@@ -1,0 +1,1142 @@
+[
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "principale",
+    "title": "01 · Fenêtre principale",
+    "file": "variante-1/clair/01-principale.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "48a059f0fc509060f5fc8d6f13a07947b69e5d946dd99b50f695c499a1c7fb95"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "unifiee",
+    "title": "02 · Réception unifiée",
+    "file": "variante-1/clair/02-unifiee.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "a781134013bb1f1d9fbe569605087455bf257cb45ba5f61225af906f6f5a9e07"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "redaction",
+    "title": "03 · Rédaction",
+    "file": "variante-1/clair/03-redaction.png",
+    "width": 900,
+    "height": 800,
+    "sha256": "936d19f97fd7e1fbca62293cb2797ac715b615550ca6b6eb738d346c5519a88b"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "ajout_compte",
+    "title": "04 · Ajouter un compte",
+    "file": "variante-1/clair/04-ajout_compte.png",
+    "width": 940,
+    "height": 810,
+    "sha256": "39b9a20008cacdb090f8f6f49352297796539c5b9492cce56cba0f057ee5438a"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "compte_non_chiffre",
+    "title": "05 · Compte sans chiffrement",
+    "file": "variante-1/clair/05-compte_non_chiffre.png",
+    "width": 940,
+    "height": 810,
+    "sha256": "d36e98ccb793ea9b3927c2ea721b05d364b4d92741940dfdf9a2625fede0b926"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "certificat",
+    "title": "06 · Certificat invalide",
+    "file": "variante-1/clair/06-certificat.png",
+    "width": 770,
+    "height": 660,
+    "sha256": "0ce628395fa23fe0d3d93abc4d987a15cf64614e9d1e719cf927f65e98428fbb"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "parametres_apparence",
+    "title": "07 · Apparence",
+    "file": "variante-1/clair/07-parametres_apparence.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "eb213b36939d2a83797598c3d88fe76bd009a709e693f01b401f1dbe3201440b"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "parametres_comptes",
+    "title": "08 · Comptes",
+    "file": "variante-1/clair/08-parametres_comptes.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "c1168c53edcfccd669782a2b12910b15f1d8361cc054b60c31135e2fffea9828"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "parametres_securite",
+    "title": "09 · Sécurité",
+    "file": "variante-1/clair/09-parametres_securite.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "0624312d5c5c89a6183260051fb0482166206aea76a583a29a93fb5d86effd1e"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "parametres_raccourcis",
+    "title": "10 · Raccourcis",
+    "file": "variante-1/clair/10-parametres_raccourcis.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "e9cc928fae222af2e32a9603e1eead830bdf93db287663affafb8948cc697226"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "recherche",
+    "title": "11 · Recherche et filtres",
+    "file": "variante-1/clair/11-recherche.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "8dd4a42f7c1211f3e6106bd4acdd16161ea817a5b4eb02a36a614f6d42fcc9c8"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "vide",
+    "title": "12 · Boîte vide",
+    "file": "variante-1/clair/12-vide.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "58e197374c09924e6563456573e43ba74d76d6a635ce53d4742dbec41acb32ac"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "sans_connexion",
+    "title": "13 · Aucune connexion",
+    "file": "variante-1/clair/13-sans_connexion.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "70f5cd34fdf6408462c69df01b8494d992ae6606d3b256dbddaa47f3803f9f9d"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "chargement",
+    "title": "14 · Chargement",
+    "file": "variante-1/clair/14-chargement.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "7a11d038593b70ba74ac6ee010d6252518b323692bdba61d66ba5a4e124a4dac"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "palette",
+    "title": "15 · Palette de commandes",
+    "file": "variante-1/clair/15-palette.png",
+    "width": 760,
+    "height": 610,
+    "sha256": "7439205bffb522353c7c8b7564e32893f1aafa8e71c50e3e81091976a411e2c4"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "images_bloquees",
+    "title": "16 · Images bloquées",
+    "file": "variante-1/clair/16-images_bloquees.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "b4d9c9279bad630442dae96374f1ad7ba6b3a27cec7a024553a3252a84cf2ccd"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "html",
+    "title": "17 · Message HTML",
+    "file": "variante-1/clair/17-html.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "6f1edf66bd5502a506e15baef281e2501492ab6f87b76406061d2aefd0d8c65a"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "piece_suspecte",
+    "title": "18 · Pièce jointe suspecte",
+    "file": "variante-1/clair/18-piece_suspecte.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "2f9d900b23632e45f9c6a71cfa3b5651d9a294c6630b60963b068a85c040aa15"
+  },
+  {
+    "variant": 1,
+    "theme": "clair",
+    "scene": "alerte_piece_jointe",
+    "title": "19 · Alerte pièce jointe",
+    "file": "variante-1/clair/19-alerte_piece_jointe.png",
+    "width": 720,
+    "height": 530,
+    "sha256": "27ba5633d71d28ff9bc991fd2ceb36cc9cab1abbda300d0e0e5afed710bf24bb"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "principale",
+    "title": "01 · Fenêtre principale",
+    "file": "variante-1/sombre/01-principale.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "7c87f19c853a36bf107cf6ca2337b42b5434925734934279ef027c7764874545"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "unifiee",
+    "title": "02 · Réception unifiée",
+    "file": "variante-1/sombre/02-unifiee.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "7b080b1487a4b7666dd1b6c070c85ad2937f6cf049eeaa1d4f099d777c01f87c"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "redaction",
+    "title": "03 · Rédaction",
+    "file": "variante-1/sombre/03-redaction.png",
+    "width": 900,
+    "height": 800,
+    "sha256": "3eb6dfe215e322a77dc18489004e32a11236e52fa16066237870ce7643f15ba0"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "ajout_compte",
+    "title": "04 · Ajouter un compte",
+    "file": "variante-1/sombre/04-ajout_compte.png",
+    "width": 940,
+    "height": 810,
+    "sha256": "fd1dabd0ccdfe6acd10a9000e2c47f8e8bb0c9e0bed5ab3ae0edfad417c26400"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "compte_non_chiffre",
+    "title": "05 · Compte sans chiffrement",
+    "file": "variante-1/sombre/05-compte_non_chiffre.png",
+    "width": 940,
+    "height": 810,
+    "sha256": "50da27963e3bd1e6d37ca4de86f36027bf7beb5f2607dfa35690e3b196b0f857"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "certificat",
+    "title": "06 · Certificat invalide",
+    "file": "variante-1/sombre/06-certificat.png",
+    "width": 770,
+    "height": 660,
+    "sha256": "5a944c6bdfb0234039dca873c3cbf65ff78b1177758a2152838464643cb8f022"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "parametres_apparence",
+    "title": "07 · Apparence",
+    "file": "variante-1/sombre/07-parametres_apparence.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "95b48b73e053a89868c06bf87d693cf302fa76cc25071acfbbd4e8a687c7489f"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "parametres_comptes",
+    "title": "08 · Comptes",
+    "file": "variante-1/sombre/08-parametres_comptes.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "63a11ab1340908e77e55d2ee81b61d9ce77053f61a5906d1c010139560e7dcb9"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "parametres_securite",
+    "title": "09 · Sécurité",
+    "file": "variante-1/sombre/09-parametres_securite.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "e6211267ce3248dec4fbf6cc6553cb63df3d2534a6ac5efbee028a698a1b769b"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "parametres_raccourcis",
+    "title": "10 · Raccourcis",
+    "file": "variante-1/sombre/10-parametres_raccourcis.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "85c170b1c42db2636562cd8fba8e65b390a23029ecf3c19e2213fc10859f7190"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "recherche",
+    "title": "11 · Recherche et filtres",
+    "file": "variante-1/sombre/11-recherche.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "8f19aa087a851b74904db2e7408dc2a7ac0e9dd151599c0557bc0f36a9400aa9"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "vide",
+    "title": "12 · Boîte vide",
+    "file": "variante-1/sombre/12-vide.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "ae00b5ae88e9034bc821dd01aee6c490f3a23b779335a81b7381fff9e44680d4"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "sans_connexion",
+    "title": "13 · Aucune connexion",
+    "file": "variante-1/sombre/13-sans_connexion.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "d51438566d1959946571dcb7d6e8be0a4e40cef838740fb6249b72f179260f4c"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "chargement",
+    "title": "14 · Chargement",
+    "file": "variante-1/sombre/14-chargement.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "5efd7a6b9d7fa2e0adaa34799003796f6af79672dd50a1c24b15901eba871271"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "palette",
+    "title": "15 · Palette de commandes",
+    "file": "variante-1/sombre/15-palette.png",
+    "width": 760,
+    "height": 610,
+    "sha256": "b3b82b9ba8a59bc85f6c882aee6791b687aeaf0bc238a80768c4151ec6396f27"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "images_bloquees",
+    "title": "16 · Images bloquées",
+    "file": "variante-1/sombre/16-images_bloquees.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "0d34e0c56b47ff006dca6847ad7c0eb06770ec070b10563dd9979eeedfac3083"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "html",
+    "title": "17 · Message HTML",
+    "file": "variante-1/sombre/17-html.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "e5e00c14eed3961d6b96fa74b0eb56f26d2f5b6008e6395b9e0ce2d605d416df"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "piece_suspecte",
+    "title": "18 · Pièce jointe suspecte",
+    "file": "variante-1/sombre/18-piece_suspecte.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "bcd03a35c9d067b9eb9cb2c3ad5fdcbb8910ad4b939f1a0f1f895545a68c75a8"
+  },
+  {
+    "variant": 1,
+    "theme": "sombre",
+    "scene": "alerte_piece_jointe",
+    "title": "19 · Alerte pièce jointe",
+    "file": "variante-1/sombre/19-alerte_piece_jointe.png",
+    "width": 720,
+    "height": 530,
+    "sha256": "4c7462f523d73a0b70261f73542784fd2a175f36e6d75f3f754c35c8cc7d3193"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "principale",
+    "title": "01 · Fenêtre principale",
+    "file": "variante-2/clair/01-principale.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "3e63e1777709e4e6e8b236da9e68055a41773ae182e311c6dd2ccb0c75ddd21a"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "unifiee",
+    "title": "02 · Réception unifiée",
+    "file": "variante-2/clair/02-unifiee.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "378bc6d208c8bf75801ce0d667df1bd628cb68bc74b38874caa24cefd871d51a"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "redaction",
+    "title": "03 · Rédaction",
+    "file": "variante-2/clair/03-redaction.png",
+    "width": 900,
+    "height": 800,
+    "sha256": "ea23bc5400c2a9896836c84f1d7266a0536edcbdefcfd360a3103d6b7e0dde69"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "ajout_compte",
+    "title": "04 · Ajouter un compte",
+    "file": "variante-2/clair/04-ajout_compte.png",
+    "width": 940,
+    "height": 810,
+    "sha256": "e355d4c36d1c99e9e73530bcd4fd6e5e1e54a144f625861c790f300f62f32726"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "compte_non_chiffre",
+    "title": "05 · Compte sans chiffrement",
+    "file": "variante-2/clair/05-compte_non_chiffre.png",
+    "width": 940,
+    "height": 810,
+    "sha256": "b7d1fc32ee39bc96266e41a08070b88ecebdca6d0bc28b432985a6acebd20925"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "certificat",
+    "title": "06 · Certificat invalide",
+    "file": "variante-2/clair/06-certificat.png",
+    "width": 770,
+    "height": 660,
+    "sha256": "7cffb0e21eaaa7cb2a9d732906a559a0fc205e5dcb41ab4b74fbca4f1db12b37"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "parametres_apparence",
+    "title": "07 · Apparence",
+    "file": "variante-2/clair/07-parametres_apparence.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "f4a243f47482c5bdc2bd857ab8b8ebe244b28f5e3c62a506235e17c09c2a9921"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "parametres_comptes",
+    "title": "08 · Comptes",
+    "file": "variante-2/clair/08-parametres_comptes.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "d9b3cbfc96052c4532da841a7df4e9e5a6eb4330d1b5207507bcca2cd15f88b7"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "parametres_securite",
+    "title": "09 · Sécurité",
+    "file": "variante-2/clair/09-parametres_securite.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "e35edaceba3c2766dd36d8e475e0f5e43f9ca3dcb6f25df40b7624d8b6392f0b"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "parametres_raccourcis",
+    "title": "10 · Raccourcis",
+    "file": "variante-2/clair/10-parametres_raccourcis.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "a1b86ef66ff66ac9fcc5dacf01c9ab115c1e079269a7738be39b9a736b085c9f"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "recherche",
+    "title": "11 · Recherche et filtres",
+    "file": "variante-2/clair/11-recherche.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "dc349a8a918da03cfa1082bbb67d2e2a7bfc352cfe5e942b368791eaf9a7d5d1"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "vide",
+    "title": "12 · Boîte vide",
+    "file": "variante-2/clair/12-vide.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "6d32d41ae6fa522727034740c13116f20e4d85c724dddc8073048920b0583a6d"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "sans_connexion",
+    "title": "13 · Aucune connexion",
+    "file": "variante-2/clair/13-sans_connexion.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "33208c055a08e9500aae4a42b616ae07a269e73fa7328e7c27929b9a21d1bbd3"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "chargement",
+    "title": "14 · Chargement",
+    "file": "variante-2/clair/14-chargement.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "1b8f1332a173def54bde5d499c3bc8e28ffd18fffa338597973671e9aba93a96"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "palette",
+    "title": "15 · Palette de commandes",
+    "file": "variante-2/clair/15-palette.png",
+    "width": 760,
+    "height": 610,
+    "sha256": "41fcb13ca694b89d0d57b4d770192c9ceab06e32c0ee40452e21da05e10f5150"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "images_bloquees",
+    "title": "16 · Images bloquées",
+    "file": "variante-2/clair/16-images_bloquees.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "97604ac8b5c826941903146dfacdd00576fc80c4b99c09b95f5cec78e287ea30"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "html",
+    "title": "17 · Message HTML",
+    "file": "variante-2/clair/17-html.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "dd52030fca81ceb404803fc24ecb6bb7a43051414ea82a08db526c9b6c69cca5"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "piece_suspecte",
+    "title": "18 · Pièce jointe suspecte",
+    "file": "variante-2/clair/18-piece_suspecte.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "6f125d65fb4705633c25bbbaa3dad387c7d069a9e5cce5515a3b240a653cb753"
+  },
+  {
+    "variant": 2,
+    "theme": "clair",
+    "scene": "alerte_piece_jointe",
+    "title": "19 · Alerte pièce jointe",
+    "file": "variante-2/clair/19-alerte_piece_jointe.png",
+    "width": 720,
+    "height": 530,
+    "sha256": "2a6f36a370eab1b605abeba8a52ed6876316551923bb05b9faaa41b88404ab14"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "principale",
+    "title": "01 · Fenêtre principale",
+    "file": "variante-2/sombre/01-principale.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "9230ce33a65b950e5d90c63da09d02b333563bfea459ca8e321197a7660fb94a"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "unifiee",
+    "title": "02 · Réception unifiée",
+    "file": "variante-2/sombre/02-unifiee.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "0bd8ebb1bcb68f572ef409fa552255d9ced9130242784e5d7ce23ae7cf626be2"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "redaction",
+    "title": "03 · Rédaction",
+    "file": "variante-2/sombre/03-redaction.png",
+    "width": 900,
+    "height": 800,
+    "sha256": "4acd7b6cc0ece54302c8f156064f214f5c2f4a9290d282581bfa93f0d6e29cd9"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "ajout_compte",
+    "title": "04 · Ajouter un compte",
+    "file": "variante-2/sombre/04-ajout_compte.png",
+    "width": 940,
+    "height": 810,
+    "sha256": "0c2a5ad525148d172e9135d2d8efe1467635386c2610b0f93842f4272866e71e"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "compte_non_chiffre",
+    "title": "05 · Compte sans chiffrement",
+    "file": "variante-2/sombre/05-compte_non_chiffre.png",
+    "width": 940,
+    "height": 810,
+    "sha256": "95ada3ea2c3f42dc1567b0ec5810f1830aabde0f9d8de71f44ed6eb9be60eee0"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "certificat",
+    "title": "06 · Certificat invalide",
+    "file": "variante-2/sombre/06-certificat.png",
+    "width": 770,
+    "height": 660,
+    "sha256": "d26af7b16eefc49c5e186f58bf47682bf9090046a0752f497e6b5f51c8f06103"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "parametres_apparence",
+    "title": "07 · Apparence",
+    "file": "variante-2/sombre/07-parametres_apparence.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "3013d8393d487a48b94c12157d1c29beb27b124b8fcbb3813a3470b1f94d9c14"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "parametres_comptes",
+    "title": "08 · Comptes",
+    "file": "variante-2/sombre/08-parametres_comptes.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "e4b7f4c31c4431bcd15f0289e048d7c54b5ae94d7905fb5db7e6aae04899bfd4"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "parametres_securite",
+    "title": "09 · Sécurité",
+    "file": "variante-2/sombre/09-parametres_securite.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "fa4053b6455c9ec78b36800b60d569521aa9de77611e68cd676460da1cafd7e2"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "parametres_raccourcis",
+    "title": "10 · Raccourcis",
+    "file": "variante-2/sombre/10-parametres_raccourcis.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "1dc662d3a68d7af53ab173ae77ac48f3c98c3b518e334b8d3dfdad9cb69e9856"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "recherche",
+    "title": "11 · Recherche et filtres",
+    "file": "variante-2/sombre/11-recherche.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "ebce752e9ad464a3e8103328b2e58cbdd00e4d6c5dcfe26eaff489f104c0bd4d"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "vide",
+    "title": "12 · Boîte vide",
+    "file": "variante-2/sombre/12-vide.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "c270f7148514cbde09c829b7f8546082f91cf96e724a2541b35057e4c9d5cf71"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "sans_connexion",
+    "title": "13 · Aucune connexion",
+    "file": "variante-2/sombre/13-sans_connexion.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "b38412455bccd95533ea1a2312a38c91e6a9c1178c5438fc423dfb9280d6eb70"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "chargement",
+    "title": "14 · Chargement",
+    "file": "variante-2/sombre/14-chargement.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "33f7b6b524e1876061dfb967eccc44dc99625daeb1785dc924d7c2d0007735f5"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "palette",
+    "title": "15 · Palette de commandes",
+    "file": "variante-2/sombre/15-palette.png",
+    "width": 760,
+    "height": 610,
+    "sha256": "47765863bcc00cc09eb89087f0c455696e19454aedcc9b63bf29e08b816e193a"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "images_bloquees",
+    "title": "16 · Images bloquées",
+    "file": "variante-2/sombre/16-images_bloquees.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "4c994c77dd58f05213b92f1cccb6c90337a0ff87f0e73b30452220806e33be5d"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "html",
+    "title": "17 · Message HTML",
+    "file": "variante-2/sombre/17-html.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "3636e2d27c26059113aa1b1fa246e8ee91b1f52a438bc029e169211521af5973"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "piece_suspecte",
+    "title": "18 · Pièce jointe suspecte",
+    "file": "variante-2/sombre/18-piece_suspecte.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "2cb2b62809494b551a870a586283bafd7ca870e1e3e582272a0ae35d1443fcef"
+  },
+  {
+    "variant": 2,
+    "theme": "sombre",
+    "scene": "alerte_piece_jointe",
+    "title": "19 · Alerte pièce jointe",
+    "file": "variante-2/sombre/19-alerte_piece_jointe.png",
+    "width": 720,
+    "height": 530,
+    "sha256": "165d5bed5eb25f2cfbd1e5a002248482a1fa7ecdc94b539401f0564211f2cea7"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "principale",
+    "title": "01 · Fenêtre principale",
+    "file": "variante-3/clair/01-principale.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "3d4ffcd9ea91af3df8aff6508390ad5da8774d09bf8348f4e2b178b0a0a8f045"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "unifiee",
+    "title": "02 · Réception unifiée",
+    "file": "variante-3/clair/02-unifiee.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "2fc1cd5b4284c6d641837d6a11240d80cad7e17ef56caf0f11c9a4ca577bcb3c"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "redaction",
+    "title": "03 · Rédaction",
+    "file": "variante-3/clair/03-redaction.png",
+    "width": 900,
+    "height": 800,
+    "sha256": "deb9930524ccb3c27195b59aef667d2e363efd370fdd9db890cc4740ec0e510e"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "ajout_compte",
+    "title": "04 · Ajouter un compte",
+    "file": "variante-3/clair/04-ajout_compte.png",
+    "width": 940,
+    "height": 810,
+    "sha256": "e3062e1e9866dc3e01319927b4c82f4d980cdb6c9763a8a9dc04afc3a3ef8b50"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "compte_non_chiffre",
+    "title": "05 · Compte sans chiffrement",
+    "file": "variante-3/clair/05-compte_non_chiffre.png",
+    "width": 940,
+    "height": 810,
+    "sha256": "9090d845d972c9bf5a3a4b9dce68d7c6b82b15eabec040f9d5699141445ff0b8"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "certificat",
+    "title": "06 · Certificat invalide",
+    "file": "variante-3/clair/06-certificat.png",
+    "width": 770,
+    "height": 660,
+    "sha256": "ea4603b325254cfb09f7d84d2d9a8310327e2cf4fdc347bd7cb026934a4589bf"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "parametres_apparence",
+    "title": "07 · Apparence",
+    "file": "variante-3/clair/07-parametres_apparence.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "ed45690556282906b2a5dc14fad9d1b05d0bc1e8e951f6b73d2db54f50c8ae85"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "parametres_comptes",
+    "title": "08 · Comptes",
+    "file": "variante-3/clair/08-parametres_comptes.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "c4190c38cb32d7cfc0954a0eed99c8b4f6f2a2a2e2e2da7cc3a0c4a15c28c0d9"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "parametres_securite",
+    "title": "09 · Sécurité",
+    "file": "variante-3/clair/09-parametres_securite.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "9e2cadcee145d2f2ba92a569b15cf1ba1f07dc0660c5a423749baa2481ede30b"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "parametres_raccourcis",
+    "title": "10 · Raccourcis",
+    "file": "variante-3/clair/10-parametres_raccourcis.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "c02bae1638aadd99c85d3ccaac511c30d1ea21ec0b668f4ff6c189267c6b480e"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "recherche",
+    "title": "11 · Recherche et filtres",
+    "file": "variante-3/clair/11-recherche.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "4e34db87147862ac63512511f6269e11098ba0b0c6297f4eaef76d7085cf660c"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "vide",
+    "title": "12 · Boîte vide",
+    "file": "variante-3/clair/12-vide.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "4427b98ff21dd6cdcd7b0fb8b2f496a37a71df781a1b7ee12be985d02a556530"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "sans_connexion",
+    "title": "13 · Aucune connexion",
+    "file": "variante-3/clair/13-sans_connexion.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "26b010d342c9b5d3f5bc156aaa7f783643ed30670ec07262c10302573dc4c43d"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "chargement",
+    "title": "14 · Chargement",
+    "file": "variante-3/clair/14-chargement.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "eb5393526166f3230b23c851f9aa52d4aab765f47143629e78f7b5bc70220d03"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "palette",
+    "title": "15 · Palette de commandes",
+    "file": "variante-3/clair/15-palette.png",
+    "width": 760,
+    "height": 610,
+    "sha256": "833ef2caf626be5f67e542399aa3cf870154895a4de5a8f9fd7bcd38bd8bce24"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "images_bloquees",
+    "title": "16 · Images bloquées",
+    "file": "variante-3/clair/16-images_bloquees.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "89febec9808d4d2ec6ec96ac894d0c1015cb41b50cadde32bca630714b3c1cd4"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "html",
+    "title": "17 · Message HTML",
+    "file": "variante-3/clair/17-html.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "2e57cb95ab12991595a045b64cfb38f8aa44b8df3a24fde677c5a8f108b174e3"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "piece_suspecte",
+    "title": "18 · Pièce jointe suspecte",
+    "file": "variante-3/clair/18-piece_suspecte.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "aa44b19221086a09cf87b7d175c295938e8fe849c8245b310c39f1a665db86b0"
+  },
+  {
+    "variant": 3,
+    "theme": "clair",
+    "scene": "alerte_piece_jointe",
+    "title": "19 · Alerte pièce jointe",
+    "file": "variante-3/clair/19-alerte_piece_jointe.png",
+    "width": 720,
+    "height": 530,
+    "sha256": "91e1731628c450005ac680832dd72dcd9421dc3365dc4834022a36a7544636c3"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "principale",
+    "title": "01 · Fenêtre principale",
+    "file": "variante-3/sombre/01-principale.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "be4bb72efde4415ca7ecf0684df91e890b63db2fcd3e987b3a576f3aebb2a324"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "unifiee",
+    "title": "02 · Réception unifiée",
+    "file": "variante-3/sombre/02-unifiee.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "64f3cbc403faa3c5d826500dd6839f4c6c0af50100fc350aa9374ffdce0f7f47"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "redaction",
+    "title": "03 · Rédaction",
+    "file": "variante-3/sombre/03-redaction.png",
+    "width": 900,
+    "height": 800,
+    "sha256": "707b25d9b1c6933d07e9361bfefcede8628ec9d76b86c7814e7bb80f6e433013"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "ajout_compte",
+    "title": "04 · Ajouter un compte",
+    "file": "variante-3/sombre/04-ajout_compte.png",
+    "width": 940,
+    "height": 810,
+    "sha256": "82f1c3b1d6059adcbfbdf04569fec75019a802c6dc29fa6e4ef7d0e53aa925e3"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "compte_non_chiffre",
+    "title": "05 · Compte sans chiffrement",
+    "file": "variante-3/sombre/05-compte_non_chiffre.png",
+    "width": 940,
+    "height": 810,
+    "sha256": "84c1a10333773eebd4f6bcd567f56614433ba4aadd624031601a892c6cbe5f4c"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "certificat",
+    "title": "06 · Certificat invalide",
+    "file": "variante-3/sombre/06-certificat.png",
+    "width": 770,
+    "height": 660,
+    "sha256": "6f144b9f3c651763ca95785023dd4b54ddf9dc596919fe83d0985284047ea423"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "parametres_apparence",
+    "title": "07 · Apparence",
+    "file": "variante-3/sombre/07-parametres_apparence.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "229ea43a63a7a183e5ce2bff1a1d051ded366d43767c139174da6a2d1ead95e8"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "parametres_comptes",
+    "title": "08 · Comptes",
+    "file": "variante-3/sombre/08-parametres_comptes.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "676306183014cecf4a1831a8ddab54a9c4eedd73aeebb8589f9828428e7304d4"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "parametres_securite",
+    "title": "09 · Sécurité",
+    "file": "variante-3/sombre/09-parametres_securite.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "6aeb8a260726758e4dcbe6b62b29df74afe051b130d227a358954c7e0894419b"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "parametres_raccourcis",
+    "title": "10 · Raccourcis",
+    "file": "variante-3/sombre/10-parametres_raccourcis.png",
+    "width": 1000,
+    "height": 760,
+    "sha256": "114a2c16a53a41aacd722e9f2a83f61ea9729df355d13fab2da2a76bc4d869c9"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "recherche",
+    "title": "11 · Recherche et filtres",
+    "file": "variante-3/sombre/11-recherche.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "9d96b70c6cdb639630c48c33082d2517238de08ebd6cde1573ac3ce9bb3eb4bb"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "vide",
+    "title": "12 · Boîte vide",
+    "file": "variante-3/sombre/12-vide.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "3ac982f7385bf67a1d189dae19a58f9e6750ba51fc5200103be2df89ed495845"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "sans_connexion",
+    "title": "13 · Aucune connexion",
+    "file": "variante-3/sombre/13-sans_connexion.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "8a4e91856c9b3ef79d2aa3e336e9015b2c5a292dc4ce7bb58707954cea47b28b"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "chargement",
+    "title": "14 · Chargement",
+    "file": "variante-3/sombre/14-chargement.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "a0b55f629eaa9a502a79117ed38237f8140640142a214c46817b73b7c54923bf"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "palette",
+    "title": "15 · Palette de commandes",
+    "file": "variante-3/sombre/15-palette.png",
+    "width": 760,
+    "height": 610,
+    "sha256": "e7a6959c84ebaaaeb1286434006bfdfa8cbcf409c3dff3b70dc56f5a805916c1"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "images_bloquees",
+    "title": "16 · Images bloquées",
+    "file": "variante-3/sombre/16-images_bloquees.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "fe7c71bb90c84052001ad4b5571a448d49ae38c62bcf6f6e23ec949e07699749"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "html",
+    "title": "17 · Message HTML",
+    "file": "variante-3/sombre/17-html.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "77c424b94e091bec7ccace792d0bbb891e85b1f607a22dedad44026f3e97c351"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "piece_suspecte",
+    "title": "18 · Pièce jointe suspecte",
+    "file": "variante-3/sombre/18-piece_suspecte.png",
+    "width": 1440,
+    "height": 940,
+    "sha256": "a8b216f1ce4875045bac5e39e22e81d25a1fa5fc818903e81a42bd1c33f5d8a1"
+  },
+  {
+    "variant": 3,
+    "theme": "sombre",
+    "scene": "alerte_piece_jointe",
+    "title": "19 · Alerte pièce jointe",
+    "file": "variante-3/sombre/19-alerte_piece_jointe.png",
+    "width": 720,
+    "height": 530,
+    "sha256": "b4cd6a258ad1e26f5c71539c24bd9576e7553456a2dbb71897f13f408364d3db"
+  }
+]

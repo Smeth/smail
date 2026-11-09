@@ -1,0 +1,5 @@
+Lucide — https://github.com/lucide-icons/lucide
+Révision : 53fab88ff9d1b48f4704b5b5b560d6b4d560bf4c
+Licence : ISC (et mentions Feather du fichier LICENSE)
+Alias locaux : {"trash-2": "trash", "shield-alert": "shield-exclamation-point", "circle-help": "circle-question-mark", "circle-alert": "circle-exclamation-point"}
+Les SVG sont livrés localement ; aucun téléchargement à l’exécution.
