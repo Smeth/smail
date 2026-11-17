@@ -7,7 +7,7 @@ import sqlite3
 import threading
 from mailclient.core.accounts import Account, Server
 from mailclient.core.imap_client import IMAPClient
-from mailclient.core.service import MailService
+from mailclient.core.service import MailService, cache_key
 from mailclient.core.tls_policy import TLSPolicy
 from mailclient.storage.database import Database
 
@@ -89,6 +89,14 @@ def test_unchanged_folders_are_skipped_with_condstore(tmp_path, monkeypatch):
     server.snapshots.clear()
     service.sync_account(ACCOUNT, threading.Event(), limit=200)
     assert server.snapshots == ['INBOX', 'Spam']  # Une nouvelle limite impose une capture complète.
+    # Cache d’une version antérieure, sans identifiants de conversation : recapturé une seule fois.
+    state = service.state(ACCOUNT, 'Spam')
+    state.pop('threaded')
+    db.cache_put('mailbox', cache_key(ACCOUNT.id, 'Spam'), state)
+    server.snapshots.clear()
+    service.sync_account(ACCOUNT, threading.Event(), limit=200)
+    service.sync_account(ACCOUNT, threading.Event(), limit=200)
+    assert server.snapshots == ['Spam']
 
 
 def test_without_condstore_every_folder_is_captured(tmp_path, monkeypatch):

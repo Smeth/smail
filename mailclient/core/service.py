@@ -313,7 +313,9 @@ class MailService:
             previous = self.state(account, folder) or {}
             status = statuses.get(folder)
             # Dossier inchangé depuis la dernière synchronisation complète : aucun SELECT ni FETCH.
-            if status and 'HIGHESTMODSEQ' in status and previous.get('status') == status and previous.get('limit') == limit:
+            # « threaded » : capture faite avec les identifiants de conversation (cache antérieur recapturé une fois).
+            if (status and 'HIGHESTMODSEQ' in status and previous.get('status') == status and previous.get('limit') == limit
+                    and previous.get('threaded')):
                 continue
             reused = set()
             def known(uid, validity):
@@ -336,7 +338,7 @@ class MailService:
                 pages = {'0': []}
             # STATUS a été lu avant la capture : une modification pendant la capture sera revue au cycle suivant.
             state = dict(account=account.id, folder=folder, pages=pages, total=total, uidvalidity=validity,
-                         status=status if status and status.get('UIDVALIDITY') == int(validity or 0) else None, limit=limit)
+                         status=status if status and status.get('UIDVALIDITY') == int(validity or 0) else None, limit=limit, threaded=True)
             for row in rows:
                 if row['uid'] not in reused:  # Les contenus déjà en cache ne sont pas réécrits.
                     self.db.cache_put('body', self.body_key(row), base64.b64encode(bodies[row['uid']]).decode('ascii'), account.id)
