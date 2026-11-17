@@ -149,6 +149,52 @@ class Database:
         with self.lock, self.connect() as db:
             db.execute('DELETE FROM cache WHERE kind=? AND key=?', (kind, self._cache_key(key)))
             db.execute('DELETE FROM cache_owner WHERE kind=? AND key=?', (kind, self._cache_key(key)))
+            if kind == 'body' and self._index_exists(db):
+                db.execute('DELETE FROM search_index WHERE key=?', (self._cache_key(key),))
+
+    # Index plein texte des messages en cache. Il contient le texte en clair : il n’existe que si le
+    # chiffrement du cache est désactivé (le cache est alors lui-même en clair) et disparaît à son activation.
+    @staticmethod
+    def _index_exists(db) -> bool:
+        return db.execute("SELECT 1 FROM sqlite_master WHERE name='search_index'").fetchone() is not None
+
+    def index_enabled(self) -> bool:
+        if self._cache_encrypted():
+            return False
+        with self.lock, self.connect() as db:
+            if self._index_exists(db):
+                return True
+            try:
+                db.execute("CREATE VIRTUAL TABLE search_index USING fts5(key UNINDEXED, account UNINDEXED, content, tokenize='trigram')")
+                return True
+            except sqlite3.OperationalError:
+                return False  # SQLite sans FTS5 ou sans trigram : la recherche reste un balayage.
+
+    def index_put(self, key: str, account: str, content: str) -> None:
+        with self.lock:
+            if account in self.deleted_accounts or not self.index_enabled():
+                return
+            hashed = self._cache_key(key)
+            with self.connect() as db:
+                db.execute('DELETE FROM search_index WHERE key=?', (hashed,))
+                db.execute('INSERT INTO search_index (key, account, content) VALUES (?,?,?)', (hashed, account, content))
+
+    def index_keys(self) -> set[str]:
+        """Clés hachées déjà indexées."""
+        with self.lock, self.connect() as db:
+            return {row[0] for row in db.execute('SELECT key FROM search_index')} if self._index_exists(db) else set()
+
+    def index_search(self, query: str) -> set[str]:
+        """Clés hachées des contenus contenant la sous-chaîne (3 caractères au moins, casse ignorée)."""
+        with self.lock, self.connect() as db:
+            if not self._index_exists(db):
+                return set()
+            phrase = '"' + query.replace('"', '""') + '"'
+            return {row[0] for row in db.execute('SELECT key FROM search_index WHERE search_index MATCH ?', (phrase,))}
+
+    @staticmethod
+    def hashed_key(key: str) -> str:
+        return Database._cache_key(key)
 
     def encrypt_cache(self, enabled: bool) -> None:
         """Migration transactionnelle des contenus ; purge des anciennes pages SQLite."""
@@ -161,6 +207,8 @@ class Database:
                     payload = b'E' + cipher.encrypt(raw) if enabled else b'P' + raw
                     db.execute('UPDATE cache SET data=? WHERE kind=? AND key=?', (payload, kind, key))
                 db.execute('INSERT OR REPLACE INTO settings VALUES (?,?)', ('cache_encrypted', json.dumps(enabled)))
+                if enabled:
+                    db.execute('DROP TABLE IF EXISTS search_index')  # Le texte en clair ne survit pas au chiffrement.
             self._encrypted = enabled
             self.vacuum()
 
@@ -209,4 +257,6 @@ class Database:
                 db.execute('DELETE FROM pins WHERE account=?', (account_id,))
                 db.execute('DELETE FROM cache WHERE EXISTS (SELECT 1 FROM cache_owner o WHERE o.kind=cache.kind AND o.key=cache.key AND o.account=?)', (account_id,))
                 db.execute('DELETE FROM cache_owner WHERE account=?', (account_id,))
+                if self._index_exists(db):
+                    db.execute('DELETE FROM search_index WHERE account=?', (account_id,))
             self.vacuum()  # secure_delete efface les pages ; VACUUM réduit aussi le fichier.

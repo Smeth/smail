@@ -17,6 +17,7 @@ from mailclient.ui.icons import icon
 from mailclient.ui.attachment_widgets import (AttachmentGrid, ComposeEditor, IMAGE_FILTER,
     read_attachments, thumbnail, clipboard_attachment, local_paths, clipboard_image)
 from mailclient.core.html_security import dangerous_filename
+from mailclient.ui.address_completer import AddressCompleter
 from shiboken6 import isValid
 
 def reply_fields(mail, account, mode):
@@ -86,6 +87,12 @@ class ComposeWindow(QDialog):
             self.account_box.setCurrentIndex(max(0, self.account_box.findData(wanted)))
         form.addRow('De', self.account_box)
         self.to, self.cc, self.bcc, self.subject = QLineEdit(), QLineEdit(), QLineEdit(), QLineEdit()
+        try:
+            contacts = service.contacts(self.accounts) if hasattr(service, 'contacts') else []
+        except Exception:
+            contacts = []  # Carnet illisible (clé du coffre absente…) : la saisie reste libre.
+        for field in (self.to, self.cc, self.bcc):
+            field.setCompleter(AddressCompleter(contacts, field))
         recipient = QHBoxLayout()
         recipient.setContentsMargins(0,0,0,0)
         recipient.addWidget(self.to,1)
@@ -411,6 +418,12 @@ class ComposeWindow(QDialog):
                 self.service.db.cache_put('sent-copy', local_id, dict(id=local_id, account=account.id, raw=base64.b64encode(raw).decode('ascii'), server_saved=False))
             except Exception:
                 local_id = None  # L’envoi a réussi : ne jamais le relancer pour une erreur de cache.
+            try:
+                rejected = {value.casefold() for value in refused}
+                accepted = [pair for field in ('to', 'cc', 'bcc') for pair in addresses(state[field]) if pair[1].casefold() not in rejected]
+                self.service.remember_contacts(account, accepted, sent=True)
+            except Exception:
+                pass  # Le carnet d’adresses n’influe jamais sur l’issue d’un envoi.
             return raw, list(refused), local_id
         def done(result):
             raw, refused, self.last_copy_id = result

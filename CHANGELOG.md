@@ -11,6 +11,10 @@
 - Schéma SQLite versionné avec migrations automatiques ; compatibilité conservée avec Smail 1.0.0.
 - Icône de l’application, informations de version de l’exécutable, gestionnaire d’erreurs inattendues.
 - Dépendances de développement séparées (`requirements-dev.txt`) et intégration continue GitHub Actions.
+- Synchronisation incrémentale : dossiers inchangés ignorés grâce à CONDSTORE, contenus déjà en cache non réécrits.
+- Recherche hors ligne indexée (SQLite FTS5) lorsque le cache n’est pas chiffré.
+- Carnet d’adresses et autocomplétion des destinataires ; virgule finale acceptée dans les champs d’adresses.
+- Installateur Windows par utilisateur (Inno Setup), construit par l’intégration continue.
 
 ## V1 — 1.0.0
 

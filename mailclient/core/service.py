@@ -1,8 +1,10 @@
 """Coordination du cache, de l’authentification et des opérations réseau."""
 import base64
+import html
+import re
 import threading
 from datetime import timezone
-from email.utils import parsedate_to_datetime
+from email.utils import getaddresses, parsedate_to_datetime
 from mailclient.core.imap_client import IMAPClient, ConnectionPool
 from mailclient.core.oauth import OAuth
 from mailclient.core.parser import parse_message
@@ -17,6 +19,7 @@ class MailService:
         self.db, self.vault, self.tls = database, vault, tls
         self.oauth = OAuth(vault)
         self.pool = ConnectionPool()
+        self.contacts_lock = threading.Lock()
 
     def client(self, account):
         return IMAPClient(account, self.oauth.credential(account), self.tls, self.pool)
@@ -74,16 +77,85 @@ class MailService:
         rows = {row['uid']: row for page in state.get('pages', {}).values() for row in page}
         return sorted(rows.values(), key=lambda row: int(row['uid']), reverse=True)
 
+    # Carnet d’adresses : une entrée de cache par compte (chiffrée avec le cache, purgée avec le compte).
+    def remember_contacts(self, account, pairs, sent=False):
+        """pairs : [(nom, adresse)]. Un envoi incrémente le compteur ; un expéditeur vu est seulement ajouté."""
+        own = account.email.casefold()
+        with self.contacts_lock:
+            book = self.db.cache_get('contacts', account.id) or dict(account=account.id, entries={})
+            entries, changed = book['entries'], False
+            for name, address in pairs:
+                address = address.strip()
+                key = address.casefold()
+                if not address or '@' not in address or key == own or len(address) > 254 or any(ord(c) < 32 for c in name + address):
+                    continue
+                if key not in entries:
+                    entries[key] = dict(name='', address=address, sent=0)
+                    changed = True
+                entry, name = entries[key], name.strip()[:200]
+                if name and entry['name'] != name and (not entry['name'] or sent):
+                    entry['name'] = name  # Le nom choisi à l’envoi l’emporte sur celui d’un expéditeur.
+                    changed = True
+                if sent:
+                    entry['sent'] += 1
+                    changed = True
+            if changed:
+                self.db.cache_put('contacts', account.id, book, account.id)
+
+    def contacts(self, accounts) -> list[str]:
+        """Adresses connues, au format « Nom <adresse> », les plus utilisées d’abord."""
+        merged = {}
+        for account in accounts:
+            for key, entry in ((self.db.cache_get('contacts', account.id) or {}).get('entries') or {}).items():
+                current = merged.get(key)
+                if current is None or entry['sent'] > current['sent']:
+                    merged[key] = dict(entry, sent=entry['sent'] + (current or {}).get('sent', 0))
+        def display(entry):
+            name = entry['name']
+            if not name:
+                return entry['address']
+            if any(c in name for c in ',;"<>@()[]:'):
+                name = '"' + name.replace('"', '').replace('\\', '') + '"'
+            return f'{name} <{entry["address"]}>'
+        ordered = sorted(merged.values(), key=lambda e: (-e['sent'], (e['name'] or e['address']).casefold()))
+        return [display(entry) for entry in ordered]
+
+    @staticmethod
+    def searchable_text(row, mail) -> str:
+        text = mail.text + ' ' + html.unescape(re.sub(r'<[^>]*>', ' ', mail.html))
+        return ' '.join([row.get('sender', ''), row.get('subject', ''), text])
+
+    def index_body(self, row, raw: bytes) -> None:
+        """Indexe un contenu nouvellement mis en cache (sans effet si le cache est chiffré)."""
+        try:
+            self.db.index_put(self.body_key(row), row['account'], self.searchable_text(row, parse_message(raw)))
+        except Exception:
+            pass  # L’index est une accélération : la recherche retombe sur le balayage du cache.
+
     def _search(self, rows, query):
+        """Recherche hors ligne : index FTS5 si disponible, balayage du cache pour le reste."""
         result = []
-        query = query.casefold()
+        folded = query.casefold()
+        indexed = len(query) >= 3 and self.db.index_enabled()
+        hits = self.db.index_search(query) if indexed else set()
+        known = self.db.index_keys() if indexed else set()
         for row in rows:
-            content = row.get('sender', '') + ' ' + row.get('subject', '')
+            if folded in (row.get('sender', '') + ' ' + row.get('subject', '')).casefold():
+                result.append(row)
+                continue
+            hashed = self.db.hashed_key(self.body_key(row))
+            if hashed in known:
+                if hashed in hits:
+                    result.append(row)
+                continue
             payload = self.db.cache_get('body', self.body_key(row))
-            if payload:
-                mail = parse_message(base64.b64decode(payload))
-                content += ' ' + mail.text + ' ' + mail.html
-            if query in content.casefold():
+            if not payload:
+                continue
+            raw = base64.b64decode(payload)
+            content = self.searchable_text(row, parse_message(raw))
+            if indexed:
+                self.db.index_put(self.body_key(row), row['account'], content)  # Index complété au fil des recherches.
+            if folded in content.casefold():
                 result.append(row)
         return result
 
@@ -103,6 +175,7 @@ class MailService:
         if row.get('uidvalidity') and client.uidvalidity != row['uidvalidity']:
             raise RuntimeError('Le dossier a changé sur le serveur. Actualisez avant de lire ce message.')
         self.db.cache_put('body', self.body_key(row), base64.b64encode(raw).decode('ascii'), account.id)
+        self.index_body(dict(row, account=account.id), raw)
         return parse_message(raw)
 
     def action(self, account, rows, action, target=''):
@@ -203,18 +276,34 @@ class MailService:
     def sync_account(self, account, cancelled, limit=100):
         folders = self.client(account).folders()
         self.db.cache_put('folders', account.id, folders, account.id)
+        try:
+            statuses = self.client(account).folder_status([name for name, _ in folders])
+        except CertificateAlert:
+            raise
+        except Exception:
+            statuses = {}  # Synchronisation complète de chaque dossier.
         new_count = 0
-        for folder, _ in folders:
+        senders = []
+        for folder, label in folders:
             if cancelled.is_set() or account.id in self.db.deleted_accounts:
                 break
+            previous = self.state(account, folder) or {}
+            status = statuses.get(folder)
+            # Dossier inchangé depuis la dernière synchronisation complète : aucun SELECT ni FETCH.
+            if status and 'HIGHESTMODSEQ' in status and previous.get('status') == status and previous.get('limit') == limit:
+                continue
+            reused = set()
             def known(uid, validity):
                 payload = self.db.cache_get('body', self.body_key(dict(account=account.id, folder=folder, uidvalidity=validity, uid=uid)))
+                if payload:
+                    reused.add(uid)
                 return base64.b64decode(payload) if payload else None
             rows, total, bodies, validity = self.client(account).snapshot(folder, limit, cancelled, known)
             if cancelled.is_set():
                 break
             rows = self._enrich(rows, account, folder)
-            previous = self.state(account, folder) or {}
+            if not any(word in (folder + ' ' + label).casefold() for word in ('spam', 'junk', 'indésirable')):
+                senders.extend(row.get('sender', '') for row in rows)
             retained = {self.body_key(row) for row in rows}
             for old_row in self._known_rows(previous):
                 if self.body_key(old_row) not in retained:
@@ -222,9 +311,13 @@ class MailService:
             pages = {str(i//50): rows[i:i+50] for i in range(0, len(rows), 50)}
             if not pages:
                 pages = {'0': []}
-            state = dict(account=account.id, folder=folder, pages=pages, total=total, uidvalidity=validity)
+            # STATUS a été lu avant la capture : une modification pendant la capture sera revue au cycle suivant.
+            state = dict(account=account.id, folder=folder, pages=pages, total=total, uidvalidity=validity,
+                         status=status if status and status.get('UIDVALIDITY') == int(validity or 0) else None, limit=limit)
             for row in rows:
-                self.db.cache_put('body', self.body_key(row), base64.b64encode(bodies[row['uid']]).decode('ascii'), account.id)
+                if row['uid'] not in reused:  # Les contenus déjà en cache ne sont pas réécrits.
+                    self.db.cache_put('body', self.body_key(row), base64.b64encode(bodies[row['uid']]).decode('ascii'), account.id)
+                    self.index_body(row, bodies[row['uid']])
             self.db.cache_put('mailbox', cache_key(account.id, folder), state)
             if folder.upper() == 'INBOX':
                 old = self.db.cache_get('notified', account.id)
@@ -232,4 +325,6 @@ class MailService:
                 if old and old['validity'] == validity:
                     new_count = sum(int(row['uid']) > old['uid'] for row in rows)
                 self.db.cache_put('notified', account.id, dict(validity=validity, uid=highest), account.id)
+        if senders and account.id not in self.db.deleted_accounts:
+            self.remember_contacts(account, getaddresses(senders))
         return new_count

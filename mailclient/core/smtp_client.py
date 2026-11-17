@@ -11,7 +11,8 @@ from mailclient.core.oauth import xoauth2
 def addresses(value: str) -> list[tuple[str, str]]:
     if any(ord(c) < 32 or ord(c) == 127 for c in value):
         raise ValueError('Les en-têtes ne doivent pas contenir de caractères de contrôle.')
-    if not value.strip():
+    value = value.strip().rstrip(',;').strip()  # Virgule finale laissée par l’autocomplétion.
+    if not value:
         return []
     result = getaddresses([value])
     if not result or any(not address.isascii() or len(address) > 254 or not re.fullmatch(r'[^\s@<>;,]+@[^\s@<>;,]+\.[^\s@<>;,]+', address) for _, address in result):
