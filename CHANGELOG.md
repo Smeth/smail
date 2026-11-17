@@ -15,6 +15,7 @@
 - Recherche hors ligne indexée (SQLite FTS5) lorsque le cache n’est pas chiffré.
 - Carnet d’adresses et autocomplétion des destinataires ; virgule finale acceptée dans les champs d’adresses.
 - Installateur Windows par utilisateur (Inno Setup), construit par l’intégration continue.
+- Vue par conversation : regroupement par références, bandeau de conversation incluant vos réponses envoyées, actions sur toute la conversation, navigation Alt+Bas / Alt+Haut.
 
 ## V1 — 1.0.0
 

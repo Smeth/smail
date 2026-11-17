@@ -105,4 +105,16 @@ def metadata(raw: bytes) -> dict:
     message = BytesParser(policy=policy.default).parsebytes(raw)
     return {'sender': str(message.get('From', '')), 'subject': str(message.get('Subject', '(Sans objet)')),
             'date': str(message.get('Date', '')),
-            'attachment': any(p.get_content_disposition() == 'attachment' or p.get_filename() for p in message.walk())}
+            'attachment': any(p.get_content_disposition() == 'attachment' or p.get_filename() for p in message.walk()),
+            # Identifiants de fil : regroupement des conversations.
+            'message_id': ' '.join(message_ids(message, 'Message-ID')[:1]),
+            'in_reply_to': ' '.join(message_ids(message, 'In-Reply-To')[:1]),
+            'references': ' '.join(message_ids(message, 'References')[-30:])}
+
+def message_ids(message, name: str) -> list[str]:
+    """Identifiants <…> d’un en-tête, normalisés ; tolère les en-têtes mal formés."""
+    try:
+        value = str(message.get(name, '') or '')
+    except Exception:
+        return []
+    return [match.lower() for match in re.findall(r'<[^<>\s]{1,250}>', value)]

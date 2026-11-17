@@ -224,7 +224,7 @@ class SettingsDialog(QDialog):
                           ('Répondre','Ctrl + R'),('Répondre à tous','Ctrl + Maj + R'),('Transférer','Ctrl + L'),
                           ('Synchroniser','F5'),('Changer de thème','Ctrl + Maj + L'),('Changer la densité','Ctrl + Maj + D'),
                           ('Message suivant / précédent (style 3)','J / K'),('Archiver / étoiler (style 3)','E / S'),
-                          ('Corbeille (focus dans la liste)','Suppr'),('Envoyer en rédaction','Ctrl + Entrée')]:
+                          ('Corbeille (focus dans la liste)','Suppr'),('Regrouper par conversation','Ctrl + Maj + T'),('Message suivant / précédent de la conversation','Alt + Bas / Haut'),('Envoyer en rédaction','Ctrl + Entrée')]:
             row = QHBoxLayout()
             row.addWidget(label(title))
             row.addStretch()

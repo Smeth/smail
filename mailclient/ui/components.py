@@ -1,6 +1,6 @@
 """Composants visuels réutilisables, découplés de tout service métier."""
 from PySide6.QtCore import Qt, QSize, QRectF, QPropertyAnimation, QEasingCurve, QTimer
-from PySide6.QtGui import QColor, QPainter, QFont, QPen
+from PySide6.QtGui import QColor, QPainter, QFont, QPen, QFontMetrics
 from PySide6.QtWidgets import (QLabel, QPushButton, QFrame, QHBoxLayout, QVBoxLayout,
     QWidget, QStyledItemDelegate, QGraphicsOpacityEffect, QTextBrowser)
 from .icons import icon
@@ -147,8 +147,23 @@ class MailDelegate(QStyledItemDelegate):
         width = rect.right()-left-16
         painter.setFont(QFont('Segoe UI', 10, QFont.DemiBold))
         painter.setPen(QColor(t['text']))
-        sender = painter.fontMetrics().elidedText(mail.sender, Qt.ElideRight, max(40,width-76))
+        count = getattr(mail, 'count', 1)
+        badge = 0
+        if count > 1:
+            badge_font = QFont('Segoe UI', 8, QFont.DemiBold)
+            badge = QFontMetrics(badge_font).horizontalAdvance(str(count)) + 12
+        sender = painter.fontMetrics().elidedText(mail.sender, Qt.ElideRight, max(40,width-76-badge))
         painter.drawText(QRectF(left,top,width-70,20), Qt.AlignLeft|Qt.AlignVCenter, sender)
+        if badge:
+            # Nombre de messages de la conversation, juste après les expéditeurs.
+            x = left + painter.fontMetrics().horizontalAdvance(sender) + 6
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(t['soft'] if not selected else t['surface']))
+            painter.drawRoundedRect(QRectF(x, top+3, badge, 15), 7.5, 7.5)
+            painter.setFont(badge_font)
+            painter.setPen(QColor(t['accent'] if mail.unread else t['muted']))
+            painter.drawText(QRectF(x, top+3, badge, 15), Qt.AlignCenter, str(count))
+            painter.setFont(QFont('Segoe UI', 10, QFont.DemiBold))
         painter.setFont(QFont('Segoe UI', 8))
         painter.setPen(QColor(t['accent'] if mail.unread else t['muted']))
         painter.drawText(QRectF(rect.right()-71,top,57,20), Qt.AlignRight|Qt.AlignVCenter, mail.time)

@@ -258,7 +258,7 @@ class IMAPClient:
             if not wanted:
                 return [], len(ids)
             # Une seule commande FETCH pour toute la page.
-            status, parts = client.uid('fetch', ','.join(wanted), '(UID FLAGS BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE CONTENT-TYPE CONTENT-DISPOSITION)])')
+            status, parts = client.uid('fetch', ','.join(wanted), '(UID FLAGS BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE CONTENT-TYPE CONTENT-DISPOSITION MESSAGE-ID IN-REPLY-TO REFERENCES)])')
             if status != 'OK':
                 raise RuntimeError('Impossible de charger la liste des messages.')
             items = fetch_items(parts)

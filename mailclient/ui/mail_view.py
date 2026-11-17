@@ -4,7 +4,7 @@ from html.parser import HTMLParser
 from email.utils import parseaddr, parsedate_to_datetime
 from PySide6.QtCore import Qt, QUrl, QSaveFile, QIODevice, QBuffer, Signal
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTabWidget, QPlainTextEdit, QListWidgetItem, QFileDialog, QMessageBox, QScrollArea, QSizePolicy, QMenu)
+    QTabWidget, QPlainTextEdit, QListWidget, QListWidgetItem, QFileDialog, QMessageBox, QScrollArea, QSizePolicy, QMenu)
 from PySide6.QtWebEngineCore import (QWebEnginePage, QWebEngineProfile, QWebEngineSettings,
                                     QWebEngineUrlRequestInterceptor, QWebEngineUrlRequestInfo,
                                     QWebEngineUrlScheme, QWebEngineUrlSchemeHandler, QWebEngineUrlRequestJob)
@@ -84,6 +84,7 @@ class MailView(QWidget):
     deleteRequested = Signal()
     starRequested = Signal()
     readRequested = Signal()
+    threadMessageRequested = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -121,6 +122,19 @@ class MailView(QWidget):
         self.subject.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Preferred)
         self.metadata.setWidget(self.subject)
         self.subject_card.box.addWidget(self.metadata)
+        # Bandeau de conversation : un message par ligne, du plus ancien au plus récent.
+        self.thread_card = Card('ReaderThread',8)
+        self.thread_title = label('','Eyebrow')
+        self.thread_card.box.addWidget(self.thread_title)
+        self.thread_list = QListWidget()
+        self.thread_list.setObjectName('ThreadList')
+        self.thread_list.setAccessibleName('Messages de la conversation, Entrée pour lire')
+        self.thread_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.thread_list.itemActivated.connect(lambda item:self.threadMessageRequested.emit(self.thread_list.row(item)))
+        self.thread_list.itemClicked.connect(lambda item:self.threadMessageRequested.emit(self.thread_list.row(item)))
+        self.thread_card.box.addWidget(self.thread_list)
+        self.thread_card.hide()
+        layout.addWidget(self.thread_card)
         self.message_card = Card('ReaderMessage',16)
         self.message_card.box.setSpacing(8)
         layout.addWidget(self.message_card,1)
@@ -275,7 +289,30 @@ class MailView(QWidget):
         self.shutdown()
         super().closeEvent(event)
 
-    def clear(self, message='Sélectionnez un message pour le lire.'):
+    def set_thread(self, entries, current=-1, elsewhere=0):
+        """entries : [(texte, non lu, info-bulle)] ; liste vide ou d’un seul message : bandeau masqué."""
+        self.thread_list.blockSignals(True)
+        self.thread_list.clear()
+        for index,(text,unread,tooltip) in enumerate(entries):
+            item = QListWidgetItem(('● ' if unread else '    ')+text)
+            item.setToolTip(tooltip)
+            font = item.font()
+            font.setBold(unread or index == current)
+            item.setFont(font)
+            self.thread_list.addItem(item)
+        if 0 <= current < len(entries):
+            self.thread_list.setCurrentRow(current)
+            self.thread_list.scrollToItem(self.thread_list.currentItem())
+        self.thread_list.blockSignals(False)
+        visible = len(entries) > 1
+        self.thread_title.setText(f'CONVERSATION · {len(entries)} MESSAGES' + (f' · DONT {elsewhere} DANS D’AUTRES DOSSIERS' if elsewhere else ''))
+        rows = min(len(entries), 5)
+        self.thread_list.setFixedHeight(self.thread_list.sizeHintForRow(0)*rows+6 if entries else 0)
+        self.thread_card.setVisible(visible)
+
+    def clear(self, message='Sélectionnez un message pour le lire.', keep_thread=False):
+        if not keep_thread:
+            self.set_thread([])
         self.mail = None
         self.preview_revision += 1
         self.interceptor.remote = False
@@ -306,8 +343,8 @@ class MailView(QWidget):
         self.images.setText('Afficher les images')
         self.save_button.setEnabled(False)
 
-    def display(self, mail: Mail):
-        self.clear()
+    def display(self, mail: Mail, keep_thread=False):
+        self.clear(keep_thread=keep_thread)
         self.mail = mail
         self.subject_card.show()
         self.message_card.show()

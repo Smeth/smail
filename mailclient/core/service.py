@@ -9,6 +9,7 @@ from mailclient.core.imap_client import IMAPClient, ConnectionPool
 from mailclient.core.oauth import OAuth
 from mailclient.core.parser import parse_message
 from mailclient.core.tls_policy import CertificateAlert
+from mailclient.core.threads import chronological, row_ids, thread_ids
 
 def cache_key(*values) -> str:
     import json
@@ -119,6 +120,28 @@ class MailService:
             return f'{name} <{entry["address"]}>'
         ordered = sorted(merged.values(), key=lambda e: (-e['sent'], (e['name'] or e['address']).casefold()))
         return [display(entry) for entry in ordered]
+
+    def conversation(self, account, rows):
+        """Messages d’une conversation, complétés par ceux des autres dossiers en cache (vos réponses dans
+        Envoyés notamment), sans doublon, du plus ancien au plus récent."""
+        ids = thread_ids(rows)
+        own_ids = {row_ids(row)[0] for row in rows if row_ids(row)[0]}
+        result, seen = [], set()
+        def add(row):
+            own = row_ids(row)[0]
+            key = own or (row.get('folder'), row.get('uid'))
+            if key not in seen:
+                seen.add(key)
+                result.append(row)
+        for row in rows:
+            add(row)
+        if ids:
+            for folder, _ in self.db.cache_get('folders', account.id, []) or []:
+                for row in self._known_rows(self.state(account, folder) or {}):
+                    own, references = row_ids(row)
+                    if (own and own in ids) or own_ids.intersection(references):
+                        add(row)
+        return chronological(result)
 
     @staticmethod
     def searchable_text(row, mail) -> str:

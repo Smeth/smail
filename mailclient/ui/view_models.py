@@ -14,6 +14,34 @@ class MessageRow:
     starred: bool
     attachments: bool
     account_name: str
+    thread: tuple = ()  # Messages de la conversation présents dans la liste, du plus récent au plus ancien.
+
+    @property
+    def count(self) -> int:
+        return max(1, len(self.thread))
+
+    @property
+    def rows(self) -> tuple:
+        return self.thread or (self.raw,)
+
+    @classmethod
+    def from_thread(cls, rows, account=None):
+        """Conversation : le message le plus récent la représente ; les indicateurs agrègent tous les messages."""
+        if len(rows) == 1:
+            return cls.from_row(rows[0], account)
+        base = cls.from_row(rows[0], account)
+        names = []
+        for row in reversed(rows):  # Ordre d’arrivée dans la conversation.
+            name, address = parseaddr(row.get('sender', ''))
+            name = name.split()[0].strip('",') if name.strip() else (address.split('@')[0] or '?')
+            if account and address.casefold() == account.email.casefold():
+                name = 'moi'
+            if name not in names:
+                names.append(name)
+        sender = ', '.join(names[:3]) + ('…' if len(names) > 3 else '')
+        return cls(rows[0], sender, base.subject, base.preview, base.time,
+                   any(row.get('unread') for row in rows), any(row.get('starred') for row in rows),
+                   any(row.get('attachment') for row in rows), base.account_name, tuple(rows))
 
     @classmethod
     def from_row(cls, row, account=None):

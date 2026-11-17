@@ -33,6 +33,7 @@ class MainWindow(QMainWindow):
         self.composers = set()
         self.local_copy = None
         self.auto_load = auto_load
+        self.thread_rows, self.thread_account, self.thread_index = [], None, -1
         self.setWindowTitle('Smail — Client mail')
         self.resize(1440, 900)
         self.setMinimumSize(1080,720)
@@ -255,6 +256,13 @@ class MainWindow(QMainWindow):
         action('Rechercher', self.search.setFocus, 'Ctrl+F', menu=view_menu, icon_name='search')
         action('Palette de commandes', self.open_palette, 'Ctrl+K', menu=view_menu, icon_name='command')
         view_menu.addSeparator()
+        self.conversation_action = QAction('Regrouper par conversation', self)
+        self.conversation_action.setCheckable(True)
+        self.conversation_action.setChecked(self.conversations_enabled())
+        self.conversation_action.setShortcut('Ctrl+Shift+T')
+        self.conversation_action.toggled.connect(self.toggle_conversations)
+        view_menu.addAction(self.conversation_action)
+        self.command_actions.append(self.conversation_action)
         self.dark_action = action('Thème sombre', self.toggle_theme, 'Ctrl+Shift+L', menu=view_menu, icon_name='moon')
         self.dark_action.setCheckable(True)
         self.style_actions = {}
@@ -306,6 +314,10 @@ class MainWindow(QMainWindow):
         self.reader.deleteRequested.connect(lambda:self.trigger_command('Supprimer'))
         self.reader.starRequested.connect(lambda:self.trigger_command('Étoiler'))
         self.reader.readRequested.connect(lambda:self.trigger_command('Lu / non lu'))
+        self.reader.threadMessageRequested.connect(self.open_thread_message)
+        # Parcours de la conversation au clavier, sans quitter la liste.
+        QShortcut(QKeySequence('Alt+Down'),self,activated=lambda:self.step_thread(1))
+        QShortcut(QKeySequence('Alt+Up'),self,activated=lambda:self.step_thread(-1))
         self.appearance.changed.connect(self.refresh_appearance)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.sync_now)
@@ -468,8 +480,9 @@ class MainWindow(QMainWindow):
         return next((account for account in self.accounts if account.id == value), None)
 
     def selected_rows(self):
+        """Messages sélectionnés ; une conversation compte pour tous ses messages de la liste."""
         items = sorted((item for item in self.table.selectedItems() if not item.isHidden()), key=self.table.row)
-        return [item.data(Qt.UserRole).raw for item in items if isinstance(item.data(Qt.UserRole), MessageRow)]
+        return [row for item in items if isinstance(item.data(Qt.UserRole), MessageRow) for row in item.data(Qt.UserRole).rows]
 
     def selected_row(self):
         """Le message lu : seulement quand un seul message est sélectionné."""
@@ -679,17 +692,10 @@ class MainWindow(QMainWindow):
         self.set_busy(True)
         def done(result):
             self.rows, self.total = result['rows'], result['total']
-            self.table.blockSignals(True)
-            self.table.clear()
-            for row in self.rows:
-                row_account = self.row_account(row)
-                view = MessageRow.from_row(row,row_account)
-                item = QListWidgetItem(f'{view.sender} · {view.subject} · {view.preview} · {view.time}')
-                item.setData(Qt.UserRole,view)
-                item.setToolTip(f'{row["sender"]}\n{view.subject}\n{view.account_name}\n{row["date"]}')
-                self.table.addItem(item)
-            self.table.blockSignals(False)
-            self.page_label.setText(f'Page {page+1} — {self.total} message(s), 50 par page')
+            self.render_rows()
+            conversations = self.table.count()
+            grouped = f' · {conversations} conversation(s) sur cette page' if conversations != len(self.rows) else ''
+            self.page_label.setText(f'Page {page+1} — {self.total} message(s), 50 par page{grouped}')
             self.cache_status.setText('Cache local — recherche limitée aux messages synchronisés' if result['offline'] else 'Serveur — recherche dans tout le dossier')
             if not self.rows and result['offline'] and self.total:
                 self.cache_status.setText('Cette page n’est pas encore en cache. Reconnectez-vous ou augmentez la limite dans Préférences.')
@@ -709,8 +715,80 @@ class MainWindow(QMainWindow):
             operation = lambda: self.service.unified(accounts, page, query)
         self.runner.run(operation, done, self.failure)
 
+    def conversations_enabled(self):
+        return bool(self.database.setting('conversation_view', True))
+
+    def toggle_conversations(self, checked):
+        self.database.set_setting('conversation_view', bool(checked))
+        if not self.busy:
+            self.reader.clear()
+            self.render_rows()
+            self.filter_page(self.page_filter)
+
+    def render_rows(self):
+        """Une ligne par conversation (ou par message si le regroupement est désactivé)."""
+        from mailclient.core.threads import group_threads
+        self.table.blockSignals(True)
+        self.table.clear()
+        groups = group_threads(self.rows) if self.conversations_enabled() else [[row] for row in self.rows]
+        for group in groups:
+            row = group[0]
+            row_account = self.row_account(row)
+            view = MessageRow.from_thread(group,row_account)
+            item = QListWidgetItem(f'{view.sender} · {view.subject} · {view.preview} · {view.time}'
+                                   + (f' · {view.count} messages' if view.count > 1 else ''))
+            item.setData(Qt.UserRole,view)
+            item.setToolTip(f'{row["sender"]}\n{view.subject}\n{view.account_name}\n{row["date"]}'
+                            + (f'\nConversation de {view.count} messages dans cette page' if view.count > 1 else ''))
+            self.table.addItem(item)
+        self.table.blockSignals(False)
+
+    def selected_view(self):
+        item = self.table.currentItem()
+        if len(self.table.selectedItems()) > 1 or not item or not item.isSelected() or item.isHidden():
+            return None
+        value = item.data(Qt.UserRole)
+        return value if isinstance(value, MessageRow) else None
+
+    def thread_entry(self, row, account):
+        from email.utils import parseaddr
+        from mailclient.ui.view_models import MessageRow as View
+        name, address = parseaddr(row.get('sender', ''))
+        who = 'Moi' if account and address.casefold() == account.email.casefold() else (name or address or '?')
+        folders = dict(self.database.cache_get('folders', account.id, []) or []) if account else {}
+        current = self.current_folder()
+        where = '' if current and row.get('folder') == current[0] else f' · {folders.get(row.get("folder"), row.get("folder", ""))}'
+        return (f'{who} · {View.from_row(row).time}{where}', bool(row.get('unread')), f'{row.get("sender","")}\n{row.get("subject","")}\n{row.get("date","")}')
+
+    def thread_elsewhere(self):
+        listed = {(row.get('account'), row.get('folder'), row.get('uid')) for row in self.rows}
+        return sum((row.get('account'), row.get('folder'), row.get('uid')) not in listed for row in self.thread_rows)
+
+    def step_thread(self, delta):
+        if self.reader.thread_card.isVisible():
+            self.open_thread_message(self.thread_index + delta)
+
+    def open_thread_message(self, index):
+        """Clic dans le bandeau de conversation : affiche ce message sans quitter la conversation."""
+        if self.busy or not 0 <= index < len(self.thread_rows):
+            return
+        row, account = self.thread_rows[index], self.thread_account
+        self.reader.clear('Chargement du message…', keep_thread=True)
+        self.set_busy(True)
+        offline = self.offline.isChecked()
+        def done(mail):
+            self.thread_index = index
+            self.reader.display(mail, keep_thread=True)
+            self.reader.set_thread([self.thread_entry(r, account) for r in self.thread_rows], index, self.thread_elsewhere())
+            self.set_busy(False)
+        def failed(message):
+            self.reader.clear(message, keep_thread=True)
+            self.failure(message)
+        self.runner.run(lambda: self.service.message(account, row, offline), done, failed)
+
     def read_selected(self):
-        row = self.selected_row()
+        view = self.selected_view()
+        row = view.raw if view else None
         if self.busy:
             return
         if not row:
@@ -722,10 +800,22 @@ class MainWindow(QMainWindow):
         self.reader.clear('Chargement du message…')
         self.set_busy(True)
         offline = self.offline.isChecked()
-        def done(mail):
-            self.reader.display(mail)
+        grouped = self.conversations_enabled()
+        def operation():
+            if not grouped:
+                return self.service.message(account, row, offline), [row], 0
+            # Conversation complète (réponses retrouvées dans les autres dossiers en cache) ;
+            # ouverture sur le premier message non lu, sinon sur le plus récent.
+            messages = self.service.conversation(account, list(view.rows))
+            index = next((i for i, item in enumerate(messages) if item.get('unread')), len(messages) - 1)
+            return self.service.message(account, messages[index], offline), messages, index
+        def done(result):
+            mail, messages, index = result
+            self.thread_rows, self.thread_account, self.thread_index = messages, account, index
+            self.reader.display(mail, keep_thread=True)
+            self.reader.set_thread([self.thread_entry(r, account) for r in messages] if len(messages) > 1 else [], index, self.thread_elsewhere())
             current = self.table.currentItem()
-            if current and current.data(Qt.UserRole).raw is row and mail.text:
+            if current and current.data(Qt.UserRole).raw is row and messages[index] is row and mail.text:
                 from dataclasses import replace
                 view = current.data(Qt.UserRole)
                 view = replace(view,preview=' '.join(mail.text.split())[:180])
@@ -737,7 +827,7 @@ class MainWindow(QMainWindow):
         def failed(message):
             self.reader.clear(message)
             self.failure(message)
-        self.runner.run(lambda: self.service.message(account, row, offline), done, failed)
+        self.runner.run(operation, done, failed)
 
     def mutate(self, action, target='', rows=None, plan=None):
         """plan : [(compte, messages, action, cible)] ; par défaut la sélection courante et une seule action."""

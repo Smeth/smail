@@ -49,6 +49,9 @@ QListWidget#Commands::item { padding: 13px 12px; margin: 2px 6px; }
 QListWidget#Commands::item:selected { background: $soft; color: $accent; }
 QListWidget#SettingsNav::item { padding: 12px 10px; margin: 3px; }
 QListWidget#SettingsNav::item:selected { background: $soft; color: $accent; }
+QListWidget#ThreadList::item { padding: 5px 8px; margin: 1px 0; }
+QListWidget#ThreadList::item:hover { background: $hover; }
+QListWidget#ThreadList::item:selected { background: $soft; color: $accent; }
 QTabWidget::pane { border: none; background: $surface; }
 QTabBar::tab { background: transparent; color: $muted; padding: 9px 12px; border-bottom: 2px solid transparent; }
 QTabBar::tab:selected { color: $accent; border-bottom: 2px solid $accent; }
@@ -81,7 +84,7 @@ QMenuBar::item { padding: 6px 12px; border-radius: 5px; background: transparent;
 QMenuBar::item:selected { background: $soft; color: $accent; }
 QFrame#ComposeCard { background: $surface; border: 1px solid $border; border-radius: 10px; }
 QWidget#ReaderWorkspace { background: transparent; }
-QFrame#ReaderSubject, QFrame#ReaderMessage { background: $surface; border: 1px solid $border; border-radius: 9px; }
+QFrame#ReaderSubject, QFrame#ReaderMessage, QFrame#ReaderThread { background: $surface; border: 1px solid $border; border-radius: 9px; }
 QLabel#ReaderSubjectText { font-size: 18px; font-weight: 650; }
 QLabel#ReaderSender { font-size: 14px; font-weight: 650; color: $accent; }
 QLabel#ReaderAvatar { background: $soft; color: $accent; border-radius: 21px; font-size: 16px; font-weight: 600; }
