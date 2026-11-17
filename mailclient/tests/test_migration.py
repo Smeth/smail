@@ -116,7 +116,7 @@ def test_unified_duplicate_uid_selection_uses_account_identity(window,monkeypatc
     from mailclient.core.parser import Mail
     monkeypatch.setattr(window.service,'message',lambda account,row,offline:Mail('test@example.com',account.email,row['subject'],'',text='Contenu réel contrôlé'))
     calls = []
-    monkeypatch.setattr(window.service,'action',lambda account,row,*args:calls.append((account.id,row['uid'])))
+    monkeypatch.setattr(window.service,'action',lambda account,rows,*args:calls.extend((account.id,row['uid']) for row in rows))
     window.load_messages()
     wait_for(lambda:not window.busy and window.table.count() == 2)
     window.table.selectRow(1)

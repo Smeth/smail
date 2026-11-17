@@ -26,6 +26,8 @@ L’exécutable construit est `dist\Smail\Smail.exe`. Conservez et distribuez **
 
 **Ajouter un compte** permet de saisir le nom, l’adresse et les paramètres distincts IMAP/SMTP. En quittant le champ adresse, les domaines Gmail, Outlook/Hotmail et Yahoo préremplissent les champs serveur encore vides. Pour LWS, cPanel ou un serveur interne, reprenez les valeurs fournies par votre hébergeur ou administrateur. Le bouton **Compte** modifie un compte existant, sa signature et son authentification.
 
+**Comptes › Supprimer le compte…** (ou l’icône corbeille dans Préférences › Comptes) retire le compte de ce PC après confirmation : paramètres, cache hors ligne, brouillons locaux, copies locales des envois, certificats approuvés, ainsi que mot de passe et jetons OAuth2 du Gestionnaire d’identifiants Windows. Les messages restent sur le serveur. Fermez d’abord les fenêtres de rédaction ouvertes.
+
 | Connexion | Port IMAP usuel | Port SMTP usuel | Comportement |
 | --- | --- | --- | --- |
 | SSL/TLS | 993 | 465 | TLS immédiat, choix initial |
@@ -38,7 +40,7 @@ Le changement du type remplit le port usuel ; le port reste modifiable. **Aucun*
 
 La vérification TLS système et le contrôle du nom de serveur sont actifs par défaut (`ssl.create_default_context`). Si la vérification échoue, une sonde sans authentification récupère le certificat. La boîte de sécurité affiche le serveur, l’émetteur, les dates, l’empreinte SHA-256 et la raison de l’échec. **Annuler** est le choix par défaut. **Continuer quand même** autorise seulement cette empreinte pour ce compte et ce serveur pendant la session. La case de confiance permanente conserve cette empreinte dans SQLite. Tout changement d’empreinte réaffiche l’alerte, même si le nouveau certificat est par ailleurs valide. Comparez l’empreinte avec votre administrateur via un canal indépendant avant de faire confiance.
 
-Un serveur sans STARTTLS est refusé sans envoi d’identifiants : aucun repli automatique en clair. Une alerte de certificat rencontrée en synchronisation suspend cette opération ; choisissez le compte puis **Actualiser** pour examiner l’alerte. Relancez ensuite **Synchroniser** ; la surveillance IDLE peut être redémarrée en désactivant puis réactivant son option dans Préférences. Pour supprimer une ancienne exception persistante, fermez Smail puis retirez l’entrée concernée de la table `pins` de `settings.db`.
+Un serveur sans STARTTLS est refusé sans envoi d’identifiants : aucun repli automatique en clair. Une alerte de certificat rencontrée en synchronisation suspend cette opération ; choisissez le compte puis **Actualiser** pour examiner l’alerte. Relancez ensuite **Synchroniser** ; la surveillance IDLE peut être redémarrée en désactivant puis réactivant son option dans Préférences. Pour retirer une exception permanente, ouvrez **Préférences › Sécurité › Certificats approuvés** puis cliquez sur **Retirer** : l’alerte réapparaîtra à la prochaine connexion à ce serveur.
 
 ## Gmail : mot de passe d’application
 
@@ -76,8 +78,10 @@ Références : [OAuth pour IMAP/SMTP Microsoft](https://learn.microsoft.com/en-u
 L’interface propose les dossiers, la liste paginée par 50 et le panneau de lecture. Les UID décroissants donnent l’ordre de réception ; l’ordre unifié utilise les dates déclarées des messages. Les non lus sont en gras, les étoiles et pièces jointes ont un indicateur.
 
 - Sélectionnez un message pour le lire en texte brut ou HTML sécurisé. Les encodages MIME, UTF-8, ISO-8859-1, quoted-printable et base64 sont décodés. La lecture seule utilise `BODY.PEEK` et ne change pas le drapeau lu/non lu.
-- **Lu / non lu**, **Étoiler**, **Déplacer**, **Archiver** et **Supprimer** agissent sur le message sélectionné, y compris depuis la boîte unifiée. Supprimer déplace vers la corbeille après confirmation, sans suppression définitive. Si aucun dossier spécial n’est reconnu, choisissez un dossier existant ; créez au besoin ce dossier depuis votre webmail puis actualisez.
-- Les actions vérifient UIDVALIDITY pour éviter de modifier un autre message après recréation d’un dossier. Déplacer utilise UID MOVE si disponible, sinon COPY puis suppression ciblée de la source. Sans UIDPLUS, la source reste marquée `Deleted` en attendant la purge du serveur ; Smail n’exécute jamais une purge globale susceptible de supprimer les mails d’une autre session.
+- Ctrl+clic, Maj+clic ou Ctrl+A sélectionnent plusieurs messages. **Lu / non lu**, **Étoiler**, **Déplacer**, **Archiver** et **Supprimer** agissent sur toute la sélection, y compris depuis la boîte unifiée (Déplacer exige des messages d’un seul compte) ; une seule commande IMAP est envoyée par dossier. Répondre et Transférer exigent un seul message. Supprimer déplace vers la corbeille après confirmation ; depuis la corbeille, Supprimer devient une **suppression définitive**, confirmée séparément.
+- **Tout marquer comme lu** (Ctrl+Maj+U, menu Message ou clic droit sur un dossier) agit sur tout le dossier courant côté serveur, ou sur la réception de chaque compte dans la boîte unifiée.
+- **Comptes › Dossier** (ou clic droit sur la liste des dossiers) crée, renomme ou supprime un dossier. Les dossiers système (réception, envoyés, brouillons, corbeille, spam) sont protégés. Pour un sous-dossier, utilisez le séparateur de votre serveur (souvent `/` ou `.`). **Vider le dossier…** supprime définitivement tout le contenu de la corbeille ou du spam.
+- Les actions vérifient UIDVALIDITY pour éviter de modifier un autre message après recréation d’un dossier. Déplacer utilise UID MOVE si disponible, sinon COPY puis suppression ciblée de la source. Sans UIDPLUS, la source reste marquée `Deleted` (masquée) en attendant la purge du serveur ; Smail n’exécute une purge globale (EXPUNGE) que lorsque vous videz entièrement la corbeille ou le spam.
 - Saisissez une recherche puis appuyez sur **Entrée**. En ligne, IMAP TEXT cherche dans tout le dossier avec une valeur UTF-8 littérale. Hors ligne, et dans la réception unifiée, la recherche porte sur les métadonnées et contenus déjà présents dans le cache. La bannière indique cette portée. Si le serveur refuse la recherche, le cache disponible est utilisé et indiqué.
 
 Le HTML est nettoyé sur liste blanche avec Bleach. Scripts, iframes, formulaires, événements JavaScript et styles du mail sont exclus. JavaScript, navigation externe, accès aux fichiers locaux et téléchargements WebEngine sont bloqués ; une CSP et un intercepteur réseau renforcent ces règles. Le profil WebEngine est privé, en mémoire. Les documents sont servis à WebEngine via un protocole interne en mémoire, sans fichier temporaire et sans la limite d’URL data de `setHtml`.
@@ -96,7 +100,7 @@ Les brouillons locaux sont sauvegardés en arrière-plan après 1,5 seconde d’
 
 Après acceptation SMTP, une copie locale est conservée dans **Envoyés locaux**. Pour les serveurs autres que Gmail, Smail tente aussi de conserver une copie dans le dossier Envoyés. L’envoi SMTP et cette copie sont deux tâches distinctes : une erreur de copie ou une alerte de certificat ne renvoie jamais le message. **Exporter .eml** sauvegarde la copie locale ouverte. Si le serveur conserve déjà lui-même une copie, une seconde copie serveur peut apparaître (le cas Gmail est traité automatiquement).
 
-Raccourcis : Ctrl+N rédiger, Ctrl+R répondre, Ctrl+Maj+R répondre à tous, Ctrl+L transférer, Suppr déplacer vers la corbeille, F5 synchroniser.
+Raccourcis : Ctrl+N rédiger, Ctrl+R répondre, Ctrl+Maj+R répondre à tous, Ctrl+L transférer, Suppr déplacer vers la corbeille, Ctrl+Maj+U tout marquer comme lu, F5 synchroniser.
 
 ## Hors ligne, synchronisation et confort
 
@@ -118,7 +122,11 @@ L’option **Chiffrer les messages, pièces jointes et brouillons du cache** app
 
 Ne supprimez pas la clé `cache-encryption-key` du service keyring `SmailDesktop` : sans elle, un cache chiffré ne peut pas être déchiffré. Sauvegarder uniquement `settings.db` ne sauvegarde pas la clé. La migration ne chiffre pas les anciennes sauvegardes, les exports, les fichiers joints enregistrés ni les éventuelles copies réalisées auparavant par le système.
 
-Le journal tourne sur trois sauvegardes de 500 Ko. Il contient démarrage/arrêt et noms de types d’erreurs techniques ; aucun mot de passe, jeton, contenu de mail ou exception serveur brute n’y est écrit. Ne pas activer les traces détaillées des bibliothèques IMAP/SMTP.
+Le schéma SQLite est versionné (`PRAGMA user_version`) et migré automatiquement au démarrage ; une base créée par une version plus récente de Smail est refusée plutôt que modifiée. La table `cache` conserve sa structure d’origine : une base migrée reste utilisable par Smail 1.0.0.
+
+Les sessions IMAP authentifiées sont réutilisées pendant 4 minutes au plus (vérification NOOP avant réemploi, fermeture après toute erreur) et les listes de messages sont téléchargées en une commande par page ; IDLE garde sa session dédiée.
+
+Le journal tourne sur trois sauvegardes de 500 Ko. Il contient démarrage/arrêt, noms de types d’erreurs techniques et, pour une erreur inattendue, les fichiers et lignes de code concernés ; aucun mot de passe, jeton, contenu de mail ou exception serveur brute n’y est écrit. Ne pas activer les traces détaillées des bibliothèques IMAP/SMTP.
 
 ## Structure du code
 
@@ -136,20 +144,25 @@ Les appels réseau, la synchronisation et les sauvegardes de brouillons passent 
 
 ## Tests, diagnostic et build Windows
 
+Les outils de test et de compilation sont dans `requirements-dev.txt` (qui inclut aussi les dépendances d’exécution) :
+
 ```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m pytest mailclient/tests -q
 .\.venv\Scripts\python.exe -m mailclient.main --smoke-test
 .\.venv\Scripts\python.exe -m PyInstaller --clean Smail.spec
 ```
 
-Le diagnostic ouvre brièvement une fenêtre avec un message fictif, vérifie WebEngine et le backend du coffre puis se ferme avec le code 0 attendu. Il ne charge pas les comptes, ne lit pas leurs identifiants et ne se connecte pas aux serveurs. Il peut créer les tables de configuration et écrire les événements de démarrage/arrêt habituels. Pour tester l’exécutable dans PowerShell en attendant son code de sortie :
+La version de l’application est définie une seule fois dans `mailclient/__init__.py` ; `Smail.spec` en dérive les informations de version de l’exécutable. L’icône `mailclient/ui/assets/smail.ico` est générée par `python tools/make_icon.py`. Le workflow `.github/workflows/ci.yml` exécute les tests sous Windows (Python 3.11 et 3.13), construit l’exécutable, lance son diagnostic et publie le dossier `dist\Smail` comme artefact.
+
+Le diagnostic ouvre brièvement une fenêtre avec un message fictif, vérifie WebEngine et le backend du coffre puis se ferme avec le code 0 attendu. Il ne charge pas les comptes, ne lit pas leurs identifiants et ne se connecte pas aux serveurs. Il peut créer ou migrer les tables de configuration et écrire les événements de démarrage/arrêt habituels. Pour tester l’exécutable dans PowerShell en attendant son code de sortie :
 
 ```powershell
 $p = Start-Process .\dist\Smail\Smail.exe -ArgumentList '--smoke-test' -PassThru -Wait
 $p.ExitCode
 ```
 
-Les tests couvrent MIME, encodages, TLS et empreintes, STARTTLS sans repli, SQLite et migration de chiffrement, coffre Windows et longs jetons, en-têtes/Cci, réponses, brouillons, envois partiels, absence de double envoi, déplacement sans purge globale, recherche littérale, cache hors ligne et boîte unifiée. Des serveurs exclusivement locaux vérifient une vraie session SMTP, le dialogue IDLE, le rappel OAuth PKCE/state et les requêtes d’images WebEngine. Le rendu des tests sans écran utilise le mode logiciel pour éviter les problèmes GPU de la plateforme offscreen.
+Les tests couvrent MIME, encodages, TLS et empreintes, STARTTLS sans repli, SQLite, migrations de schéma et de chiffrement, suppression de compte, actions groupées et gestion des dossiers, réserve de sessions IMAP, coffre Windows et longs jetons, en-têtes/Cci, réponses, brouillons, envois partiels, absence de double envoi, déplacement sans purge globale, recherche littérale, cache hors ligne et boîte unifiée. Des serveurs exclusivement locaux vérifient une vraie session SMTP, le dialogue IDLE, le rappel OAuth PKCE/state et les requêtes d’images WebEngine. Le rendu des tests sans écran utilise le mode logiciel pour éviter les problèmes GPU de la plateforme offscreen.
 
 L’autorisation OAuth réelle doit être validée avec votre propre identifiant d’application, le consentement du fournisseur et votre compte. L’envoi et les actions réels doivent être vérifiés avec un compte de test et un destinataire contrôlé. Une suite locale ne remplace pas ces validations de bout en bout chez votre hébergeur.
 

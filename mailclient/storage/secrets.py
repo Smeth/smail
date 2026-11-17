@@ -29,6 +29,24 @@ class Secrets:
                 raise RuntimeError('Secret incomplet dans le coffre Windows. Reconnectez ce compte.') from None
         return value
 
+    def delete(self, account_id: str) -> None:
+        """Supprime un secret et ses fragments ; un secret déjà absent n’est pas une erreur."""
+        backend = self._backend()
+        value = backend.get_password(self.SERVICE, account_id)
+        if value is None:
+            return
+        if value.startswith(self.PREFIX):
+            try:
+                generation, count = value[len(self.PREFIX):].split(':')
+                for i in range(min(int(count), 1000)):
+                    try:
+                        backend.delete_password(self.SERVICE, f'{account_id}:{generation}:{i}')
+                    except Exception:
+                        pass  # Fragment déjà absent.
+            except ValueError:
+                pass
+        backend.delete_password(self.SERVICE, account_id)
+
     def set(self, account_id: str, password: str) -> None:
         backend = self._backend()
         old = backend.get_password(self.SERVICE, account_id)

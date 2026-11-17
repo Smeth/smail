@@ -1,5 +1,17 @@
 # Historique des versions
 
+## Non publié
+
+- Suppression d’un compte (menu Comptes ou Préférences) : configuration, cache, brouillons, copies d’envoi, certificats approuvés et secrets du coffre Windows sont effacés de ce PC.
+- Liste et retrait des certificats approuvés dans Préférences › Sécurité.
+- Sélection multiple des messages ; actions groupées en une commande IMAP par dossier.
+- Tout marquer comme lu, suppression définitive depuis la corbeille, vidage de la corbeille et du spam.
+- Création, renommage et suppression de dossiers (noms accentués encodés en UTF-7 modifié).
+- Performances : réutilisation des sessions IMAP et téléchargement des listes et de la synchronisation par lots.
+- Schéma SQLite versionné avec migrations automatiques ; compatibilité conservée avec Smail 1.0.0.
+- Icône de l’application, informations de version de l’exécutable, gestionnaire d’erreurs inattendues.
+- Dépendances de développement séparées (`requirements-dev.txt`) et intégration continue GitHub Actions.
+
 ## V1 — 1.0.0
 
 Première version publique de Smail, client mail de bureau Windows en français.

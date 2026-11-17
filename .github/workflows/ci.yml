@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests (Python ${{ matrix.python }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.13']
+    env:
+      QT_QPA_PLATFORM: offscreen
+      QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Installer les dépendances
+        run: python -m pip install -r requirements-dev.txt
+      - name: Tests
+        run: python -m pytest mailclient/tests -q -p no:cacheprovider
+
+  build:
+    name: Exécutable Windows
+    needs: tests
+    runs-on: windows-latest
+    env:
+      QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Installer les dépendances
+        run: python -m pip install -r requirements-dev.txt
+      - name: Construire
+        run: python -m PyInstaller --clean --noconfirm Smail.spec
+      - name: Diagnostic de l’exécutable
+        shell: pwsh
+        run: |
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $p = Start-Process .\dist\Smail\Smail.exe -ArgumentList '--smoke-test' -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "Diagnostic en échec : code $($p.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Smail-windows
+          path: dist/Smail
+          retention-days: 14

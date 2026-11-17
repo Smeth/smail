@@ -1,16 +1,121 @@
 """Sessions IMAP dédiées : lecture, actions UID et surveillance IDLE."""
+import base64
+import hashlib
 import imaplib
 import re
 import select
+import threading
 import time
+from contextlib import contextmanager
 from mailclient.core.parser import metadata, decode_folder, parse_message, Mail
 from mailclient.core.tls_policy import require_starttls
 from mailclient.core.oauth import xoauth2
+
+UID_SET = re.compile(r'[1-9][0-9]*(?:,[1-9][0-9]*)*')
 
 def quote_folder(folder: str) -> str:
     if any(c in folder for c in '\r\n\x00'):
         raise ValueError('Nom de dossier invalide.')
     return '"' + folder.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+def encode_folder(value: str) -> str:
+    """UTF-7 modifié de la RFC 3501, inverse de decode_folder."""
+    result, pending = [], ''
+    def flush():
+        if pending:
+            data = base64.b64encode(pending.encode('utf-16-be')).decode('ascii').rstrip('=').replace('/', ',')
+            result.append('&' + data + '-')
+    for char in value:
+        if 0x20 <= ord(char) <= 0x7e:
+            flush()
+            pending = ''
+            result.append('&-' if char == '&' else char)
+        else:
+            pending += char
+    flush()
+    return ''.join(result)
+
+def valid_folder_name(name: str) -> str:
+    name = name.strip()
+    if not name or len(name) > 200 or any(ord(c) < 32 or c in '*%' for c in name):
+        raise ValueError('Nom de dossier invalide : évitez les caractères * et %.')
+    return name
+
+FETCH_START = re.compile(rb'\d+ \(')
+
+def fetch_items(parts) -> dict:
+    """Regroupe une réponse FETCH multi-messages d’imaplib : {uid: (attributs, littéral ou None)}.
+
+    imaplib renvoie un tuple (préfixe, littéral) par message, suivi d’octets contenant la fin des
+    attributs (FLAGS peut être placé après le littéral). Les réponses sans UID (notifications
+    non sollicitées) sont ignorées."""
+    entries = []
+    for part in parts or []:
+        if isinstance(part, tuple) and len(part) == 2:
+            entries.append([part[0], part[1]])
+        elif isinstance(part, bytes):
+            if FETCH_START.match(part) or not entries:
+                entries.append([part, None])
+            else:
+                entries[-1][0] += part
+    result = {}
+    for attributes, literal in entries:
+        match = re.search(rb'UID (\d+)', attributes)
+        if match:
+            result[match[1].decode()] = (attributes, literal)
+    return result
+
+class ConnectionPool:
+    """Sessions IMAP authentifiées réutilisables, vérifiées par NOOP et fermées après inactivité."""
+    def __init__(self, ttl=240, per_key=2):
+        self.ttl, self.per_key = ttl, per_key
+        self.lock = threading.Lock()
+        self.idle: dict[tuple, list] = {}
+
+    def acquire(self, key):
+        while True:
+            with self.lock:
+                stack = self.idle.get(key) or []
+                if not stack:
+                    return None
+                client, last = stack.pop()
+            if time.monotonic() - last > self.ttl:
+                self._close(client)
+                continue
+            try:
+                if client.noop()[0] == 'OK':
+                    return client
+            except Exception:
+                pass
+            self._close(client)
+
+    def release(self, key, client):
+        with self.lock:
+            stack = self.idle.setdefault(key, [])
+            if len(stack) < self.per_key:
+                stack.append((client, time.monotonic()))
+                return
+        self._close(client)
+
+    def clear(self, account_id=None):
+        with self.lock:
+            keys = [key for key in self.idle if account_id is None or key[0] == account_id]
+            clients = [client for key in keys for client, _ in self.idle.pop(key)]
+        for client in clients:
+            self._close(client)
+
+    @staticmethod
+    def _close(client):
+        try:
+            client.shutdown()
+        except Exception:
+            pass
+
+def uid_set(uids) -> str:
+    value = ','.join(str(uid) for uid in ([uids] if isinstance(uids, str) else uids))
+    if not UID_SET.fullmatch(value):
+        raise ValueError('Actualisez le dossier avant de modifier ce message.')
+    return value
 
 class IMAPClient:
     def select(self, client, folder, readonly=True, expected=None):
@@ -31,7 +136,7 @@ class IMAPClient:
     def message_raw(self, folder: str, uid: str) -> bytes:
         if not re.fullmatch(r'[1-9][0-9]*', uid):
             raise ValueError('Identifiant de message invalide.')
-        with self.open() as client:
+        with self.session() as client:
             self.select(client, folder)
             status, parts = client.uid('fetch', uid, '(BODY.PEEK[])')
             if status != 'OK':
@@ -41,8 +146,30 @@ class IMAPClient:
                     return part[1]
             raise RuntimeError('Ce message n’est plus disponible sur le serveur.')
 
-    def __init__(self, account, password, tls):
-        self.account, self.password, self.tls = account, password, tls
+    def __init__(self, account, password, tls, pool=None):
+        self.account, self.password, self.tls, self.pool = account, password, tls, pool
+
+    def _pool_key(self):
+        # La configuration et l’empreinte du secret : un changement de paramètres n’emprunte jamais une ancienne session.
+        server = self.account.imap
+        secret = hashlib.sha256((self.password or '').encode('utf-8')).hexdigest()
+        return (self.account.id, server.host, server.port, server.mode, self.account.email, self.account.auth_method, secret)
+
+    @contextmanager
+    def session(self):
+        """Session authentifiée : empruntée à la réserve si possible, rendue après succès, fermée après erreur."""
+        if self.pool is None:
+            with self.open() as client:
+                yield client
+            return
+        key = self._pool_key()
+        client = self.pool.acquire(key) or self.open()
+        try:
+            yield client
+        except BaseException:
+            ConnectionPool._close(client)
+            raise
+        self.pool.release(key, client)
 
     def open(self):
         server = self.account.imap
@@ -75,7 +202,7 @@ class IMAPClient:
             raise
 
     def folders(self):
-        with self.open() as client:
+        with self.session() as client:
             status, data = client.list()
             if status != 'OK':
                 raise RuntimeError('Impossible de lister les dossiers.')
@@ -95,7 +222,7 @@ class IMAPClient:
             return folders
 
     def messages(self, folder: str, page: int, query: str = ''):
-        with self.open() as client:
+        with self.session() as client:
             self.select(client, folder)
             if query:
                 client.literal = query.encode('utf-8')
@@ -105,25 +232,37 @@ class IMAPClient:
             if status != 'OK':
                 raise RuntimeError('Impossible de rechercher les messages.')
             ids = list(reversed(data[0].split()))
+            wanted = [uid.decode() for uid in ids[page * 50:(page + 1) * 50]]
+            if not wanted:
+                return [], len(ids)
+            # Une seule commande FETCH pour toute la page.
+            status, parts = client.uid('fetch', ','.join(wanted), '(UID FLAGS BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE CONTENT-TYPE CONTENT-DISPOSITION)])')
+            if status != 'OK':
+                raise RuntimeError('Impossible de charger la liste des messages.')
+            items = fetch_items(parts)
             rows = []
-            for uid in ids[page * 50:(page + 1) * 50]:
-                status, parts = client.uid('fetch', uid, '(FLAGS BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE CONTENT-TYPE CONTENT-DISPOSITION)])')
-                if status != 'OK':
-                    continue
-                for part in parts:
-                    if isinstance(part, tuple):
-                        row = metadata(part[1])
-                        row.update(uid=uid.decode(), uidvalidity=self.uidvalidity, starred=b'\\Flagged' in part[0], unread=b'\\Seen' not in part[0], attachment=row['attachment'] or bool(re.search(rb'"(?:ATTACHMENT|FILENAME|NAME)"', part[0], re.I)))
-                        rows.append(row)
-                        break
+            for uid in wanted:
+                if uid not in items or items[uid][1] is None:
+                    continue  # Message supprimé entre SEARCH et FETCH.
+                attributes, header = items[uid]
+                row = metadata(header)
+                row.update(uid=uid, uidvalidity=self.uidvalidity, starred=b'\\Flagged' in attributes, unread=b'\\Seen' not in attributes,
+                           attachment=row['attachment'] or bool(re.search(rb'"(?:ATTACHMENT|FILENAME|NAME)"', attributes, re.I)))
+                rows.append(row)
             return rows, len(ids)
 
-    def action(self, folder: str, uid: str, expected: str, action: str, target=''):
-        if not re.fullmatch(r'[1-9][0-9]*', uid) or not expected:
+    def action(self, folder: str, uid, expected: str, action: str, target=''):
+        """uid accepte un UID ou une liste d’UID du même dossier : une seule commande IMAP."""
+        uid = uid_set(uid)
+        if not expected:
             raise ValueError('Actualisez le dossier avant de modifier ce message.')
-        with self.open() as client:
+        with self.session() as client:
             self.select(client, folder, False, expected)
-            if action in {'read', 'unread', 'star', 'unstar'}:
+            if action == 'delete':
+                status, _ = client.uid('STORE', uid, '+FLAGS.SILENT', '(\\Deleted)')
+                if status == 'OK':
+                    status = self._expunge(client, uid)
+            elif action in {'read', 'unread', 'star', 'unstar'}:
                 flag = '\\Seen' if action in {'read', 'unread'} else '\\Flagged'
                 operation = '+FLAGS.SILENT' if action in {'read', 'star'} else '-FLAGS.SILENT'
                 status, _ = client.uid('store', uid, operation, f'({flag})')
@@ -146,42 +285,95 @@ class IMAPClient:
             if status != 'OK':
                 raise RuntimeError('Le serveur a refusé cette action. Actualisez le dossier avant de réessayer.')
 
+    @staticmethod
+    def _expunge(client, uid, allow_global=False):
+        """Purge ciblée avec UIDPLUS. Sans UIDPLUS, EXPUNGE global seulement quand tout le dossier est vidé ;
+        sinon le message reste marqué Deleted (masqué) jusqu’à la purge du serveur."""
+        if b'UIDPLUS' in client.capabilities:
+            return client.uid('EXPUNGE', uid)[0]
+        return client.expunge()[0] if allow_global else 'OK'
+
+    def mark_all_read(self, folder: str):
+        with self.session() as client:
+            self.select(client, folder, False)
+            status, data = client.uid('search', None, 'UNSEEN')
+            if status != 'OK':
+                raise RuntimeError('Impossible de rechercher les messages non lus.')
+            uids = data[0].split() if data and data[0] else []
+            for start in range(0, len(uids), 500):
+                status, _ = client.uid('STORE', b','.join(uids[start:start+500]).decode('ascii'), '+FLAGS.SILENT', '(\\Seen)')
+                if status != 'OK':
+                    raise RuntimeError('Le serveur a refusé de marquer les messages comme lus.')
+            return len(uids)
+
+    def empty_folder(self, folder: str):
+        """Suppression définitive de tous les messages du dossier (corbeille, spam)."""
+        with self.session() as client:
+            self.select(client, folder, False)
+            status, data = client.uid('search', None, 'ALL')
+            if status != 'OK':
+                raise RuntimeError('Impossible de lister les messages du dossier.')
+            uids = data[0].split() if data and data[0] else []
+            for start in range(0, len(uids), 500):
+                chunk = b','.join(uids[start:start+500]).decode('ascii')
+                status, _ = client.uid('STORE', chunk, '+FLAGS.SILENT', '(\\Deleted)')
+                if status != 'OK' or self._expunge(client, chunk, allow_global=True) != 'OK':
+                    raise RuntimeError('Le serveur a refusé la suppression définitive. Actualisez le dossier.')
+            return len(uids)
+
+    def manage_folder(self, operation: str, name: str, new_name: str = ''):
+        """create / rename / delete ; les noms affichés sont encodés en UTF-7 modifié."""
+        with self.session() as client:
+            if operation == 'create':
+                status, _ = client.create(quote_folder(encode_folder(valid_folder_name(name))))
+            elif operation == 'rename':
+                status, _ = client.rename(quote_folder(name), quote_folder(encode_folder(valid_folder_name(new_name))))
+            elif operation == 'delete':
+                status, _ = client.delete(quote_folder(name))
+            else:
+                raise ValueError('Opération de dossier inconnue.')
+            if status != 'OK':
+                raise RuntimeError('Le serveur a refusé cette opération sur le dossier (nom déjà utilisé ou dossier protégé ?).')
+
     def append(self, folder: str, raw: bytes, draft=False):
-        with self.open() as client:
+        with self.session() as client:
             status, _ = client.append(quote_folder(folder), '(\\Draft)' if draft else '(\\Seen)', None, raw)
             if status != 'OK':
                 raise RuntimeError('Le serveur a refusé l’enregistrement de la copie.')
 
     def snapshot(self, folder: str, limit: int, cancelled, known=None):
         """Capture du dossier et téléchargement borné des derniers messages."""
-        with self.open() as client:
+        with self.session() as client:
             self.select(client, folder)
             status, data = client.uid('search', None, 'UNDELETED')
             if status != 'OK':
                 raise RuntimeError('Synchronisation du dossier refusée.')
-            ids = list(reversed(data[0].split()))
-            rows, bodies = [], {}
-            for uid in ids[:limit]:
-                if cancelled.is_set():
-                    break
-                cached = known(uid.decode(), self.uidvalidity) if known else None
-                status, parts = client.uid('fetch', uid, '(UID FLAGS)' if cached else '(UID FLAGS BODY.PEEK[])')
-                if status != 'OK':
-                    continue
-                if cached:
-                    flags = b' '.join(part for part in parts if isinstance(part, bytes))
-                    row = metadata(cached)
-                    row.update(uid=uid.decode(), uidvalidity=self.uidvalidity, unread=b'\\Seen' not in flags, starred=b'\\Flagged' in flags)
-                    rows.append(row)
-                    bodies[uid.decode()] = cached
-                    continue
-                for part in parts:
-                    if isinstance(part, tuple) and isinstance(part[1], bytes):
-                        row = metadata(part[1])
-                        row.update(uid=uid.decode(), uidvalidity=self.uidvalidity, unread=b'\\Seen' not in part[0], starred=b'\\Flagged' in part[0])
-                        rows.append(row)
-                        bodies[uid.decode()] = part[1]
+            ids = [uid.decode() for uid in reversed(data[0].split())]
+            wanted = ids[:limit]
+            cached = {uid: known(uid, self.uidvalidity) for uid in wanted} if known else {}
+            cached = {uid: raw for uid, raw in cached.items() if raw}
+            missing = [uid for uid in wanted if uid not in cached]
+            fetched = {}
+            # Drapeaux des messages déjà en cache : lots de 500 ; contenus complets : lots de 25 (mémoire bornée, annulation rapide).
+            for size, uids, items in ((500, list(cached), '(UID FLAGS)'), (25, missing, '(UID FLAGS BODY.PEEK[])')):
+                for start in range(0, len(uids), size):
+                    if cancelled.is_set():
                         break
+                    status, parts = client.uid('fetch', ','.join(uids[start:start+size]), items)
+                    if status == 'OK':
+                        fetched.update(fetch_items(parts))
+            rows, bodies = [], {}
+            for uid in wanted:
+                if uid not in fetched:
+                    continue
+                attributes, literal = fetched[uid]
+                raw = cached.get(uid) or literal
+                if not isinstance(raw, bytes):
+                    continue
+                row = metadata(raw)
+                row.update(uid=uid, uidvalidity=self.uidvalidity, unread=b'\\Seen' not in attributes, starred=b'\\Flagged' in attributes)
+                rows.append(row)
+                bodies[uid] = raw
             return rows, len(ids), bodies, self.uidvalidity
 
     def idle_wait(self, cancelled, seconds=25):

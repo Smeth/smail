@@ -1,6 +1,7 @@
 """Préférences réelles dans les catégories de la maquette validée."""
 from PySide6.QtWidgets import (QDialog, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QSpinBox, QComboBox, QCheckBox, QDialogButtonBox, QListWidget, QStackedWidget, QColorDialog)
+    QSpinBox, QComboBox, QCheckBox, QDialogButtonBox, QListWidget, QStackedWidget, QColorDialog, QMessageBox)
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from mailclient.ui.dialog_shell import dialog_layout
 from mailclient.ui.components import label, Button, Card, Banner
@@ -116,6 +117,11 @@ class SettingsDialog(QDialog):
             edit.setEnabled(self.parent() is not None and hasattr(self.parent(),'secrets'))
             edit.clicked.connect(lambda checked=False,a=account:self.edit_account(a))
             row.addWidget(edit)
+            remove = Button('',self.appearance_theme,'trash-2','QuietDanger','Supprimer le compte '+account.name+' de ce PC')
+            remove.setAccessibleName('Supprimer le compte '+account.name)
+            remove.setEnabled(edit.isEnabled())
+            remove.clicked.connect(lambda checked=False,a=account,c=card:self.delete_account(a,c))
+            row.addWidget(remove)
             card.box.addLayout(row)
             secure = account.imap.mode != 'Aucun' and account.smtp.mode != 'Aucun'
             card.box.addWidget(Banner('Connexion chiffrée' if secure else 'Attention · connexion en clair',
@@ -133,6 +139,50 @@ class SettingsDialog(QDialog):
         if owner and AccountDialog(self.database,owner.secrets,owner.runner.tls,self,account=account).exec():
             owner.reload_accounts()
             owner.restart_idle()
+
+    def delete_account(self, account, card):
+        owner = self.parent()
+        if owner and owner.delete_account(account):
+            card.hide()
+
+    def certificates_box(self):
+        """Exceptions de certificat permanentes, retirables une à une."""
+        container = QWidget()
+        box = QVBoxLayout(container)
+        box.setContentsMargins(0,0,0,0)
+        box.addWidget(label('Certificats approuvés','Bold'))
+        names = {account.id:account.name for account in self.database.accounts()}
+        pins = self.database.pins()
+        if not pins:
+            box.addWidget(label('Aucune exception de certificat permanente.','Subtitle',True))
+        for account_id,endpoint,fingerprint in pins:
+            card = Card('Attachment',10)
+            row = QHBoxLayout()
+            text = QVBoxLayout()
+            protocol,_,server = endpoint.partition(':')
+            text.addWidget(label(f'{names.get(account_id,"Compte supprimé")} · {protocol.upper()} {server}','Bold'))
+            fingerprint_label = label('SHA-256 '+':'.join(fingerprint[i:i+2] for i in range(0,len(fingerprint),2)).upper(),'Small',True)
+            fingerprint_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            text.addWidget(fingerprint_label)
+            row.addLayout(text,1)
+            remove = Button('Retirer',self.appearance_theme,'trash-2','QuietDanger','Ne plus faire confiance à ce certificat')
+            remove.clicked.connect(lambda checked=False,a=account_id,e=endpoint,c=card:self.remove_pin(a,e,c))
+            row.addWidget(remove)
+            card.box.addLayout(row)
+            box.addWidget(card)
+        return container
+
+    def remove_pin(self, account_id, endpoint, card):
+        if QMessageBox.question(self,'Retirer le certificat','Ne plus faire confiance à ce certificat ? Une alerte réapparaîtra à la prochaine connexion à ce serveur.',
+                                QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+            return
+        owner = self.parent()
+        tls = getattr(getattr(owner,'runner',None),'tls',None)
+        if tls is not None:
+            tls.forget(account_id,endpoint)
+        else:
+            self.database.untrust(account_id,endpoint)
+        card.hide()
 
     def security_page(self):
         widget = QWidget()
@@ -161,6 +211,7 @@ class SettingsDialog(QDialog):
         form.addRow('Synchroniser toutes les (minutes)',self.minutes)
         form.addRow('Messages hors ligne par dossier',self.limit)
         box.addLayout(form)
+        box.addWidget(self.certificates_box())
         box.addWidget(label('Le chiffrement protège les contenus du cache avec une clé du coffre Windows. Les paramètres de comptes et le schéma SQLite restent lisibles. Sans cette option, le cache contient vos mails en clair sur ce PC.','Small',True))
         box.addStretch()
         return widget

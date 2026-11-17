@@ -2,7 +2,8 @@
 from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
     QComboBox, QListWidget, QTableWidget, QTableWidgetItem, QSplitter, QHeaderView, QLabel,
     QLineEdit, QCheckBox, QToolBar, QInputDialog, QMessageBox, QSystemTrayIcon, QMenu,
-    QStyle, QApplication, QFileDialog, QFrame, QScrollArea, QStackedWidget, QListWidgetItem, QButtonGroup)
+    QStyle, QApplication, QFileDialog, QFrame, QScrollArea, QStackedWidget, QListWidgetItem, QButtonGroup,
+    QAbstractItemView)
 from PySide6.QtCore import Qt, QTimer, QSaveFile, QIODevice
 from PySide6.QtGui import QFont, QAction, QActionGroup, QShortcut, QKeySequence
 from mailclient.ui.account_dialog import AccountDialog
@@ -217,9 +218,11 @@ class MainWindow(QMainWindow):
             return item
         action('Rédiger', self.compose, 'Ctrl+N', menu=file_menu, icon_name='plus')
         file_menu.addSeparator()
-        action('Répondre', lambda: self.compose('reply'), 'Ctrl+R', True, icon_name='reply')
-        action('Répondre à tous', lambda: self.compose('reply_all'), 'Ctrl+Shift+R', True, icon_name='reply-all')
-        action('Transférer', lambda: self.compose('forward'), 'Ctrl+L', True, icon_name='forward')
+        # Répondre et transférer exigent un seul message ; les autres actions acceptent une sélection multiple.
+        self.single_actions = [
+            action('Répondre', lambda: self.compose('reply'), 'Ctrl+R', True, icon_name='reply'),
+            action('Répondre à tous', lambda: self.compose('reply_all'), 'Ctrl+Shift+R', True, icon_name='reply-all'),
+            action('Transférer', lambda: self.compose('forward'), 'Ctrl+L', True, icon_name='forward')]
         actions.addSeparator()
         action('Lu / non lu', self.toggle_read, needs_message=True, icon_name='mail')
         action('Étoiler', self.toggle_star, needs_message=True, icon_name='star')
@@ -227,6 +230,14 @@ class MainWindow(QMainWindow):
         action('Déplacer', lambda: self.move('move'), needs_message=True, icon_name='folder')
         action('Archiver', lambda: self.move('archive'), needs_message=True, icon_name='archive')
         action('Supprimer', lambda: self.move('trash'), 'Delete', True, icon_name='trash-2')
+        actions.addSeparator()
+        self.mark_all_action = action('Tout marquer comme lu', self.mark_all_read, 'Ctrl+Shift+U', icon_name='check')
+        folder_menu = accounts_menu.addMenu('Dossier')
+        self.folder_actions = {
+            'create': action('Nouveau dossier…', lambda: self.manage_folder('create'), menu=folder_menu, icon_name='folder'),
+            'rename': action('Renommer le dossier…', lambda: self.manage_folder('rename'), menu=folder_menu, icon_name='file-pen-line'),
+            'delete': action('Supprimer le dossier…', lambda: self.manage_folder('delete'), menu=folder_menu, icon_name='trash-2'),
+            'empty': action('Vider le dossier…', self.empty_folder, menu=folder_menu, icon_name='trash-2')}
         action('Brouillons locaux', self.open_draft, menu=file_menu, icon_name='file-pen-line')
         action('Envoyés locaux', self.open_sent_copy, menu=file_menu, icon_name='send')
         action('Exporter .eml', self.export_sent_copy, menu=file_menu, icon_name='download')
@@ -234,6 +245,7 @@ class MainWindow(QMainWindow):
         action('Quitter', self.request_quit, 'Ctrl+Q', menu=file_menu)
         action('Ajouter un compte', self.add_account, menu=accounts_menu, icon_name='plus')
         action('Compte', self.edit_account, menu=accounts_menu, icon_name='settings-2')
+        self.delete_account_action = action('Supprimer le compte…', self.delete_account, menu=accounts_menu, icon_name='trash-2')
         self.offline_action = action('Hors ligne',self.offline.click,menu=accounts_menu)
         self.offline_action.setCheckable(True)
         self.offline.toggled.connect(self.offline_action.setChecked)
@@ -263,8 +275,11 @@ class MainWindow(QMainWindow):
             item.setCheckable(True)
             density_group.addAction(item)
             self.density_actions[name] = item
+        self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.show_message_menu)
+        self.folders.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.folders.customContextMenuRequested.connect(self.show_folder_menu)
         self.add.clicked.connect(self.add_account)
         self.refresh.clicked.connect(self.load_folders)
         self.account_box.currentIndexChanged.connect(self.load_folders)
@@ -300,7 +315,7 @@ class MainWindow(QMainWindow):
         self.idle_debounce.timeout.connect(self.sync_now)
         self.tray = None
         if auto_load and QApplication.platformName() != 'offscreen' and QSystemTrayIcon.isSystemTrayAvailable():
-            self.tray = QSystemTrayIcon(self.style().standardIcon(QStyle.SP_MessageBoxInformation), self)
+            self.tray = QSystemTrayIcon(QApplication.windowIcon() if not QApplication.windowIcon().isNull() else self.style().standardIcon(QStyle.SP_MessageBoxInformation), self)
             self.tray.setToolTip('Smail')
             menu = QMenu(self)
             menu.addAction('Ouvrir Smail', self.show_normal)
@@ -327,7 +342,7 @@ class MainWindow(QMainWindow):
         item = self.table.itemAt(position)
         if item is None or self.busy:
             return
-        if item is not self.table.currentItem():
+        if not item.isSelected():
             self.table.setCurrentItem(item)
         self.update_actions()
         menu = QMenu(self.table)
@@ -338,12 +353,129 @@ class MainWindow(QMainWindow):
         menu.exec(self.table.viewport().mapToGlobal(position))
         menu.deleteLater()
 
+    def show_folder_menu(self, position):
+        if self.busy:
+            return
+        item = self.folders.itemAt(position)
+        if item is not None and item is not self.folders.currentItem():
+            self.folders.setCurrentItem(item)
+        self.update_actions()
+        menu = QMenu(self.folders)
+        menu.addAction(self.mark_all_action)
+        menu.addSeparator()
+        for action in self.folder_actions.values():
+            menu.addAction(action)
+        menu.exec(self.folders.viewport().mapToGlobal(position))
+        menu.deleteLater()
+
+    PROTECTED = ('Boîte de réception','Envoyés','Brouillons','Corbeille','Spam')
+    SPECIAL_WORDS = {'trash': ('corbeille', 'trash', 'deleted'), 'archive': ('archive', 'all mail', 'tous les messages'),
+                     'junk': ('spam', 'junk', 'indésirable')}
+
+    def current_folder(self):
+        """(nom IMAP, libellé) du dossier courant d’un compte ; None en réception unifiée."""
+        index = self.folders.currentRow()
+        if self.account() is None or not 0 <= index < len(self.folder_data):
+            return None
+        return self.folder_data[index]
+
+    def is_special(self, name, label, kind):
+        return any(word in (name+' '+label).casefold() for word in self.SPECIAL_WORDS[kind])
+
+    def special_folder(self, folders, kind, exclude=''):
+        return next((name for name,label in folders if name != exclude and self.is_special(name,label,kind)), None)
+
+    def run_and_reload(self, operation, message, reload_folders=False):
+        self.set_busy(True)
+        def done(result):
+            self.set_busy(False)
+            self.statusBar().showMessage(message(result) if callable(message) else message)
+            self.load_folders() if reload_folders else self.load_messages()
+        self.runner.run(operation, done, self.failure)
+
+    def mark_all_read(self):
+        if self.busy:
+            return
+        if self.offline.isChecked():
+            self.statusBar().showMessage('Reconnectez-vous pour modifier les messages du serveur.')
+            return
+        current = self.current_folder()
+        if current:
+            targets = [(self.account(), current[0])]
+        elif self.account() is None and self.accounts:
+            targets = []
+            for account in self.accounts:
+                folders = self.database.cache_get('folders', account.id, [])
+                targets.append((account, next((name for name,_ in folders if name.upper() == 'INBOX'), 'INBOX')))
+        else:
+            return
+        def operation():
+            return sum(self.service.mark_all_read(account, folder) for account,folder in targets)
+        self.run_and_reload(operation, lambda count: f'{count} message(s) marqué(s) comme lu(s).')
+
+    def empty_folder(self):
+        current = self.current_folder()
+        if self.busy or not current:
+            return
+        name, label = current
+        if not (self.is_special(name,label,'trash') or self.is_special(name,label,'junk')):
+            self.statusBar().showMessage('Seuls la corbeille et le dossier spam peuvent être vidés.')
+            return
+        if self.offline.isChecked():
+            self.statusBar().showMessage('Reconnectez-vous pour vider ce dossier.')
+            return
+        if QMessageBox.warning(self, 'Vider le dossier', f'Supprimer définitivement tous les messages de « {label} » ?\n\nCette action est irréversible.',
+                               QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel) != QMessageBox.Yes:
+            return
+        account = self.account()
+        self.run_and_reload(lambda: self.service.empty_folder(account, name), lambda count: f'{count} message(s) supprimé(s) définitivement.')
+
+    def manage_folder(self, operation):
+        account = self.account()
+        if self.busy or account is None:
+            self.statusBar().showMessage('Choisissez d’abord un compte (pas la réception unifiée).')
+            return
+        if self.offline.isChecked():
+            self.statusBar().showMessage('Reconnectez-vous pour gérer les dossiers.')
+            return
+        current = self.current_folder()
+        if operation == 'create':
+            name, ok = QInputDialog.getText(self, 'Nouveau dossier', 'Nom du dossier (utilisez le séparateur du serveur, souvent / ou ., pour un sous-dossier)')
+            if not ok or not name.strip():
+                return
+            self.run_and_reload(lambda: self.service.manage_folder(account, 'create', name), f'Dossier « {name.strip()} » créé.', True)
+            return
+        if not current:
+            return
+        name, label = current
+        if name.upper() == 'INBOX' or label in self.PROTECTED:
+            self.statusBar().showMessage('Les dossiers système (réception, envoyés, brouillons, corbeille, spam) ne peuvent pas être modifiés.')
+            return
+        if operation == 'rename':
+            from mailclient.core.parser import decode_folder
+            new_name, ok = QInputDialog.getText(self, 'Renommer le dossier', 'Nouveau nom', text=decode_folder(name))
+            if not ok or not new_name.strip() or new_name.strip() == decode_folder(name):
+                return
+            self.run_and_reload(lambda: self.service.manage_folder(account, 'rename', name, new_name), 'Dossier renommé.', True)
+        elif operation == 'delete':
+            if QMessageBox.warning(self, 'Supprimer le dossier', f'Supprimer le dossier « {label} » et tous les messages qu’il contient sur le serveur ?\n\nCette action est irréversible.',
+                                   QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel) != QMessageBox.Yes:
+                return
+            self.run_and_reload(lambda: self.service.manage_folder(account, 'delete', name), f'Dossier « {label} » supprimé.', True)
+
     def account(self):
         value = self.account_box.currentData()
         return next((account for account in self.accounts if account.id == value), None)
 
+    def selected_rows(self):
+        items = sorted((item for item in self.table.selectedItems() if not item.isHidden()), key=self.table.row)
+        return [item.data(Qt.UserRole).raw for item in items if isinstance(item.data(Qt.UserRole), MessageRow)]
+
     def selected_row(self):
+        """Le message lu : seulement quand un seul message est sélectionné."""
         item = self.table.currentItem()
+        if len(self.table.selectedItems()) > 1:
+            return None
         value = item.data(Qt.UserRole) if item and item.isSelected() and not item.isHidden() else None
         return value.raw if isinstance(value, MessageRow) else None
 
@@ -384,16 +516,52 @@ class MainWindow(QMainWindow):
     def edit_account(self):
         if self.busy or not self.accounts:
             return
-        account = self.account()
+        account = self.choose_account('Compte')
         if account is None:
-            names = [f'{a.name} — {a.email}' for a in self.accounts]
-            name, ok = QInputDialog.getItem(self, 'Compte', 'Choisissez le compte', names, 0, False)
-            if not ok:
-                return
-            account = self.accounts[names.index(name)]
+            return
         if AccountDialog(self.database, self.secrets, self.runner.tls, self, account=account).exec():
             self.reload_accounts()
             self.restart_idle()
+
+    def choose_account(self, title):
+        account = self.account()
+        if account is not None:
+            return account
+        names = [f'{a.name} — {a.email}' for a in self.accounts]
+        name, ok = QInputDialog.getItem(self, title, 'Choisissez le compte', names, 0, False)
+        return self.accounts[names.index(name)] if ok else None
+
+    def delete_account(self, account=None):
+        if self.busy or not self.accounts:
+            return False
+        account = account or self.choose_account('Supprimer le compte')
+        if account is None:
+            return False
+        if any(window.isVisible() for window in self.composers):
+            QMessageBox.information(self, 'Supprimer le compte', 'Fermez d’abord les fenêtres de rédaction ouvertes.')
+            return False
+        text = (f'Supprimer le compte « {account.name} » ({account.email}) de Smail ?\n\n'
+                'Vos messages restent sur le serveur. Seront effacés de ce PC : les paramètres du compte, le cache hors ligne, '
+                'les brouillons locaux, les copies locales des messages envoyés, les certificats approuvés et les mots de passe '
+                'ou jetons OAuth2 du Gestionnaire d’identifiants Windows.\n\nCette action est irréversible.')
+        box = QMessageBox(QMessageBox.Warning, 'Supprimer le compte', text, QMessageBox.Yes | QMessageBox.Cancel, self)
+        box.button(QMessageBox.Yes).setText('Supprimer le compte')
+        box.button(QMessageBox.Cancel).setText('Annuler')
+        box.setDefaultButton(QMessageBox.Cancel)
+        if box.exec() != QMessageBox.Yes:
+            return False
+        for thread in self.idle_threads:
+            if thread.account.id == account.id:
+                thread.stop()
+        self.set_busy(True)
+        def finish(message):
+            self.set_busy(False)
+            self.reload_accounts()
+            self.restart_idle()
+            self.statusBar().showMessage(message)
+        self.runner.run(lambda: self.service.delete_account(account),
+                        lambda _: finish(f'Compte « {account.name} » supprimé de ce PC.'), finish)
+        return True
 
     def set_busy(self, busy):
         self.busy = busy
@@ -414,9 +582,20 @@ class MainWindow(QMainWindow):
 
     def update_actions(self):
         self.offline_action.setEnabled(self.offline.isEnabled())
+        self.delete_account_action.setEnabled(not self.busy and bool(self.accounts))
+        selected, single = bool(self.selected_rows()), self.selected_row() is not None
         for action in self.message_actions:
-            action.setEnabled(not self.busy and self.selected_row() is not None)
-        self.reader.set_actions_enabled(not self.busy and self.selected_row() is not None)
+            action.setEnabled(not self.busy and (single if action in self.single_actions else selected))
+        self.reader.set_actions_enabled(not self.busy and single)
+        online = not self.busy and not self.offline.isChecked()
+        current = self.current_folder()
+        self.mark_all_action.setEnabled(online and bool(self.accounts) and (current is not None or self.account() is None))
+        self.folder_actions['create'].setEnabled(online and self.account() is not None)
+        editable = current is not None and current[0].upper() != 'INBOX' and current[1] not in self.PROTECTED
+        self.folder_actions['rename'].setEnabled(online and editable)
+        self.folder_actions['delete'].setEnabled(online and editable)
+        self.folder_actions['empty'].setEnabled(online and current is not None and
+                                                (self.is_special(*current,'trash') or self.is_special(*current,'junk')))
 
     def failure(self, message):
         self.set_busy(False)
@@ -532,7 +711,12 @@ class MainWindow(QMainWindow):
 
     def read_selected(self):
         row = self.selected_row()
-        if self.busy or not row:
+        if self.busy:
+            return
+        if not row:
+            count = len(self.selected_rows())
+            if count > 1:
+                self.reader.clear(f'{count} messages sélectionnés')
             return
         account = self.row_account(row)
         self.reader.clear('Chargement du message…')
@@ -555,56 +739,89 @@ class MainWindow(QMainWindow):
             self.failure(message)
         self.runner.run(lambda: self.service.message(account, row, offline), done, failed)
 
-    def mutate(self, action, target=''):
-        row = self.selected_row()
-        if self.busy or row is None:
+    def mutate(self, action, target='', rows=None, plan=None):
+        """plan : [(compte, messages, action, cible)] ; par défaut la sélection courante et une seule action."""
+        if plan is None:
+            rows = rows if rows is not None else self.selected_rows()
+            groups = {}
+            for row in rows:
+                groups.setdefault(row['account'], []).append(row)
+            plan = [(self.row_account(group[0]), group, action, target) for group in groups.values()]
+        if self.busy or not plan:
             return
         if self.offline.isChecked():
             self.statusBar().showMessage('Reconnectez-vous pour modifier les messages du serveur.')
             return
-        account = self.row_account(row)
+        if any(account is None for account,*_ in plan):
+            self.statusBar().showMessage('Le compte de ce message n’existe plus. Actualisez.')
+            return
         self.set_busy(True)
+        def operation():
+            for account, group, step, destination in plan:
+                self.service.action(account, group, step, destination)
         def done(_):
             self.set_busy(False)
             self.load_messages()
         def failed(message):
             self.failure(message + ' Actualisez les dossiers source et destination avant de réessayer : l’action peut avoir été acceptée avant une coupure.')
-        self.runner.run(lambda: self.service.action(account, row, action, target), done, failed)
+        self.runner.run(operation, done, failed)
 
     def toggle_read(self):
-        row = self.selected_row()
-        if row:
-            self.mutate('read' if row['unread'] else 'unread')
+        rows = self.selected_rows()
+        if rows:
+            self.mutate('read' if any(row['unread'] for row in rows) else 'unread', rows=rows)
 
     def toggle_star(self):
-        row = self.selected_row()
-        if row:
-            self.mutate('unstar' if row.get('starred') else 'star')
+        rows = self.selected_rows()
+        if rows:
+            self.mutate('star' if not all(row.get('starred') for row in rows) else 'unstar', rows=rows)
 
     def move(self, kind):
-        row = self.selected_row()
-        if not row or self.busy:
+        rows = self.selected_rows()
+        if not rows or self.busy:
             return
-        account = self.row_account(row)
-        folders = self.database.cache_get('folders', account.id, [])
-        words = {'trash': ('corbeille', 'trash', 'deleted'), 'archive': ('archive', 'all mail', 'tous les messages')}.get(kind, ())
-        if words and any(name == row['folder'] and any(word in (name+' '+label).casefold() for word in words) for name,label in folders):
-            self.statusBar().showMessage('Ce message est déjà dans le dossier de destination.')
+        groups = {}
+        for row in rows:
+            groups.setdefault(row['account'], []).append(row)
+        if kind == 'move' and len(groups) > 1:
+            self.statusBar().showMessage('Pour déplacer, sélectionnez des messages d’un seul compte.')
             return
-        target = next((name for name,label in folders if words and any(word in (name+' '+label).casefold() for word in words) and name != row['folder']), None)
-        if target is None:
-            choices = [(name, label) for name,label in folders if name != row['folder']]
-            if not choices:
-                self.statusBar().showMessage('Aucun autre dossier disponible. Créez un dossier depuis votre webmail puis actualisez.')
+        plan = []
+        for group in groups.values():
+            account = self.row_account(group[0])
+            if account is None:
+                self.statusBar().showMessage('Le compte de ce message n’existe plus. Actualisez.')
                 return
-            labels = [label + ' — ' + name for name,label in choices]
-            choice, ok = QInputDialog.getItem(self, 'Destination', 'Choisissez le dossier de destination', labels, 0, False)
-            if not ok:
+            folders = self.database.cache_get('folders', account.id, [])
+            source = group[0]['folder']
+            source_label = next((label for name,label in folders if name == source), source)
+            if kind in self.SPECIAL_WORDS and self.is_special(source, source_label, kind):
+                if kind != 'trash':
+                    self.statusBar().showMessage('Ce message est déjà dans le dossier de destination.')
+                    return
+                plan.append((account, group, 'delete', ''))  # Depuis la corbeille : suppression définitive.
+                continue
+            target = self.special_folder(folders, kind, exclude=source) if kind in self.SPECIAL_WORDS else None
+            if target is None:
+                choices = [(name, label) for name,label in folders if name != source]
+                if not choices:
+                    self.statusBar().showMessage('Aucun autre dossier disponible. Créez un dossier (Comptes › Dossier) puis réessayez.')
+                    return
+                labels = [label + ' — ' + name for name,label in choices]
+                choice, ok = QInputDialog.getItem(self, 'Destination', f'Choisissez le dossier de destination ({account.name})', labels, 0, False)
+                if not ok:
+                    return
+                target = choices[labels.index(choice)][0]
+            plan.append((account, group, 'move', target))
+        count = len(rows)
+        subject = 'ce message' if count == 1 else f'ces {count} messages'
+        if any(step == 'delete' for _,_,step,_ in plan):
+            if QMessageBox.warning(self, 'Supprimer définitivement', f'Supprimer définitivement {subject} de la corbeille ?\n\nCette action est irréversible.',
+                                   QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel) != QMessageBox.Yes:
                 return
-            target = choices[labels.index(choice)][0]
-        if kind == 'trash' and QMessageBox.question(self, 'Déplacer dans la corbeille', 'Déplacer ce message dans la corbeille ?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+        elif kind == 'trash' and QMessageBox.question(self, 'Déplacer dans la corbeille', f'Déplacer {subject} dans la corbeille ?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
             return
-        self.mutate('move', target)
+        self.mutate(None, plan=plan)
 
     def compose(self, mode=None):
         if not self.accounts:
@@ -735,6 +952,7 @@ class MainWindow(QMainWindow):
     def restart_idle(self):
         for thread in self.idle_threads:
             thread.stop()
+        self.idle_threads = [thread for thread in self.idle_threads if thread.isRunning()]
         if not self.auto_load or self.quitting or self.offline.isChecked() or not self.database.setting('idle', True):
             return
         for account in self.accounts:
@@ -941,6 +1159,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(250, self.close)
             event.ignore()
             return
+        self.service.pool.clear()
         if self.tray:
             self.tray.hide()
         self.reader.shutdown()

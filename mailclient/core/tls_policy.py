@@ -30,6 +30,14 @@ class TLSPolicy:
             if permanent:
                 self.database.trust(alert.account, alert.endpoint, alert.fingerprint)
 
+    def forget(self, account: str, endpoint: str | None = None) -> None:
+        """Retire les exceptions de session (et permanentes) d’un compte ou d’un seul point d’accès."""
+        with self.lock:
+            for key in [key for key in self.session if key[0] == account and endpoint in (None, key[1])]:
+                del self.session[key]
+        if endpoint is not None:
+            self.database.untrust(account, endpoint)
+
     def connect(self, account: str, endpoint: str, factory):
         """factory(context) établit TLS sans transmettre d'identifiants."""
         context = ssl.create_default_context()

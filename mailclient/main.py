@@ -1,6 +1,9 @@
 """Point d'entrée : python -m mailclient.main."""
 import sys
+from pathlib import Path
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
+from mailclient import __version__
 from mailclient.utils.config import data_directory
 from mailclient.utils.logger import configure
 from mailclient.storage.database import Database
@@ -9,12 +12,29 @@ from mailclient.core.tls_policy import TLSPolicy
 from mailclient.ui.main_window import MainWindow
 from mailclient.ui.presentation import install_theme
 
+def install_excepthook(logger):
+    """Journalise les erreurs inattendues sans leur message (qui peut contenir des données de mail) et prévient une fois."""
+    import traceback
+    state = {'shown': False}
+    def hook(kind, error, trace):
+        frames = ' < '.join(f'{Path(frame.filename).name}:{frame.lineno}' for frame in reversed(traceback.extract_tb(trace)))
+        logger.error('Erreur inattendue (%s) %s', kind.__name__, frames)
+        if not state['shown'] and QApplication.instance() is not None:
+            state['shown'] = True
+            QMessageBox.critical(None, 'Erreur inattendue',
+                                 'Une erreur inattendue s’est produite. Smail continue de fonctionner, mais il est conseillé de le redémarrer.\n\n'
+                                 'Le type d’erreur a été noté dans smail.log, sans contenu de message.')
+    sys.excepthook = hook
+
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName('Smail')
     app.setOrganizationName('SmailDesktop')
+    app.setApplicationVersion(__version__)
+    app.setWindowIcon(QIcon(str(Path(__file__).parent / 'ui' / 'assets' / 'smail.ico')))
     directory = data_directory()
     logger = configure(directory)
+    install_excepthook(logger)
     try:
         database = Database(directory / 'settings.db', Secrets())
         install_theme(database)
@@ -22,7 +42,7 @@ def main():
     except Exception:
         QMessageBox.critical(None, 'Démarrage impossible', 'Impossible de charger la configuration locale. Vérifiez les droits d’accès au dossier Smail dans AppData.')
         return 1
-    logger.info('Démarrage de l’application')
+    logger.info('Démarrage de l’application %s', __version__)
     window.show()
     if '--smoke-test' in sys.argv:
         from PySide6.QtCore import QTimer

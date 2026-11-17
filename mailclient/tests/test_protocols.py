@@ -33,15 +33,25 @@ def test_pagination_is_readonly_and_does_not_download_bodies(monkeypatch):
         if command == 'search':
             return 'OK', [b' '.join(str(i).encode() for i in range(1, 121))]
         fetched.append(args)
-        return 'OK', [(b'1 (UID 70 FLAGS () BODYSTRUCTURE ("APPLICATION" "PDF" ("NAME" "a.pdf"))', b'From: a@example.com\r\nSubject: Hello\r\n\r\n'), b')']
+        response = []
+        for n, value in enumerate(args[0].split(','), 1):
+            # FLAGS placé après le littéral sur un message sur deux, comme certains serveurs.
+            before, after = (b'FLAGS () ', b'') if n % 2 else (b'', b' FLAGS (\\Seen)')
+            response += [(b'%d (UID %s %sBODYSTRUCTURE ("APPLICATION" "PDF" ("NAME" "a.pdf"))' % (n, value.encode(), before),
+                          b'From: a@example.com\r\nSubject: Hello ' + value.encode() + b'\r\n\r\n'), after + b')']
+        response.append(b'5 (FLAGS (\\Seen))')  # Notification non sollicitée sans UID : ignorée.
+        return 'OK', response
     client.uid.side_effect = uid
     monkeypatch.setattr(IMAPClient, 'open', lambda self: client)
     rows, total = IMAPClient(account(), 'secret', None).messages('INBOX', 1)
     assert total == 120 and len(rows) == 50
-    assert fetched[0][0] == b'70' and fetched[-1][0] == b'21'
-    assert all('BODY.PEEK[HEADER.FIELDS' in args[1] for args in fetched)
+    assert len(fetched) == 1  # Une seule commande pour toute la page.
+    assert fetched[0][0] == ','.join(str(i) for i in range(70, 20, -1))
+    assert 'BODY.PEEK[HEADER.FIELDS' in fetched[0][1] and 'BODY.PEEK[]' not in fetched[0][1]
     client.select.assert_called_once_with('"INBOX"', readonly=True)
-    assert rows[0]['unread'] and rows[0]['attachment']
+    assert [row['uid'] for row in rows] == [str(i) for i in range(70, 20, -1)]
+    assert rows[0]['subject'] == 'Hello 70' and rows[0]['unread'] and rows[0]['attachment']
+    assert not rows[1]['unread']
 
 def test_folder_special_use_and_spaces(monkeypatch):
     client = MagicMock()
