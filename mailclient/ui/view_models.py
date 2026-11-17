@@ -52,7 +52,7 @@ class MessageRow:
         except (ValueError, TypeError, OverflowError):
             pass
         return cls(row, sender or address or row.get('sender', ''), row.get('subject', ''),
-                   row.get('preview') or (account.email if account else ''), date,
+                   row.get('preview') or '', date,
                    bool(row.get('unread')), bool(row.get('starred')), bool(row.get('attachment')),
                    account.name if account else '')
 

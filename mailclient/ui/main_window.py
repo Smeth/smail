@@ -758,14 +758,23 @@ class MainWindow(QMainWindow):
         folders = dict(self.database.cache_get('folders', account.id, []) or []) if account else {}
         current = self.current_folder()
         where = '' if current and row.get('folder') == current[0] else f' · {folders.get(row.get("folder"), row.get("folder", ""))}'
-        return (f'{who} · {View.from_row(row).time}{where}', bool(row.get('unread')), f'{row.get("sender","")}\n{row.get("subject","")}\n{row.get("date","")}')
+        extract = row.get('preview') or ('Contenu pas encore téléchargé' if row.get('preview') is None else '')
+        return (f'{who} · {View.from_row(row).time}{where}', extract, bool(row.get('unread')),
+                f'{row.get("sender","")}\n{row.get("subject","")}\n{row.get("date","")}')
+
+    @staticmethod
+    def remember_extract(row, mail):
+        """Un message ouvert fournit l’extrait affiché quand il est replié dans la conversation."""
+        if row.get('preview') is None:
+            from mailclient.core.parser import snippet
+            row['preview'] = snippet(mail)
 
     def thread_elsewhere(self):
         listed = {(row.get('account'), row.get('folder'), row.get('uid')) for row in self.rows}
         return sum((row.get('account'), row.get('folder'), row.get('uid')) not in listed for row in self.thread_rows)
 
     def step_thread(self, delta):
-        if self.reader.thread_card.isVisible():
+        if self.reader.thread_current >= 0:  # Une conversation de plusieurs messages est ouverte.
             self.open_thread_message(self.thread_index + delta)
 
     def open_thread_message(self, index):
@@ -778,6 +787,7 @@ class MainWindow(QMainWindow):
         offline = self.offline.isChecked()
         def done(mail):
             self.thread_index = index
+            self.remember_extract(row, mail)
             self.reader.display(mail, keep_thread=True)
             self.reader.set_thread([self.thread_entry(r, account) for r in self.thread_rows], index, self.thread_elsewhere())
             self.set_busy(False)
@@ -812,6 +822,7 @@ class MainWindow(QMainWindow):
         def done(result):
             mail, messages, index = result
             self.thread_rows, self.thread_account, self.thread_index = messages, account, index
+            self.remember_extract(messages[index], mail)
             self.reader.display(mail, keep_thread=True)
             self.reader.set_thread([self.thread_entry(r, account) for r in messages] if len(messages) > 1 else [], index, self.thread_elsewhere())
             current = self.table.currentItem()

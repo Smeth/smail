@@ -7,7 +7,7 @@ from datetime import timezone
 from email.utils import getaddresses, parsedate_to_datetime
 from mailclient.core.imap_client import IMAPClient, ConnectionPool
 from mailclient.core.oauth import OAuth
-from mailclient.core.parser import parse_message
+from mailclient.core.parser import parse_message, snippet
 from mailclient.core.tls_policy import CertificateAlert
 from mailclient.core.threads import chronological, row_ids, thread_ids
 
@@ -55,8 +55,9 @@ class MailService:
                 client = self.client(account)
                 rows, total = client.messages(folder, page, query)
                 rows = self._enrich(rows, account, folder)
+                old = self.state(account, folder) or {}
+                self._carry_previews(rows, old)
                 if not query:
-                    old = self.state(account, folder) or {}
                     pages = old.get('pages', {}) if old.get('uidvalidity') == client.uidvalidity else {}
                     pages[str(page)] = rows
                     state = dict(account=account.id, folder=folder, pages=pages, total=total, uidvalidity=client.uidvalidity)
@@ -72,6 +73,28 @@ class MailService:
             rows = self._search(self._known_rows(state), query)
             return dict(rows=rows[page*50:(page+1)*50], total=len(rows), offline=True)
         return dict(rows=state.get('pages', {}).get(str(page), []), total=state.get('total', 0), offline=True)
+
+    @staticmethod
+    def _carry_previews(rows, state):
+        """Reprend les aperçus déjà calculés (même UIDVALIDITY et UID) : la liste en ligne n’a que les en-têtes."""
+        known = {(row.get('uidvalidity'), row['uid']): row['preview'] for page in (state or {}).get('pages', {}).values()
+                 for row in page if row.get('preview') is not None}
+        for row in rows:
+            if row.get('preview') is None and (row.get('uidvalidity'), row['uid']) in known:
+                row['preview'] = known[row.get('uidvalidity'), row['uid']]
+
+    def _remember_preview(self, account, row, preview):
+        state = self.state(account, row['folder'])
+        if not state:
+            return
+        changed = False
+        for page in state.get('pages', {}).values():
+            for item in page:
+                if item['uid'] == row['uid'] and item.get('uidvalidity') == row.get('uidvalidity') and item.get('preview') is None:
+                    item['preview'] = preview
+                    changed = True
+        if changed:
+            self.db.cache_put('mailbox', cache_key(account.id, row['folder']), state)
 
     @staticmethod
     def _known_rows(state):
@@ -148,10 +171,10 @@ class MailService:
         text = mail.text + ' ' + html.unescape(re.sub(r'<[^>]*>', ' ', mail.html))
         return ' '.join([row.get('sender', ''), row.get('subject', ''), text])
 
-    def index_body(self, row, raw: bytes) -> None:
+    def index_body(self, row, raw: bytes, mail=None) -> None:
         """Indexe un contenu nouvellement mis en cache (sans effet si le cache est chiffré)."""
         try:
-            self.db.index_put(self.body_key(row), row['account'], self.searchable_text(row, parse_message(raw)))
+            self.db.index_put(self.body_key(row), row['account'], self.searchable_text(row, mail or parse_message(raw)))
         except Exception:
             pass  # L’index est une accélération : la recherche retombe sur le balayage du cache.
 
@@ -198,8 +221,10 @@ class MailService:
         if row.get('uidvalidity') and client.uidvalidity != row['uidvalidity']:
             raise RuntimeError('Le dossier a changé sur le serveur. Actualisez avant de lire ce message.')
         self.db.cache_put('body', self.body_key(row), base64.b64encode(raw).decode('ascii'), account.id)
-        self.index_body(dict(row, account=account.id), raw)
-        return parse_message(raw)
+        mail = parse_message(raw)
+        self.index_body(dict(row, account=account.id), raw, mail)
+        self._remember_preview(account, row, snippet(mail))
+        return mail
 
     def action(self, account, rows, action, target=''):
         """Applique l’action à un message ou à une liste de messages de ce compte.
@@ -327,6 +352,12 @@ class MailService:
             if cancelled.is_set():
                 break
             rows = self._enrich(rows, account, folder)
+            self._carry_previews(rows, previous)
+            parsed = {}
+            for row in rows:
+                if row.get('preview') is None:
+                    parsed[row['uid']] = parse_message(bodies[row['uid']])
+                    row['preview'] = snippet(parsed[row['uid']])
             if not any(word in (folder + ' ' + label).casefold() for word in ('spam', 'junk', 'indésirable')):
                 senders.extend(row.get('sender', '') for row in rows)
             retained = {self.body_key(row) for row in rows}
@@ -342,7 +373,7 @@ class MailService:
             for row in rows:
                 if row['uid'] not in reused:  # Les contenus déjà en cache ne sont pas réécrits.
                     self.db.cache_put('body', self.body_key(row), base64.b64encode(bodies[row['uid']]).decode('ascii'), account.id)
-                    self.index_body(row, bodies[row['uid']])
+                    self.index_body(row, bodies[row['uid']], parsed.get(row['uid']))
             self.db.cache_put('mailbox', cache_key(account.id, folder), state)
             if folder.upper() == 'INBOX':
                 old = self.db.cache_get('notified', account.id)

@@ -122,22 +122,23 @@ class MailView(QWidget):
         self.subject.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Preferred)
         self.metadata.setWidget(self.subject)
         self.subject_card.box.addWidget(self.metadata)
-        # Bandeau de conversation : un message par ligne, du plus ancien au plus récent.
+        # Lecture empilée : messages antérieurs repliés au-dessus du message ouvert, suivants en dessous.
+        self.thread_current = -1
         self.thread_card = Card('ReaderThread',8)
         self.thread_title = label('','Eyebrow')
         self.thread_card.box.addWidget(self.thread_title)
-        self.thread_list = QListWidget()
-        self.thread_list.setObjectName('ThreadList')
-        self.thread_list.setAccessibleName('Messages de la conversation, Entrée pour lire')
-        self.thread_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.thread_list.itemActivated.connect(lambda item:self.threadMessageRequested.emit(self.thread_list.row(item)))
-        self.thread_list.itemClicked.connect(lambda item:self.threadMessageRequested.emit(self.thread_list.row(item)))
+        self.thread_list = self.thread_list_widget('Messages précédents de la conversation, Entrée pour lire', 0)
         self.thread_card.box.addWidget(self.thread_list)
         self.thread_card.hide()
         layout.addWidget(self.thread_card)
+        self.thread_after_card = Card('ReaderThread',8)
+        self.thread_after = self.thread_list_widget('Messages suivants de la conversation, Entrée pour lire', 1)
+        self.thread_after_card.box.addWidget(self.thread_after)
+        self.thread_after_card.hide()
         self.message_card = Card('ReaderMessage',16)
         self.message_card.box.setSpacing(8)
         layout.addWidget(self.message_card,1)
+        layout.addWidget(self.thread_after_card)
         message_layout = self.message_card.box
         sender_row = QHBoxLayout()
         sender_row.setSpacing(10)
@@ -289,26 +290,47 @@ class MailView(QWidget):
         self.shutdown()
         super().closeEvent(event)
 
-    def set_thread(self, entries, current=-1, elsewhere=0):
-        """entries : [(texte, non lu, info-bulle)] ; liste vide ou d’un seul message : bandeau masqué."""
-        self.thread_list.blockSignals(True)
-        self.thread_list.clear()
-        for index,(text,unread,tooltip) in enumerate(entries):
-            item = QListWidgetItem(('● ' if unread else '    ')+text)
+    def thread_list_widget(self, name, side):
+        widget = QListWidget()
+        widget.setObjectName('ThreadList')
+        widget.setAccessibleName(name)
+        widget.setWordWrap(False)
+        widget.setTextElideMode(Qt.ElideRight)
+        widget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        def emit(item, side=side, widget=widget):
+            offset = 0 if side == 0 else self.thread_current + 1
+            self.threadMessageRequested.emit(offset + widget.row(item))
+        widget.itemActivated.connect(emit)
+        widget.itemClicked.connect(emit)
+        return widget
+
+    @staticmethod
+    def fill_thread_list(widget, entries, above=False):
+        widget.clear()
+        for title,extract,unread,tooltip in entries:
+            item = QListWidgetItem(('● ' if unread else '') + title + ('\n' + extract if extract else ''))
             item.setToolTip(tooltip)
             font = item.font()
-            font.setBold(unread or index == current)
+            font.setBold(unread)
             item.setFont(font)
-            self.thread_list.addItem(item)
-        if 0 <= current < len(entries):
-            self.thread_list.setCurrentRow(current)
-            self.thread_list.scrollToItem(self.thread_list.currentItem())
-        self.thread_list.blockSignals(False)
-        visible = len(entries) > 1
-        self.thread_title.setText(f'CONVERSATION · {len(entries)} MESSAGES' + (f' · DONT {elsewhere} DANS D’AUTRES DOSSIERS' if elsewhere else ''))
-        rows = min(len(entries), 5)
-        self.thread_list.setFixedHeight(self.thread_list.sizeHintForRow(0)*rows+6 if entries else 0)
+            widget.addItem(item)
+        rows = min(len(entries), 4)  # Au-delà, la liste défile : le message ouvert garde la place.
+        widget.setFixedHeight(sum(widget.sizeHintForRow(i) for i in range(rows)) + 8 if entries else 0)
+        widget.setVisible(bool(entries))
+        if entries:  # Au-dessus, le message juste avant celui ouvert reste visible.
+            widget.scrollToBottom() if above else widget.scrollToTop()
+
+    def set_thread(self, entries, current=-1, elsewhere=0):
+        """entries : [(qui · quand, extrait, non lu, info-bulle)] du plus ancien au plus récent ; current : message ouvert.
+        Moins de deux messages : lecture simple, sans bandeau."""
+        visible = len(entries) > 1 and 0 <= current < len(entries)
+        self.thread_current = current if visible else -1
+        self.fill_thread_list(self.thread_list, entries[:current] if visible else [], above=True)
+        self.fill_thread_list(self.thread_after, entries[current+1:] if visible else [])
+        self.thread_title.setText(f'CONVERSATION · {len(entries)} MESSAGES · MESSAGE {current+1} SUR {len(entries)}'
+                                  + (f' · DONT {elsewhere} DANS D’AUTRES DOSSIERS' if elsewhere else ''))
         self.thread_card.setVisible(visible)
+        self.thread_after_card.setVisible(visible and current < len(entries) - 1)
 
     def clear(self, message='Sélectionnez un message pour le lire.', keep_thread=False):
         if not keep_thread:

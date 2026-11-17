@@ -109,11 +109,24 @@ def test_main_window_conversation_flow(tmp_path, monkeypatch):
     window.table.setCurrentRow(0)
     assert process_until(lambda: not window.busy and window.reader.mail is not None)
     assert loaded[-1] == '12'  # Premier message non lu de la conversation.
-    assert window.reader.thread_card.isVisibleTo(window.reader) and window.reader.thread_list.count() == 2
-    assert window.reader.thread_list.currentRow() == 1
-    window.reader.thread_list.itemClicked.emit(window.reader.thread_list.item(0))
+    reader = window.reader
+    # Lecture empilée : le message plus ancien est replié au-dessus, rien en dessous.
+    assert reader.thread_card.isVisibleTo(reader) and reader.thread_list.count() == 1
+    assert not reader.thread_after_card.isVisibleTo(reader)
+    assert 'MESSAGE 2 SUR 2' in reader.thread_title.text()
+    assert reader.thread_list.item(0).text().startswith('Alice')
+    reader.thread_list.itemClicked.emit(reader.thread_list.item(0))
     assert process_until(lambda: not window.busy and loaded[-1] == '10')
-    assert window.reader.mail.subject == 'Message 10' and window.reader.thread_card.isVisibleTo(window.reader)
+    assert reader.mail.subject == 'Message 10' and reader.thread_card.isVisibleTo(reader)
+    assert reader.thread_list.count() == 0 and reader.thread_after.count() == 1
+    assert reader.thread_after_card.isVisibleTo(reader)
+    assert reader.thread_after.item(0).text().startswith('● Bob')  # Le non-lu reste signalé.
+    # L’aperçu calculé à l’ouverture sert d’extrait au message replié.
+    assert reader.thread_after.item(0).text().endswith('Corps 12')
+    reader.thread_after.itemClicked.emit(reader.thread_after.item(0))
+    assert process_until(lambda: not window.busy and reader.mail.subject == 'Message 12')  # Servi par le cache.
+    window.step_thread(-1)
+    assert process_until(lambda: not window.busy and reader.mail.subject == 'Message 10')
     # Archiver agit sur toute la conversation, en une commande.
     window.move('archive')
     assert process_until(lambda: not window.busy and calls)
@@ -128,3 +141,35 @@ def test_main_window_conversation_flow(tmp_path, monkeypatch):
     window.close()
     from shiboken6 import delete
     delete(window)
+
+
+def test_snippet_skips_quotes_signature_and_html():
+    from mailclient.core.parser import Mail, snippet
+    text = 'Merci, c’est noté.\n\nLe 16/11/2026, Sophie <s@x.fr> a écrit :\n> Voici le planning\n'
+    assert snippet(Mail('a', 'b', 's', 'd', text=text)) == 'Merci, c’est noté.'
+    assert snippet(Mail('a', 'b', 's', 'd', text='Bonjour\n> cité\nÀ demain\n-- \nSignature')) == 'Bonjour À demain'
+    html = '<style>p{color:red}</style><p>Premier&nbsp;paragraphe</p><div>Second</div>'
+    assert snippet(Mail('a', 'b', 's', 'd', html=html)) == 'Premier paragraphe Second'
+    assert snippet(Mail('a', 'b', 's', 'd', text='x' * 400), 50).endswith('…')
+
+
+def test_previews_are_computed_once_and_carried_to_online_listing(tmp_path, monkeypatch):
+    import threading
+    from mailclient.tests.test_sync_search_contacts import FakeServer, ACCOUNT as SYNC_ACCOUNT
+    db = Database(tmp_path / 'settings.db')
+    db.save(SYNC_ACCOUNT)
+    server = FakeServer(condstore=False)
+    monkeypatch.setattr(MailService, 'client', lambda *args: server)
+    service = MailService(db, None, TLSPolicy(db))
+    service.sync_account(SYNC_ACCOUNT, threading.Event())
+    rows = service._known_rows(service.state(SYNC_ACCOUNT, 'INBOX'))
+    assert {row['uid']: row['preview'] for row in rows} == {'2': 'Facture été 2', '1': 'Bonjour 1'}
+    import mailclient.core.service as module
+    parsed = []
+    original = module.parse_message
+    monkeypatch.setattr(module, 'parse_message', lambda raw: (parsed.append(raw), original(raw))[1])
+    service.sync_account(SYNC_ACCOUNT, threading.Event())
+    assert parsed == []  # Aperçus repris : aucun nouveau décodage MIME.
+    listed = [dict(uid='2', uidvalidity='7', sender='b', subject='s', date=''), dict(uid='99', uidvalidity='7', sender='c', subject='t', date='')]
+    service._carry_previews(listed, service.state(SYNC_ACCOUNT, 'INBOX'))
+    assert listed[0]['preview'] == 'Facture été 2' and 'preview' not in listed[1]

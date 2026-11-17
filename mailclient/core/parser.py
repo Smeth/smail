@@ -79,6 +79,28 @@ def parse_message(raw: bytes) -> Mail:
     result.references = str(message.get('References', ''))
     return result
 
+QUOTE_INTRO = re.compile(r'^(?:le |on |am ).{0,240}(?:a écrit|wrote|schrieb)\s*:?\s*$', re.IGNORECASE)
+
+def snippet(mail: Mail, length: int = 160) -> str:
+    """Extrait lisible : texte propre au message, sans citation, ligne d’introduction de citation ni signature."""
+    import html as html_module
+    text = mail.text
+    if not text.strip() and mail.html:
+        text = re.sub(r'<(style|script|head)[^>]*>.*?</\1>', ' ', mail.html, flags=re.S | re.I)
+        text = re.sub(r'<(?:br|/p|/div|/li|/tr|/h\d)[^>]*>', '\n', text, flags=re.I)
+        text = html_module.unescape(re.sub(r'<[^>]+>', ' ', text))
+    kept = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped in ('--', '-- ', '__') or QUOTE_INTRO.match(stripped):
+            break
+        if stripped and not stripped.startswith('>'):
+            kept.append(stripped)
+        if sum(len(item) for item in kept) > length * 2:
+            break
+    value = ' '.join(' '.join(kept).split())
+    return value if len(value) <= length else value[:length - 1].rstrip() + '…'
+
 def decode_header_value(value: str) -> str:
     result = []
     for part, encoding in decode_header(value):
