@@ -15,6 +15,7 @@
 - Recherche hors ligne indexée (SQLite FTS5) lorsque le cache n’est pas chiffré.
 - Carnet d’adresses et autocomplétion des destinataires ; virgule finale acceptée dans les champs d’adresses.
 - Installateur Windows par utilisateur (Inno Setup), construit par l’intégration continue.
+- Licence MIT.
 - Vue par conversation : regroupement par références, lecture empilée (messages repliés avec extrait au-dessus et en dessous du message ouvert) incluant vos réponses envoyées, actions sur toute la conversation, navigation Alt+Bas / Alt+Haut.
 - Aperçus de la liste calculés à la synchronisation (sans citation ni signature) ; l’adresse du compte n’est plus affichée à la place d’un aperçu absent.
 

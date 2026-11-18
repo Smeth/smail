@@ -174,3 +174,7 @@ Les tests couvrent MIME, encodages, TLS et empreintes, STARTTLS sans repli, SQLi
 L’autorisation OAuth réelle doit être validée avec votre propre identifiant d’application, le consentement du fournisseur et votre compte. L’envoi et les actions réels doivent être vérifiés avec un compte de test et un destinataire contrôlé. Une suite locale ne remplace pas ces validations de bout en bout chez votre hébergeur.
 
 Références de sécurité : [nettoyage Bleach](https://bleach.readthedocs.io/en/latest/clean.html), [interception WebEngine](https://doc.qt.io/qt-6.8/qwebengineurlrequestinterceptor.html) et [schéma interne WebEngine](https://doc.qt.io/qtforpython-6/PySide6/QtWebEngineCore/QWebEngineUrlSchemeHandler.html).
+
+## Licence
+
+Smail est distribué sous licence MIT : voir [LICENSE](LICENSE). Les icônes Lucide restent sous leur propre licence (`mailclient/ui/assets/LICENSE-LUCIDE.txt`).
