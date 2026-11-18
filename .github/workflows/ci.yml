@@ -30,7 +30,23 @@ jobs:
       - name: Installer les dépendances
         run: python -m pip install -r requirements-dev.txt
       - name: Tests
-        run: python -m pytest mailclient/tests -q -p no:cacheprovider
+        run: python -m pytest mailclient/tests -q -p no:cacheprovider --junitxml=test-results.xml
+      - name: Signaler les tests en échec
+        # Chaque échec devient une annotation, visible dans la pull request sans ouvrir les journaux.
+        if: failure()
+        shell: python
+        run: |
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          if not Path('test-results.xml').exists():
+              print('::error title=pytest::Aucun rapport : erreur avant la collecte des tests.')
+          else:
+              for case in ET.parse('test-results.xml').iter('testcase'):
+                  for problem in list(case.iter('failure')) + list(case.iter('error')):
+                      title = f"{case.get('classname')}.{case.get('name')}"
+                      detail = (problem.get('message') or '') + '\n' + (problem.text or '')[-1500:]
+                      detail = detail.replace('%', '%25').replace('\r', '').replace('\n', '%0A')
+                      print(f'::error title={title}::{detail}')
 
   build:
     name: Exécutable Windows

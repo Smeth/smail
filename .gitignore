@@ -17,3 +17,4 @@ dist/
 htmlcov/
 .test-tmp*/
 pytest-cache-files-*/
+test-results.xml
