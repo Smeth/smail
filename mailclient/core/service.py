@@ -15,6 +15,13 @@ def cache_key(*values) -> str:
     import json
     return json.dumps(values, ensure_ascii=False)
 
+def save_signature(database, account_id, qt_html=''):
+    """Signature mise en forme du compte ; vide : signature texte seule (configuration du compte)."""
+    if qt_html:
+        database.cache_put('signature', account_id, dict(account=account_id, qt_html=qt_html), account_id)
+    else:
+        database.cache_delete('signature', account_id)
+
 class MailService:
     def __init__(self, database, vault, tls):
         self.db, self.vault, self.tls = database, vault, tls
@@ -100,6 +107,15 @@ class MailService:
     def _known_rows(state):
         rows = {row['uid']: row for page in state.get('pages', {}).values() for row in page}
         return sorted(rows.values(), key=lambda row: int(row['uid']), reverse=True)
+
+    # Signature mise en forme : entrée de cache du compte (chiffrée avec le cache, purgée avec le compte).
+    # La configuration du compte garde la version texte, lisible par Smail 1.0.0.
+    def signature(self, account):
+        value = self.db.cache_get('signature', account.id) if account else None
+        return value if value and value.get('qt_html') else None
+
+    def set_signature(self, account, qt_html=''):
+        save_signature(self.db, account.id, qt_html)
 
     # Carnet d’adresses : une entrée de cache par compte (chiffrée avec le cache, purgée avec le compte).
     def remember_contacts(self, account, pairs, sent=False):

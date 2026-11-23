@@ -1,5 +1,5 @@
 """Configuration publique des comptes, sans secret."""
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, fields, asdict
 from uuid import uuid4
 import re
 
@@ -57,4 +57,7 @@ class Account:
 
     @classmethod
     def from_dict(cls, data: dict) -> 'Account':
-        return cls(**{**data, 'imap': Server(**data['imap']), 'smtp': Server(**data['smtp'])})
+        # Champs inconnus (version plus récente de Smail) ignorés plutôt que bloquants.
+        known = {item.name for item in fields(cls)}
+        values = {key: value for key, value in data.items() if key in known}
+        return cls(**{**values, 'imap': Server(**data['imap']), 'smtp': Server(**data['smtp'])})

@@ -2,6 +2,8 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit, QComboBox,
                                QSpinBox, QLabel, QCheckBox, QPushButton, QDialogButtonBox, QGroupBox, QPlainTextEdit, QScrollArea, QWidget)
 from PySide6.QtCore import Qt
+from mailclient.ui.rich_text import RichTextEdit, FormatBar
+from mailclient.core.service import save_signature
 from mailclient.core.accounts import Account, Server, MODES, PORTS, PRESETS
 from mailclient.core.imap_client import IMAPClient
 from mailclient.core.smtp_client import test_connection
@@ -82,11 +84,15 @@ class AccountDialog(QDialog):
         self.warning.hide()
         self.warning_frame.hide()
         self.confirm.hide()
-        self.signature = QPlainTextEdit()
+        self.signature = RichTextEdit(attachments=False)
         self.signature.setTabChangesFocus(True)
-        self.signature.setMaximumHeight(80)
-        self.signature.setPlaceholderText('Signature ajoutée aux nouveaux messages et réponses')
+        self.signature.setMinimumHeight(90)
+        self.signature.setMaximumHeight(140)
+        self.signature.setPlaceholderText('Signature ajoutée aux nouveaux messages et réponses (gras, liens, listes…)')
+        self.signature.setAccessibleName('Signature du compte')
         layout.addWidget(label('Signature du compte','Bold'))
+        self.signature_bar = FormatBar(self.signature, self.appearance)
+        layout.addWidget(self.signature_bar)
         layout.addWidget(self.signature)
         self.status = QLabel('OAuth2 : renseignez votre identifiant d’application Google/Microsoft, puis connectez-vous dans le navigateur.')
         self.status.setWordWrap(True)
@@ -111,7 +117,11 @@ class AccountDialog(QDialog):
             self.client_id.setText(account.oauth_client_id)
             self.tenant.setText(account.oauth_tenant)
             self.auth.setCurrentIndex(['password', 'google', 'microsoft'].index(account.auth_method))
-            self.signature.setPlainText(account.signature)
+            stored = database.cache_get('signature', account.id)
+            if stored and stored.get('qt_html'):
+                self.signature.setHtml(stored['qt_html'])
+            else:
+                self.signature.setPlainText(account.signature)
             for protocol in ('imap', 'smtp'):
                 config = getattr(account, protocol)
                 host, mode, port = self.servers[protocol]
@@ -152,7 +162,7 @@ class AccountDialog(QDialog):
         account = Account(self.name.text().strip(), self.address.text().strip(), **servers)
         account.auth_method = ['password', 'google', 'microsoft'][self.auth.currentIndex()]
         account.oauth_client_id = self.client_id.text().strip()
-        account.signature = self.signature.toPlainText()
+        account.signature = self.signature.mail_parts()[1]  # Version texte : clients sans HTML et Smail 1.0.0.
         account.oauth_tenant = self.tenant.text().strip() or 'common'
         if self.account_id:
             account.id = self.account_id
@@ -222,6 +232,8 @@ class AccountDialog(QDialog):
                 if not self.oauth.is_authorized(account):
                     raise RuntimeError('Autorisation OAuth2 nécessaire.')
             self.database.save(account)
+            formatted = bool(self.signature.mail_parts()[0])
+            save_signature(self.database, account.id, self.signature.toHtml() if formatted else '')
         except Exception:
             self.status.setText('Enregistrement impossible. Vérifiez les champs, la confirmation de connexion en clair et la disponibilité du Gestionnaire d’identifiants Windows.')
             return

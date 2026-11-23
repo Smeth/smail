@@ -19,7 +19,8 @@ def addresses(value: str) -> list[tuple[str, str]]:
         raise ValueError('Adresse destinataire invalide. Séparez les adresses par des virgules.')
     return result
 
-def build_message(account, to: str, cc: str, bcc: str, subject: str, body: str, attachments=(), reply_id='', references='', allow_empty=False):
+def build_message(account, to: str, cc: str, bcc: str, subject: str, body: str, attachments=(), reply_id='', references='', allow_empty=False, html=''):
+    """html : document complet produit par l’éditeur ; envoyé en multipart/alternative avec le texte brut."""
     account.validate()
     for value in (subject, reply_id, references):
         if any(ord(c) < 32 or ord(c) == 127 for c in value):
@@ -41,6 +42,8 @@ def build_message(account, to: str, cc: str, bcc: str, subject: str, body: str, 
     if references:
         message['References'] = references
     message.set_content(body)
+    if html:
+        message.add_alternative(html, subtype='html')
     for attachment in attachments:
         content_type = mimetypes.guess_type(attachment.name)[0] or 'application/octet-stream'
         major, minor = content_type.split('/', 1)

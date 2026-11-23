@@ -18,6 +18,8 @@ from mailclient.ui.attachment_widgets import (AttachmentGrid, ComposeEditor, IMA
     read_attachments, thumbnail, clipboard_attachment, local_paths, clipboard_image)
 from mailclient.core.html_security import dangerous_filename
 from mailclient.ui.address_completer import AddressCompleter
+from mailclient.ui.rich_text import FormatBar
+from PySide6.QtGui import QTextCharFormat
 from shiboken6 import isValid
 
 def reply_fields(mail, account, mode):
@@ -117,6 +119,8 @@ class ComposeWindow(QDialog):
         self.body.setPlaceholderText('Écrivez votre message…')
         self.body.setAccessibleName('Corps du message')
         self.body.setTabChangesFocus(True)
+        self.format_bar = FormatBar(self.body, self.appearance)
+        layout.addWidget(self.format_bar)
         layout.addWidget(self.body, 1)
         self.attachment_panel = QWidget()
         attachment_layout = QVBoxLayout(self.attachment_panel)
@@ -178,7 +182,7 @@ class ComposeWindow(QDialog):
             widget.setText(values.get(key, ''))
         for toggle,field in zip(self.recipient_toggles,(self.cc,self.bcc)):
             toggle.setChecked(bool(field.text()))
-        self.body.setPlainText(values.get('body', ''))
+        self.fill_body(values, restoring=bool(draft))
         self.reply_id, self.references = values.get('reply_id', ''), values.get('references', '')
         if draft:
             self.files = [Attachment(item['name'], item['type'], base64.b64decode(item['data'])) for item in values.get('attachments', [])]
@@ -203,6 +207,29 @@ class ComposeWindow(QDialog):
         self.setAcceptDrops(True)
         self.to.setFocus()
 
+    def fill_body(self, values, restoring):
+        """Brouillon : restitué avec sa mise en forme. Nouveau message ou réponse : signature du compte,
+        mise en forme si elle a été définie ainsi, insérée à sa place habituelle (avant la citation)."""
+        if restoring and values.get('qt_html'):
+            self.body.setHtml(values['qt_html'])
+            return
+        body = values.get('body', '')
+        account = self.current_account() if self.accounts else None
+        stored = self.service.signature(account) if account and hasattr(self.service, 'signature') else None
+        prefix = f'\n\n{account.signature}' if account else ''
+        if restoring or not stored or not account.signature or not body.startswith(prefix):
+            self.body.setPlainText(body)
+            return
+        self.body.clear()
+        cursor = self.body.textCursor()
+        cursor.insertText('\n\n')
+        self.body.insert_html(cursor, stored['qt_html'])
+        rest = body[len(prefix):]  # Citation d’une réponse, avec ses propres sauts de ligne.
+        if rest:
+            cursor.insertText(rest, QTextCharFormat())
+        cursor.setPosition(0)
+        self.body.setTextCursor(cursor)
+
     def update_draft_menu(self):
         self.server_action.setEnabled(self.server_button.isEnabled())
         self.discard_action.setEnabled(self.discard_button.isEnabled())
@@ -219,8 +246,11 @@ class ComposeWindow(QDialog):
         self.debounce.start()
 
     def state(self):
+        # Conversion dans le fil graphique : le document Qt ne doit pas être lu depuis une tâche réseau.
+        mail_html, text = self.body.mail_parts()
         return dict(id=self.id, account=self.current_account().id, to=self.to.text(), cc=self.cc.text(),
-                    bcc=self.bcc.text(), subject=self.subject.text(), body=self.body.toPlainText(),
+                    bcc=self.bcc.text(), subject=self.subject.text(), body=text, mail_html=mail_html,
+                    qt_html=self.body.toHtml() if mail_html else '',
                     reply_id=self.reply_id, references=self.references)
 
     def set_busy(self, busy):
@@ -391,7 +421,8 @@ class ComposeWindow(QDialog):
     def message(self, state, files, allow_empty=False):
         account = next(a for a in self.accounts if a.id == state['account'])
         return build_message(account, state['to'], state['cc'], state['bcc'], state['subject'],
-                             state['body'], files, state['reply_id'], state['references'], allow_empty)
+                             state['body'], files, state['reply_id'], state['references'], allow_empty,
+                             html=state.get('mail_html', ''))
 
     def failure(self, message):
         self.set_busy(False)

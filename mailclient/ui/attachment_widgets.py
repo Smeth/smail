@@ -160,20 +160,9 @@ class AttachmentGrid(QListWidget):
         else:
             super().keyPressEvent(event)
 
-class ComposeEditor(QPlainTextEdit):
-    pathsAdded = Signal(list)
-    imageAdded = Signal(QImage)
-
-    def canInsertFromMimeData(self, source):
-        return bool(local_paths(source) or source.hasImage()) or super().canInsertFromMimeData(source)
-
-    def insertFromMimeData(self, source):
-        paths = local_paths(source)
-        if paths:
-            self.pathsAdded.emit(paths)
-        elif source.hasImage():
-            image = clipboard_image(source)
-            if not image.isNull():
-                self.imageAdded.emit(image)
-        else:
-            super().insertFromMimeData(source)
+def __getattr__(name):
+    # Éditeur de rédaction : désormais en texte enrichi (import différé, rich_text dépend de ce module).
+    if name == 'ComposeEditor':
+        from mailclient.ui.rich_text import RichTextEdit
+        return RichTextEdit
+    raise AttributeError(name)
