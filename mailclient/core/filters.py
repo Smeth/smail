@@ -50,6 +50,10 @@ def describe(rule: dict) -> str:
 
 def normalize_sender(value: str) -> str:
     """Adresse complète, ou domaine écrit « @exemple.fr » / « exemple.fr »."""
+    # Une seule adresse : l’analyse de « a@b.fr, c@d.fr » varie selon la version de Python.
+    found = [address for _, address in getaddresses([value]) if address]
+    if len(found) > 1:
+        raise ValueError('Une seule adresse ou un seul domaine à la fois.')
     value = parseaddr(value)[1] or value
     value = value.strip().casefold()
     if not value or len(value) > 254 or any(c in value for c in ' <>,;"\'') or any(ord(c) < 33 for c in value):

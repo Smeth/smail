@@ -13,26 +13,15 @@ def pytest_unconfigure(config):
     """Fin de session sûre pour Qt WebEngine sous Windows.
 
     À la sortie du processus, Windows décharge les bibliothèques ; Qt WebEngine y provoque alors une
-    violation d'accès (« Windows fatal exception: access violation »). Sur les machines GitHub
-    Actions, elle remplace le code de sortie de pytest (1 ou 127 après « N passed »).
+    violation d'accès qui, sur les machines GitHub Actions, remplace le code de sortie de pytest
+    (1, 127 ou 139 après « N passed »).
 
-    pytest_unconfigure s'exécute après le résumé et l'écriture du rapport JUnit : on ferme les
-    lecteurs encore ouverts, puis on termine le processus avec le vrai code de pytest, sans phase
-    de déchargement des bibliothèques.
+    pytest_unconfigure s'exécute après le résumé et l'écriture du rapport JUnit : le processus est
+    terminé aussitôt avec le vrai code de pytest, sans phase de déchargement. Aucun objet Qt n'est
+    manipulé ici : un nettoyage tardif des lecteurs WebEngine plantait lui-même.
     """
     if sys.platform != 'win32' or 'code' not in _status:
         return
-    try:
-        from PySide6.QtWidgets import QApplication
-        from mailclient.ui.mail_view import MailView
-        app = QApplication.instance()
-        if app is not None:
-            for widget in app.allWidgets():
-                if isinstance(widget, MailView):
-                    widget.shutdown()
-            app.processEvents()
-    except Exception:
-        pass  # Nettoyage au mieux : le code de sortie reste celui de pytest.
     sys.stdout.flush()
     sys.stderr.flush()
     # Les threads WebEngine interrompus par la terminaison déclencheraient un faux rapport de plantage.
