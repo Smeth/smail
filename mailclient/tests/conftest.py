@@ -29,5 +29,9 @@ def pytest_unconfigure(config):
     faulthandler.disable()
     import ctypes
     kernel32 = ctypes.windll.kernel32
-    kernel32.TerminateProcess(kernel32.GetCurrentProcess(), _status['code'])
-    os._exit(_status['code'])  # Uniquement si TerminateProcess était refusé.
+    process = kernel32.GetCurrentProcess()
+    if kernel32.TerminateProcess(process, _status['code']):
+        # TerminateProcess rend la main avant la fin effective : attendre plutôt que d'enchaîner sur
+        # os._exit, dont la phase de déchargement des bibliothèques provoque justement le plantage.
+        kernel32.WaitForSingleObject(process, 30_000)
+    os._exit(_status['code'])  # Secours uniquement : terminaison refusée ou anormalement lente.
