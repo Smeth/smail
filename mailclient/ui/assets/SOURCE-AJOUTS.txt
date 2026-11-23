@@ -1,2 +1,2 @@
 Icônes ajoutées en v1.1, hors maquettes (même source et licence que SOURCE.txt : Lucide, ISC) :
-ban, bold, filter, italic, link, list, list-ordered, mail-minus, remove-formatting, underline.
+alarm-clock, ban, bold, clock, filter, italic, link, list, list-ordered, mail-minus, remove-formatting, underline.

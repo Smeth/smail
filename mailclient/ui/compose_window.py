@@ -58,6 +58,7 @@ class ComposeWindow(QDialog):
         self.runner = Runner(self, service.tls)
         self.id = draft['id'] if draft else str(uuid4())
         self.busy = self.saving = self.close_when_saved = False
+        self.countdown = None
         self.delivered = False
         self.revision, self.saved_revision = 1, 0
         self.files = []
@@ -161,6 +162,10 @@ class ComposeWindow(QDialog):
         for button in (self.add_file,self.add_image,self.more_button):
             buttons.addWidget(button)
         buttons.addStretch()
+        self.later_button = Button('',self.appearance,'clock','Secondary','Envoyer plus tard…')
+        self.later_button.setAccessibleName('Envoyer plus tard')
+        self.later_button.clicked.connect(self.send_later)
+        buttons.addWidget(self.later_button)
         buttons.addWidget(self.send_button)
         outer.addLayout(buttons)
         self.discard_button.clicked.connect(self.discard)
@@ -177,6 +182,10 @@ class ComposeWindow(QDialog):
         self.periodic.setInterval(20_000)
         self.periodic.timeout.connect(self.save_draft)
         self.periodic.start()
+        self.countdown = None
+        self.countdown_timer = QTimer(self)
+        self.countdown_timer.setInterval(1000)
+        self.countdown_timer.timeout.connect(self.tick_countdown)
         values = draft or fields or dict(body='\n\n' + (self.current_account().signature if self.accounts else ''))
         for key, widget in [('to', self.to), ('cc', self.cc), ('bcc', self.bcc), ('subject', self.subject)]:
             widget.setText(values.get(key, ''))
@@ -202,7 +211,7 @@ class ComposeWindow(QDialog):
         self.remove_file.clicked.connect(self.remove_attachment)
         self.send_button.clicked.connect(self.send)
         self.server_button.clicked.connect(self.save_server_draft)
-        QShortcut(QKeySequence('Ctrl+Return'),self,activated=self.send)
+        QShortcut(QKeySequence('Ctrl+Return'),self,activated=lambda:None if self.countdown else self.send())
         self.debounce.start()
         self.setAcceptDrops(True)
         self.to.setFocus()
@@ -259,7 +268,9 @@ class ComposeWindow(QDialog):
         for widget in (self.account_box, self.to, self.cc, self.bcc, self.subject, self.body, self.add_file, self.add_image, self.remove_file, self.attachments,*self.recipient_toggles):
             widget.setEnabled(not busy and not self.delivered)
         self.remove_file.setEnabled(not busy and not self.delivered and bool(self.files))
-        self.send_button.setEnabled(not busy and not self.saving and not self.delivered)
+        self.send_button.setEnabled(bool(self.countdown) or (not busy and not self.saving and not self.delivered))
+        self.later_button.setEnabled(not busy and not self.saving and not self.delivered)
+        self.format_bar.setEnabled(not busy and not self.delivered)
         self.server_button.setEnabled(not busy and not self.saving and not self.delivered)
         self.discard_button.setEnabled(not busy and not self.saving and not self.delivered)
         self.update_draft_menu()
@@ -429,6 +440,9 @@ class ComposeWindow(QDialog):
         self.status.setText(message)
 
     def send(self):
+        if self.countdown:
+            self.cancel_countdown()  # Pendant le délai, le bouton Envoyer devient « Annuler l’envoi ».
+            return
         if self.busy or self.saving or self.delivered:
             return
         if self.offline():
@@ -437,25 +451,90 @@ class ComposeWindow(QDialog):
         if not self.subject.text().strip() and QMessageBox.question(self, 'Objet vide', 'Envoyer ce message sans objet ?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
             return
         state, files, account = self.state(), list(self.files), self.current_account()
+        try:
+            self.message(state, files)  # Adresses et en-têtes vérifiés avant tout délai d’annulation.
+        except ValueError as error:
+            self.status.setText(str(error))
+            return
+        delay = int(self.service.db.setting('undo_send_seconds', 10) or 0) if hasattr(self.service, 'db') else 0
+        if delay > 0:
+            self.start_countdown(state, files, account, delay)
+        else:
+            self.deliver(state, files, account)
+
+    # Annulation d’envoi : le message part à la fin du délai, ou tout de suite si la fenêtre est fermée.
+    def start_countdown(self, state, files, account, delay):
+        self.debounce.stop()
+        self.countdown = dict(state=state, files=files, account=account, left=delay)
+        self.set_busy(True)
+        self.countdown_timer.start()
+        self.show_countdown()
+
+    def show_countdown(self):
+        left = self.countdown['left']
+        self.send_button.setText(f'Annuler l’envoi ({left} s)')
+        self.status.setText(f'Envoi dans {left} s. Cliquez sur « Annuler l’envoi » pour reprendre le message ; fermer la fenêtre l’envoie tout de suite.')
+
+    def tick_countdown(self):
+        if not self.countdown:
+            return
+        self.countdown['left'] -= 1
+        if self.countdown['left'] > 0:
+            self.show_countdown()
+            return
+        self.flush_countdown()
+
+    def flush_countdown(self):
+        pending, self.countdown = self.countdown, None
+        self.countdown_timer.stop()
+        self.send_button.setText('Envoyer')
+        self.deliver(pending['state'], pending['files'], pending['account'])
+
+    def cancel_countdown(self):
+        self.countdown_timer.stop()
+        self.countdown = None
+        self.send_button.setText('Envoyer')
+        self.set_busy(False)
+        self.status.setText('Envoi annulé. Le message reste modifiable et son brouillon est conservé.')
+        self.changed()
+
+    def send_later(self):
+        if self.busy or self.saving or self.delivered or self.countdown:
+            return
+        from mailclient.ui.schedule_dialog import ScheduleDialog
+        from mailclient.core import scheduler
+        state, files, account = self.state(), list(self.files), self.current_account()
+        try:
+            self.message(state, files)
+        except ValueError as error:
+            self.status.setText(str(error))
+            return
+        dialog = ScheduleDialog('Envoyer plus tard', 'Smail enverra ce message à l’heure choisie, s’il est ouvert à ce moment-là '
+                                '(sinon au prochain démarrage).', 'send', self)
+        if not dialog.exec():
+            return
+        try:
+            scheduler.schedule(self.service.db, account, state, files, dialog.moment, self.id)
+            self.service.db.cache_delete('draft', self.id)
+        except (ValueError, RuntimeError) as error:
+            self.status.setText(str(error))
+            return
+        self.delivered = True
+        self.saved_revision = self.revision
+        self.debounce.stop()
+        self.periodic.stop()
+        owner = self.parent()
+        if owner is not None and hasattr(owner, 'statusBar'):
+            owner.statusBar().showMessage(f'Envoi programmé le {dialog.moment:%d/%m à %H:%M} (Fichier › Envois programmés).')
+        self.close()
+
+    def deliver(self, state, files, account):
+        from mailclient.core.scheduler import send_and_record
         self.set_busy(True)
         self.debounce.stop()
         self.status.setText('Envoi en cours… Ne fermez pas cette fenêtre.')
         def operation():
-            message, recipients = self.message(state, files)
-            refused = send_message(account, self.service.oauth.credential(account), self.service.tls, message, recipients)
-            raw = message.as_bytes()
-            local_id = str(uuid4())
-            try:
-                self.service.db.cache_put('sent-copy', local_id, dict(id=local_id, account=account.id, raw=base64.b64encode(raw).decode('ascii'), server_saved=False))
-            except Exception:
-                local_id = None  # L’envoi a réussi : ne jamais le relancer pour une erreur de cache.
-            try:
-                rejected = {value.casefold() for value in refused}
-                accepted = [pair for field in ('to', 'cc', 'bcc') for pair in addresses(state[field]) if pair[1].casefold() not in rejected]
-                self.service.remember_contacts(account, accepted, sent=True)
-            except Exception:
-                pass  # Le carnet d’adresses n’influe jamais sur l’issue d’un envoi.
-            return raw, list(refused), local_id
+            return send_and_record(self.service, account, state, files)
         def done(result):
             raw, refused, self.last_copy_id = result
             self.set_busy(False)
@@ -548,7 +627,10 @@ class ComposeWindow(QDialog):
         self.close()  # Échap suit aussi le chemin de sauvegarde asynchrone.
 
     def closeEvent(self, event):
-        if self.busy:
+        if self.countdown:
+            self.flush_countdown()  # Fermer pendant le délai : envoi immédiat, puis fermeture.
+            event.ignore()
+        elif self.busy:
             self.status.setText('Attendez la fin de l’opération avant de fermer.')
             event.ignore()
         elif self.saving:

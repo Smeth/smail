@@ -230,6 +230,7 @@ class MainWindow(QMainWindow):
         actions.addSeparator()
         action('Déplacer', lambda: self.move('move'), needs_message=True, icon_name='folder')
         action('Archiver', lambda: self.move('archive'), needs_message=True, icon_name='archive')
+        action('Reporter…', self.snooze, 'Ctrl+Shift+Z', True, icon_name='alarm-clock')
         action('Supprimer', lambda: self.move('trash'), 'Delete', True, icon_name='trash-2')
         actions.addSeparator()
         self.mark_all_action = action('Tout marquer comme lu', self.mark_all_read, 'Ctrl+Shift+U', icon_name='check')
@@ -247,6 +248,7 @@ class MainWindow(QMainWindow):
         action('Brouillons locaux', self.open_draft, menu=file_menu, icon_name='file-pen-line')
         action('Envoyés locaux', self.open_sent_copy, menu=file_menu, icon_name='send')
         action('Exporter .eml', self.export_sent_copy, menu=file_menu, icon_name='download')
+        action('Envois programmés…', self.open_outbox, menu=file_menu, icon_name='clock')
         file_menu.addSeparator()
         action('Quitter', self.request_quit, 'Ctrl+Q', menu=file_menu)
         action('Ajouter un compte', self.add_account, menu=accounts_menu, icon_name='plus')
@@ -327,6 +329,11 @@ class MainWindow(QMainWindow):
         self.appearance.changed.connect(self.refresh_appearance)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.sync_now)
+        # Échéances locales : envois programmés et retours de messages reportés (Smail ouvert).
+        self.due_timer = QTimer(self)
+        self.due_timer.setInterval(30_000)
+        self.due_timer.timeout.connect(self.process_due)
+        self.due_running = False
         self.idle_debounce = QTimer(self)
         self.idle_debounce.setSingleShot(True)
         self.idle_debounce.setInterval(2000)
@@ -345,8 +352,12 @@ class MainWindow(QMainWindow):
             QApplication.instance().setQuitOnLastWindowClosed(False)
         self.apply_theme()
         if auto_load:
+            from mailclient.core import scheduler
+            uncertain = scheduler.recover(database)
             self.reload_accounts()
             self.start_background()
+            if uncertain:
+                self.statusBar().showMessage(f'{uncertain} envoi(s) programmé(s) interrompu(s) : voir Fichier › Envois programmés.')
             QTimer.singleShot(1500, self.sync_now)
         else:
             self.set_busy(False)
@@ -365,7 +376,7 @@ class MainWindow(QMainWindow):
         self.update_actions()
         menu = QMenu(self.table)
         for index,action in enumerate(self.message_actions):
-            if index in (3,5,8,11):  # Réponse · états · rangement · indésirables · règles
+            if index in (3,5,9,12):  # Réponse · états · rangement · indésirables · règles
                 menu.addSeparator()
             menu.addAction(action)
         menu.exec(self.table.viewport().mapToGlobal(position))
@@ -1155,10 +1166,66 @@ class MainWindow(QMainWindow):
             message = 'Synchronisation : ' + friendly_error(error)
         self.statusBar().showMessage(message)
 
+    def process_due(self):
+        if self.quitting or self.due_running or self.offline.isChecked() or not self.accounts:
+            return
+        from mailclient.core import scheduler
+        self.due_running = True
+        accounts = list(self.accounts)
+        def operation():
+            return scheduler.process_outbox(self.service, accounts) + scheduler.process_snoozes(self.service, accounts)
+        def done(events):
+            self.due_running = False
+            if not events:
+                return
+            texts = {'sent': 'Envoi programmé effectué', 'partial': 'Envoi programmé partiel', 'failed': 'Échec d’un envoi programmé',
+                     'returned': 'Message reporté de retour'}
+            summary = ' · '.join(f'{texts[kind]} : {subject}' for kind, subject, _ in events)
+            self.statusBar().showMessage(summary)
+            if self.tray and self.database.setting('notifications', True):
+                self.tray.showMessage('Smail', summary[:240], QSystemTrayIcon.Information, 6000)
+            if any(kind == 'returned' for kind, _, _ in events) and not self.busy:
+                self.load_messages()
+        def failed(message):
+            self.due_running = False
+            self.statusBar().showMessage('Échéances : ' + message)
+        self.runner.run(operation, done, failed)
+
+    def snooze(self):
+        rows = self.selected_rows()
+        if self.busy or not rows:
+            return
+        if self.offline.isChecked():
+            self.statusBar().showMessage('Reconnectez-vous pour reporter ce message.')
+            return
+        if len({row['account'] for row in rows}) > 1:
+            self.statusBar().showMessage('Reportez les messages d’un seul compte à la fois.')
+            return
+        from mailclient.ui.schedule_dialog import ScheduleDialog
+        from mailclient.core import scheduler
+        dialog = ScheduleDialog('Reporter', 'Le message quitte la réception et y revient, non lu, à l’heure choisie '
+                                '(dossier « Reportés » sur le serveur ; Smail doit être ouvert à ce moment-là).', 'snooze', self)
+        if not dialog.exec():
+            return
+        account, until = self.row_account(rows[0]), dialog.moment
+        self.run_and_reload(lambda: scheduler.snooze(self.service, account, rows, until),
+                            f'Reporté jusqu’au {until:%d/%m à %H:%M}.')
+
+    def open_outbox(self):
+        from mailclient.ui.outbox_dialog import OutboxDialog
+        dialog = OutboxDialog(self.database, self.accounts, self)
+        dialog.exec()
+        if dialog.reopen:
+            window = ComposeWindow(self.service, self.accounts, draft=dialog.reopen, parent=self, offline=self.offline.isChecked)
+            self.composers.add(window)
+            window.show()
+
     def start_background(self):
         if self.auto_load and not self.offline.isChecked():
             self.timer.start(self.database.setting('sync_minutes', 5) * 60_000)
             self.restart_idle()
+            self.due_timer.start()
+            QTimer.singleShot(3000, self.process_due)  # Échéances passées pendant la fermeture de Smail.
 
     def restart_idle(self):
         for thread in self.idle_threads:
@@ -1176,6 +1243,7 @@ class MainWindow(QMainWindow):
     def offline_changed(self, checked):
         if checked:
             self.timer.stop()
+            self.due_timer.stop()
             for thread in self.idle_threads:
                 thread.stop()
             if self.sync_thread:
@@ -1195,7 +1263,7 @@ class MainWindow(QMainWindow):
                       idle=dialog.idle.isChecked(), notifications=dialog.notifications.isChecked(), close_to_tray=dialog.tray.isChecked(),
                       ui_style=dialog.style_combo.currentData(),ui_density=dialog.density.currentText(),
                       ui_accent=dialog.accent.currentText(),ui_custom_accent=dialog.custom_accent,
-                      ui_reduced_motion=dialog.motion.isChecked())
+                      ui_reduced_motion=dialog.motion.isChecked(),undo_send_seconds=dialog.undo_send.value())
         encrypt = dialog.encrypt.isChecked()
         self.set_busy(True)
         def operation():
@@ -1356,6 +1424,7 @@ class MainWindow(QMainWindow):
             return
         self.quitting = True
         self.timer.stop()
+        self.due_timer.stop()
         self.idle_debounce.stop()
         for thread in self.idle_threads:
             thread.stop()

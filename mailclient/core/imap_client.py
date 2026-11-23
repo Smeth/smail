@@ -357,6 +357,17 @@ class IMAPClient:
             if status != 'OK':
                 raise RuntimeError('Le serveur a refusé cette opération sur le dossier (nom déjà utilisé ou dossier protégé ?).')
 
+    def find_by_message_id(self, folder: str, message_id: str):
+        """UID des messages portant ce Message-ID dans le dossier, et UIDVALIDITY ; un UID change à chaque déplacement."""
+        if not re.fullmatch(r'<[^<>\s"\\]{1,250}>', message_id):
+            raise ValueError('Identifiant de message invalide.')
+        with self.session() as client:
+            self.select(client, folder)
+            status, data = client.uid('search', None, 'HEADER', 'Message-ID', f'"{message_id}"')
+            if status != 'OK':
+                raise RuntimeError('Recherche du message refusée par le serveur.')
+            return ','.join(uid.decode() for uid in (data[0].split() if data and data[0] else [])), self.uidvalidity
+
     def append(self, folder: str, raw: bytes, draft=False):
         with self.session() as client:
             status, _ = client.append(quote_folder(folder), '(\\Draft)' if draft else '(\\Seen)', None, raw)

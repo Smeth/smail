@@ -200,7 +200,8 @@ def test_sent_copy_certificate_retry_never_resends_smtp(tmp_path, monkeypatch):
     vault.set(account.id, 'fake-test-password')
     service = MailService(db, vault, TLSPolicy(db))
     sent, appended = [], []
-    monkeypatch.setattr('mailclient.ui.compose_window.send_message', lambda *args: sent.append(args) or {})
+    db.set_setting('undo_send_seconds', 0)  # Envoi immédiat : le délai d’annulation est testé à part.
+    monkeypatch.setattr('mailclient.core.scheduler.send_message', lambda *args: sent.append(args) or {})
     monkeypatch.setattr(service, 'folders', lambda *args: ([('Sent', 'Envoyés')], False))
     class Client:
         def append(self, *args):
@@ -239,7 +240,8 @@ def test_partial_send_preserves_only_rejected_recipients(tmp_path, monkeypatch):
     account = Account('Test', 'a@example.com', Server('imap.example.com', 993), Server('smtp.example.com', 465))
     vault.set(account.id, 'fake-test-password')
     service = MailService(db, vault, TLSPolicy(db))
-    monkeypatch.setattr('mailclient.ui.compose_window.send_message', lambda *args: {'refused@example.com': (550, b'refused')})
+    db.set_setting('undo_send_seconds', 0)  # Envoi immédiat : le délai d’annulation est testé à part.
+    monkeypatch.setattr('mailclient.core.scheduler.send_message', lambda *args: {'refused@example.com': (550, b'refused')})
     monkeypatch.setattr(service, 'folders', lambda *args: ([('Sent', 'Envoyés')], False))
     monkeypatch.setattr(service, 'client', lambda *args: SimpleNamespace(append=lambda *args: None))
     composer = ComposeWindow(service, [account], fields=dict(to='accepted@example.com, refused@example.com', subject='Test', body='Bonjour'))
@@ -260,7 +262,8 @@ def test_offline_composer_does_not_contact_smtp(tmp_path, monkeypatch):
     account = Account('Test', 'a@example.com', Server('imap.example.com', 993), Server('smtp.example.com', 465))
     service = MailService(db, Vault(), TLSPolicy(db))
     called = []
-    monkeypatch.setattr('mailclient.ui.compose_window.send_message', lambda *args: called.append(args))
+    db.set_setting('undo_send_seconds', 0)  # Envoi immédiat : le délai d’annulation est testé à part.
+    monkeypatch.setattr('mailclient.core.scheduler.send_message', lambda *args: called.append(args))
     composer = ComposeWindow(service, [account], fields=dict(to='b@example.com', subject='Test'), offline=lambda: True)
     composer.send()
     assert not called and 'hors ligne' in composer.status.text().lower()
