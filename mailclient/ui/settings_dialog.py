@@ -22,9 +22,12 @@ class SettingsDialog(QDialog):
         self.nav.setObjectName('SettingsNav')
         self.nav.setFixedWidth(175)
         self.nav.setAccessibleName('Catégories des paramètres')
-        self.nav.addItems(['Apparence','Comptes','Sécurité','Raccourcis'])
+        self.nav.addItems(['Apparence','Comptes','Sécurité','Raccourcis','Règles et indésirables'])
         self.pages = QStackedWidget()
-        for page in (self.appearance_page(),self.accounts_page(),self.security_page(),self.shortcuts_page()):
+        from mailclient.ui.rules_dialog import FiltersPage
+        owner = self.parent()
+        self.filters_page = FiltersPage(database, database.accounts(), getattr(owner,'apply_filters_now',None))
+        for page in (self.appearance_page(),self.accounts_page(),self.security_page(),self.shortcuts_page(),self.filters_page):
             self.pages.addWidget(page)
         row.addWidget(self.nav)
         row.addWidget(self.pages,1)
@@ -224,7 +227,7 @@ class SettingsDialog(QDialog):
                           ('Répondre','Ctrl + R'),('Répondre à tous','Ctrl + Maj + R'),('Transférer','Ctrl + L'),
                           ('Synchroniser','F5'),('Changer de thème','Ctrl + Maj + L'),('Changer la densité','Ctrl + Maj + D'),
                           ('Message suivant / précédent (style 3)','J / K'),('Archiver / étoiler (style 3)','E / S'),
-                          ('Corbeille (focus dans la liste)','Suppr'),('Regrouper par conversation','Ctrl + Maj + T'),('Message suivant / précédent de la conversation','Alt + Bas / Haut'),('Envoyer en rédaction','Ctrl + Entrée')]:
+                          ('Corbeille (focus dans la liste)','Suppr'),('Regrouper par conversation','Ctrl + Maj + T'),('Message suivant / précédent de la conversation','Alt + Bas / Haut'),('Signaler comme spam','Ctrl + Maj + J'),('Mise en forme : gras, italique, souligné','Ctrl + B, I, U'),('Insérer un lien (rédaction)','Ctrl + Maj + K'),('Envoyer en rédaction','Ctrl + Entrée')]:
             row = QHBoxLayout()
             row.addWidget(label(title))
             row.addStretch()

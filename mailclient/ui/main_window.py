@@ -233,6 +233,11 @@ class MainWindow(QMainWindow):
         action('Supprimer', lambda: self.move('trash'), 'Delete', True, icon_name='trash-2')
         actions.addSeparator()
         self.mark_all_action = action('Tout marquer comme lu', self.mark_all_read, 'Ctrl+Shift+U', icon_name='check')
+        junk_menu = actions.addMenu('Courrier indésirable')
+        action('Signaler comme spam', lambda: self.report_junk(), 'Ctrl+Shift+J', True, menu=junk_menu, icon_name='shield-alert')
+        action('Bloquer l’expéditeur', lambda: self.report_junk(block=True), needs_message=True, menu=junk_menu, icon_name='ban')
+        action('Ce n’est pas un spam', lambda: self.report_junk(trust=True), needs_message=True, menu=junk_menu, icon_name='shield-check')
+        action('Créer une règle à partir du message…', self.create_rule_from_message, needs_message=True, icon_name='filter')
         folder_menu = accounts_menu.addMenu('Dossier')
         self.folder_actions = {
             'create': action('Nouveau dossier…', lambda: self.manage_folder('create'), menu=folder_menu, icon_name='folder'),
@@ -315,6 +320,7 @@ class MainWindow(QMainWindow):
         self.reader.starRequested.connect(lambda:self.trigger_command('Étoiler'))
         self.reader.readRequested.connect(lambda:self.trigger_command('Lu / non lu'))
         self.reader.threadMessageRequested.connect(self.open_thread_message)
+        self.reader.unsubscribeRequested.connect(self.unsubscribe)
         # Parcours de la conversation au clavier, sans quitter la liste.
         QShortcut(QKeySequence('Alt+Down'),self,activated=lambda:self.step_thread(1))
         QShortcut(QKeySequence('Alt+Up'),self,activated=lambda:self.step_thread(-1))
@@ -359,7 +365,7 @@ class MainWindow(QMainWindow):
         self.update_actions()
         menu = QMenu(self.table)
         for index,action in enumerate(self.message_actions):
-            if index in (3,5):
+            if index in (3,5,8,11):  # Réponse · états · rangement · indésirables · règles
                 menu.addSeparator()
             menu.addAction(action)
         menu.exec(self.table.viewport().mapToGlobal(position))
@@ -403,6 +409,110 @@ class MainWindow(QMainWindow):
             self.set_busy(False)
             self.statusBar().showMessage(message(result) if callable(message) else message)
             self.load_folders() if reload_folders else self.load_messages()
+        self.runner.run(operation, done, self.failure)
+
+    def report_junk(self, block=False, trust=False):
+        """Signaler comme spam, bloquer l’expéditeur, ou « Ce n’est pas un spam » (retour en réception, expéditeur approuvé)."""
+        rows = self.selected_rows()
+        if self.busy or not rows:
+            return
+        if self.offline.isChecked():
+            self.statusBar().showMessage('Reconnectez-vous pour déplacer ces messages.')
+            return
+        from email.utils import getaddresses
+        senders = sorted({address for row in rows for _, address in getaddresses([row.get('sender', '')]) if address})
+        if block and QMessageBox.question(
+                self, 'Bloquer l’expéditeur', 'Bloquer ' + ', '.join(senders[:5]) + ('…' if len(senders) > 5 else '') +
+                ' ?\n\nLes messages sélectionnés et les prochains de ces expéditeurs iront dans les indésirables.'
+                ' La liste se gère dans Préférences › Règles et indésirables.',
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+            return
+        groups = {}
+        for row in rows:
+            groups.setdefault(row['account'], []).append(row)
+        plan = [(self.row_account(group[0]), group) for group in groups.values()]
+        if any(account is None for account, _ in plan):
+            self.statusBar().showMessage('Le compte de ce message n’existe plus. Actualisez.')
+            return
+        def operation():
+            for account, group in plan:
+                folders = self.database.cache_get('folders', account.id, []) or self.service.folders(account)[0]
+                self.service.junk(account, group, folders, block=block, trust=trust)
+        message = ('Expéditeur approuvé, message remis dans la réception.' if trust else
+                   'Expéditeur bloqué, messages déplacés vers les indésirables.' if block else 'Message déplacé vers les indésirables.')
+        self.run_and_reload(operation, message)
+
+    def create_rule_from_message(self):
+        rows = self.selected_rows()
+        if self.busy or not rows:
+            return
+        from email.utils import parseaddr
+        from mailclient.core import filters
+        from mailclient.ui.rules_dialog import RuleDialog
+        row = rows[0]
+        address = parseaddr(row.get('sender', ''))[1]
+        dialog = RuleDialog(self.database, self.accounts, dict(account=row['account'], field='from', op='contains', value=address), self)
+        if not dialog.exec():
+            return
+        data = filters.load(self.database)
+        data['rules'].append(dialog.rule)
+        filters.save(self.database, data)
+        if QMessageBox.question(self, 'Règle enregistrée', 'Règle enregistrée. L’appliquer aussi aux messages déjà présents dans la réception ?',
+                                QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
+            self.apply_filters_now()
+        else:
+            self.statusBar().showMessage('Règle enregistrée : elle s’appliquera aux nouveaux messages.')
+
+    def apply_filters_now(self):
+        if self.busy or not self.accounts:
+            return
+        if self.offline.isChecked():
+            self.statusBar().showMessage('Reconnectez-vous pour appliquer les règles.')
+            return
+        accounts = list(self.accounts)
+        self.run_and_reload(lambda: sum(self.service.apply_filters_now(account) for account in accounts),
+                            lambda count: f'Règles appliquées : {count} message(s) traité(s).')
+
+    def unsubscribe(self):
+        """Désabonnement d’une liste : un clic (RFC 8058), sinon e-mail, sinon page web — toujours après confirmation."""
+        from mailclient.core import unsubscribe
+        mail = self.reader.mail
+        row = self.thread_rows[self.thread_index] if 0 <= self.thread_index < len(self.thread_rows) else self.selected_row()
+        account = self.thread_account if self.thread_rows else (self.row_account(row) if row else None)
+        if self.busy or mail is None or account is None:
+            return
+        options = unsubscribe.options(mail.list_unsubscribe, mail.list_unsubscribe_post)
+        if not options:
+            return
+        if options.one_click:
+            how = f'Smail enverra une demande de désabonnement automatique à {options.host}, sans ouvrir de navigateur.'
+        elif options.mailto:
+            how = f'Smail enverra depuis {account.email} un e-mail de désabonnement à {options.mailto[0]}.'
+        else:
+            how = f'La page de désabonnement de {options.host} s’ouvrira dans votre navigateur.'
+        if QMessageBox.question(self, 'Se désabonner', f'{how}\n\nContinuer ?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+            return
+        if not options.one_click and not options.mailto:
+            from PySide6.QtGui import QDesktopServices
+            from PySide6.QtCore import QUrl
+            QDesktopServices.openUrl(QUrl(options.web))
+            return
+        if self.offline.isChecked():
+            self.statusBar().showMessage('Reconnectez-vous pour vous désabonner.')
+            return
+        def operation():
+            if options.one_click:
+                unsubscribe.one_click(options.one_click)
+                return
+            from mailclient.core.smtp_client import build_message, send_message
+            address, subject, body = options.mailto
+            message, recipients = build_message(account, address, '', '', subject, body or 'unsubscribe')
+            send_message(account, self.service.oauth.credential(account), self.service.tls, message, recipients)
+        def done(_):
+            self.set_busy(False)
+            self.reader.unsubscribe_banner.hide()
+            self.statusBar().showMessage(f'Demande de désabonnement envoyée ({options.host}). Certaines listes mettent quelques jours à l’appliquer.')
+        self.set_busy(True)
         self.runner.run(operation, done, self.failure)
 
     def mark_all_read(self):

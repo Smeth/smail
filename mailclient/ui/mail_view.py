@@ -11,6 +11,7 @@ from PySide6.QtWebEngineCore import (QWebEnginePage, QWebEngineProfile, QWebEngi
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from mailclient.core.parser import Mail
 from mailclient.core.html_security import safe_document, dangerous_filename
+from mailclient.core.unsubscribe import options as unsubscribe_options
 from mailclient.ui.components import label, Button, Banner, Card
 from mailclient.ui.dialog_shell import appearance
 from mailclient.ui.attachment_widgets import AttachmentGrid, thumbnail
@@ -85,6 +86,7 @@ class MailView(QWidget):
     starRequested = Signal()
     readRequested = Signal()
     threadMessageRequested = Signal(int)
+    unsubscribeRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -200,6 +202,10 @@ class MailView(QWidget):
         message_layout.addWidget(self.remote_banner)
         self.danger_banner = Banner('Pièce jointe potentiellement dangereuse','Ce fichier peut exécuter du code. Il ne sera jamais ouvert automatiquement.',self.theme,'Danger','shield-alert')
         message_layout.addWidget(self.danger_banner)
+        self.unsubscribe_banner = Banner('Liste de diffusion','Vous pouvez vous désabonner sans ouvrir de lien dans le message.',
+                                         self.theme,'Info','mail-minus','Se désabonner')
+        self.unsubscribe_banner.action.clicked.connect(self.unsubscribeRequested.emit)
+        message_layout.addWidget(self.unsubscribe_banner)
         self.empty_message = label('Sélectionnez un message pour le lire.','Subtitle',True)
         self.empty_message.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.empty_message,1)
@@ -355,6 +361,7 @@ class MailView(QWidget):
         self.tabs.hide()
         self.remote_banner.hide()
         self.danger_banner.hide()
+        self.unsubscribe_banner.hide()
         self.attachment_title.hide()
         self.attachment_section.hide()
         self.attachments.hide()
@@ -395,6 +402,7 @@ class MailView(QWidget):
         self.has_remote_images = RemoteImages(safe_document(mail,True,self.dark)).found if mail.html else False
         self.remote_banner.setVisible(self.has_remote_images)
         self.danger_banner.setVisible(any(dangerous_filename(a.name) for a in mail.attachments))
+        self.unsubscribe_banner.setVisible(bool(unsubscribe_options(mail.list_unsubscribe, mail.list_unsubscribe_post)))
         self.attachment_title.setVisible(bool(mail.attachments))
         self.attachments.hide()
         self.save_button.setVisible(bool(mail.attachments))

@@ -28,6 +28,8 @@ class Mail:
     reply_to: str = ''
     message_id: str = ''
     references: str = ''
+    list_unsubscribe: str = ''
+    list_unsubscribe_post: str = ''
 
 def safe_filename(name: str) -> str:
     """Neutralise chemins, caractères Windows interdits et noms réservés."""
@@ -77,6 +79,8 @@ def parse_message(raw: bytes) -> Mail:
     result.reply_to = str(message.get('Reply-To', ''))
     result.message_id = str(message.get('Message-ID', ''))
     result.references = str(message.get('References', ''))
+    result.list_unsubscribe = header_text(message, 'List-Unsubscribe')[:2000]
+    result.list_unsubscribe_post = header_text(message, 'List-Unsubscribe-Post')[:200]
     return result
 
 QUOTE_INTRO = re.compile(r'^(?:le |on |am ).{0,240}(?:a écrit|wrote|schrieb)\s*:?\s*$', re.IGNORECASE)
@@ -131,7 +135,24 @@ def metadata(raw: bytes) -> dict:
             # Identifiants de fil : regroupement des conversations.
             'message_id': ' '.join(message_ids(message, 'Message-ID')[:1]),
             'in_reply_to': ' '.join(message_ids(message, 'In-Reply-To')[:1]),
-            'references': ' '.join(message_ids(message, 'References')[-30:])}
+            'references': ' '.join(message_ids(message, 'References')[-30:]),
+            # Règles de tri : destinataires et marquage spam du serveur (absents des en-têtes de liste).
+            'recipients': ', '.join(value for value in (header_text(message, 'To'), header_text(message, 'Cc')) if value)[:2000],
+            'spam': server_spam(message)}
+
+def header_text(message, name: str) -> str:
+    try:
+        return str(message.get(name, '') or '')
+    except Exception:
+        return ''
+
+def server_spam(message) -> bool:
+    """Marquage spam posé par le filtre du serveur (SpamAssassin, Rspamd…)."""
+    flag = header_text(message, 'X-Spam-Flag').strip().lower()
+    status = header_text(message, 'X-Spam-Status').strip().lower()
+    simple = header_text(message, 'X-Spam').strip().lower()
+    level = header_text(message, 'X-Spam-Level').strip()
+    return flag == 'yes' or status.startswith('yes') or simple in ('yes', 'true') or level.count('*') >= 6
 
 def message_ids(message, name: str) -> list[str]:
     """Identifiants <…> d’un en-tête, normalisés ; tolère les en-têtes mal formés."""

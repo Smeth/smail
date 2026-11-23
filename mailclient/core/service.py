@@ -10,6 +10,8 @@ from mailclient.core.oauth import OAuth
 from mailclient.core.parser import parse_message, snippet
 from mailclient.core.tls_policy import CertificateAlert
 from mailclient.core.threads import chronological, row_ids, thread_ids
+from mailclient.core import filters
+import logging
 
 def cache_key(*values) -> str:
     import json
@@ -28,6 +30,7 @@ class MailService:
         self.oauth = OAuth(vault)
         self.pool = ConnectionPool()
         self.contacts_lock = threading.Lock()
+        self.last_filtered = 0
 
     def client(self, account):
         return IMAPClient(account, self.oauth.credential(account), self.tls, self.pool)
@@ -107,6 +110,98 @@ class MailService:
     def _known_rows(state):
         rows = {row['uid']: row for page in state.get('pages', {}).values() for row in page}
         return sorted(rows.values(), key=lambda row: int(row['uid']), reverse=True)
+
+    # Règles, expéditeurs bloqués et spam : appliqués côté client aux nouveaux messages de la réception.
+    def apply_filters(self, account, folders, rows, validity, backlog=False):
+        """Applique les filtres aux messages de la réception arrivés depuis le dernier passage.
+
+        Au premier passage (ou après recréation du dossier), seul le repère est posé : les messages déjà
+        présents ne sont jamais déplacés à l’insu de l’utilisateur. backlog=True traite toutes les lignes
+        fournies (« Appliquer maintenant »). Renvoie les lignes restant dans la réception."""
+        data = filters.load(self.db)
+        mark = self.db.cache_get('filtered', account.id)
+        highest = max((int(row['uid']) for row in rows), default=0)
+        if not backlog and (not mark or mark.get('validity') != validity):
+            self.db.cache_put('filtered', account.id, dict(validity=validity, uid=highest), account.id)
+            return rows
+        threshold = 0 if backlog else mark['uid']
+        plan = {}
+        for row in rows:
+            if int(row['uid']) <= threshold:
+                continue
+            decision = filters.decide(row, data, account.id)
+            if decision:
+                action, target, _ = decision
+                plan.setdefault((action, target), []).append(row)
+        removed, client = set(), None
+        for (action, target), group in plan.items():
+            if action in {'junk', 'trash'}:
+                target = filters.special_folder(folders, filters.JUNK_WORDS if action == 'junk' else filters.TRASH_WORDS, 'INBOX')
+            elif action == 'move' and target not in {name for name, _ in folders}:
+                target = None
+            if action in {'junk', 'trash', 'move'} and not target:
+                logging.getLogger('smail').warning('Filtre ignoré : dossier de destination introuvable (%s)', action)
+                continue
+            step = {'read': 'read', 'star': 'star'}.get(action, 'move')
+            try:
+                client = client or self.client(account)
+                client.action('INBOX', ','.join(row['uid'] for row in group), validity, step, target or '')
+            except CertificateAlert:
+                raise
+            except Exception as error:
+                logging.getLogger('smail').warning('Filtre non appliqué (%s)', type(error).__name__)
+                continue
+            for row in group:
+                if step == 'move':
+                    removed.add(row['uid'])
+                    self.db.cache_delete('body', self.body_key(row))
+                elif step == 'read':
+                    row['unread'] = False
+                else:
+                    row['starred'] = True
+        if not backlog or highest > (mark or {}).get('uid', 0):
+            self.db.cache_put('filtered', account.id, dict(validity=validity, uid=max(highest, (mark or {}).get('uid', 0))), account.id)
+        self.last_filtered = sum(len(group) for group in plan.values())
+        return [row for row in rows if row['uid'] not in removed]
+
+    def apply_filters_now(self, account):
+        """« Appliquer maintenant » : filtres appliqués à toute la réception synchronisée."""
+        folders = self.client(account).folders()
+        inbox = next((name for name, _ in folders if name.upper() == 'INBOX'), 'INBOX')
+        state = self.state(account, inbox) or {}
+        rows = self._known_rows(state)
+        if not rows:
+            return 0
+        kept = self.apply_filters(account, folders, rows, state.get('uidvalidity', ''), backlog=True)
+        moved = {row['uid'] for row in rows} - {row['uid'] for row in kept}
+        for page, items in state.get('pages', {}).items():
+            state['pages'][page] = [item for item in items if item['uid'] not in moved]
+        state['total'] = max(0, state.get('total', 0) - len(moved))
+        state.pop('status', None)  # Prochaine synchronisation complète de la réception.
+        self.db.cache_put('mailbox', cache_key(account.id, inbox), state)
+        return self.last_filtered
+
+    def junk(self, account, rows, folders, block=False, trust=False):
+        """Signaler comme spam (option : bloquer les expéditeurs) ou « Ce n’est pas un spam » (trust)."""
+        data = filters.load(self.db)
+        senders = {filters.normalize_sender(addr) for row in rows for _, addr in getaddresses([row.get('sender', '')]) if addr}
+        if block:
+            data['blocked'] = sorted(set(data['blocked']) | senders)
+            data['safe'] = [entry for entry in data['safe'] if entry not in senders]
+        if trust:
+            data['safe'] = sorted(set(data['safe']) | senders)
+            data['blocked'] = [entry for entry in data['blocked'] if entry not in senders]
+        filters.save(self.db, data)
+        source = rows[0]['folder'] if rows else ''
+        if trust:
+            target = next((name for name, _ in folders if name.upper() == 'INBOX'), 'INBOX')
+        else:
+            target = filters.special_folder(folders, filters.JUNK_WORDS, source)
+            if not target:
+                raise RuntimeError('Dossier des indésirables introuvable sur le serveur. Créez-le (Comptes › Dossier) puis actualisez.')
+        if rows and source != target:
+            self.action(account, rows, 'move', target)
+        return target
 
     # Signature mise en forme : entrée de cache du compte (chiffrée avec le cache, purgée avec le compte).
     # La configuration du compte garde la version texte, lisible par Smail 1.0.0.
@@ -368,6 +463,8 @@ class MailService:
             if cancelled.is_set():
                 break
             rows = self._enrich(rows, account, folder)
+            if folder.upper() == 'INBOX':
+                rows = self.apply_filters(account, folders, rows, validity)
             self._carry_previews(rows, previous)
             parsed = {}
             for row in rows:

@@ -97,6 +97,10 @@ Les pièces jointes ne sont jamais ouvertes automatiquement. Sélectionnez-en un
 
 **Rédiger**, **Répondre**, **Répondre à tous** et **Transférer** ouvrent une fenêtre avec choix du compte, À/Cc/Cci, objet, corps et pièces jointes. Répondre respecte Reply-To ; répondre à tous retire votre adresse et les doublons. Les en-têtes de fil de discussion sont conservés. Le transfert inclut les pièces jointes. La signature du compte est ajoutée à la rédaction ; après changement de compte dans une rédaction ouverte, vérifiez manuellement la signature.
 
+**Mise en forme** : la barre au-dessus du corps applique gras (Ctrl+B), italique (Ctrl+I), souligné (Ctrl+U), listes à puces ou numérotées, liens (Ctrl+Maj+K ; https, http ou adresse e-mail uniquement) et l’effacement de la mise en forme. Un message mis en forme part en HTML accompagné d’un texte brut équivalent (listes et adresses des liens conservées) ; sans mise en forme, il reste en texte simple. Le HTML envoyé est reconstruit par Smail avec un jeu fermé de balises : un contenu collé depuis une page web ou un traitement de texte est réduit à ce jeu (styles, scripts et images distantes écartés). Les brouillons conservent la mise en forme.
+
+**Signature mise en forme** : dans **Compte**, la signature accepte la même mise en forme (sans image). Elle est insérée au-dessus de la citation dans les réponses. Sa version mise en forme est conservée dans le cache du compte (chiffrée avec lui) ; la configuration du compte garde une version texte, utilisée pour les clients sans HTML.
+
 Les champs À, Cc et Cci proposent les adresses connues dès la saisie : expéditeurs vus lors de la synchronisation (hors spam) et destinataires de vos envois, ces derniers en premier. Le carnet d’adresses est conservé par compte dans le cache : il est chiffré avec lui et effacé avec le compte.
 
 Les en-têtes et adresses sont validés ; les contrôles CR/LF sont interdits. Les destinataires Cci figurent dans l’enveloppe SMTP, jamais dans le message transmis ni sa copie enregistrée. SMTP n’est jamais relancé automatiquement après une erreur : une coupure après DATA peut laisser la livraison incertaine. Vérifiez la réception avant un nouvel essai. En cas d’acceptation partielle, seuls les destinataires refusés restent dans le brouillon ; les destinataires acceptés ne sont pas remis automatiquement dans un nouvel envoi.
@@ -106,6 +110,14 @@ Les brouillons locaux sont sauvegardés en arrière-plan après 1,5 seconde d’
 Après acceptation SMTP, une copie locale est conservée dans **Envoyés locaux**. Pour les serveurs autres que Gmail, Smail tente aussi de conserver une copie dans le dossier Envoyés. L’envoi SMTP et cette copie sont deux tâches distinctes : une erreur de copie ou une alerte de certificat ne renvoie jamais le message. **Exporter .eml** sauvegarde la copie locale ouverte. Si le serveur conserve déjà lui-même une copie, une seconde copie serveur peut apparaître (le cas Gmail est traité automatiquement).
 
 Raccourcis : Ctrl+N rédiger, Ctrl+R répondre, Ctrl+Maj+R répondre à tous, Ctrl+L transférer, Suppr déplacer vers la corbeille, Ctrl+Maj+U tout marquer comme lu, F5 synchroniser.
+
+## Règles, courrier indésirable et désabonnement
+
+**Préférences › Règles et indésirables** regroupe les règles de tri, les expéditeurs bloqués et approuvés. Une règle a une condition (De, À ou Cc, Objet, ou n’importe lequel ; contient, est exactement, se termine par) et une action (déplacer vers un dossier, marquer comme lu, étoiler, corbeille, indésirables), pour un compte ou tous. **Message › Créer une règle à partir du message…** la pré-remplit avec l’expéditeur.
+
+Les filtres s’appliquent lors de la synchronisation, côté client, aux **nouveaux** messages de la réception ; ceux déjà présents ne sont jamais déplacés sans votre demande (**Appliquer maintenant**). Ordre : un expéditeur approuvé n’est jamais traité comme indésirable ; un expéditeur bloqué (adresse ou domaine `@exemple.fr`) va aux indésirables ; un message marqué spam par le filtre du serveur (`X-Spam-Flag`, `X-Spam-Status`…) aussi, sauf si l’option est décochée ; sinon la première règle qui correspond s’applique. Les messages filtrés vers les indésirables ne déclenchent pas de notification. **Message › Courrier indésirable** propose **Signaler comme spam** (Ctrl+Maj+J), **Bloquer l’expéditeur** et **Ce n’est pas un spam** (retour en réception, expéditeur approuvé). Règles et listes sont conservées dans le cache (chiffrées avec lui).
+
+Pour une lettre d’information, le lecteur affiche **Se désabonner** (en-têtes `List-Unsubscribe`). Après confirmation, Smail utilise, dans cet ordre : le désabonnement en un clic (RFC 8058 : requête HTTPS sans navigateur, sans cookie ni redirection, refusée vers une adresse locale ou privée), un e-mail de désabonnement envoyé depuis votre compte, ou l’ouverture de la page dans votre navigateur.
 
 ## Hors ligne, synchronisation et confort
 
