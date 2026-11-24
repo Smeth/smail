@@ -2,6 +2,9 @@
 
 ## Non publié
 
+## 1.2.0 — 2026-11-25
+
+
 Interface plus simple et plus claire. Les copies installées depuis la 1.1.0 se mettent à jour automatiquement.
 
 - Ajout de compte : réglages des serveurs détectés à partir de l’adresse (fichier publié par l’hébergeur, base publique de Thunderbird, noms habituels ; seul le domaine est transmis) ; champ « Votre nom (vu par vos destinataires) ».
