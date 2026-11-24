@@ -18,11 +18,14 @@ version_info = VSVersionInfo(
               StringStruct('ProductName', 'Smail'),
               StringStruct('ProductVersion', version)])]),
           VarFileInfo([VarStruct('Translation', [0x040C, 1200])])])
+from PyInstaller.utils.hooks import collect_data_files
+# Base des fuseaux horaires (invitations de calendrier) : Windows n’en fournit pas à Python.
+tz_datas = collect_data_files('tzdata')
 a = Analysis([str(root / 'mailclient' / 'main.py')], pathex=[str(root)],
              binaries=[], datas=[
                  (str(root / 'mailclient' / 'ui' / 'styles'), 'mailclient/ui/styles'),
                  (str(root / 'mailclient' / 'ui' / 'assets'), 'mailclient/ui/assets'),
-             ], hiddenimports=['keyring.backends.Windows'],
+             ] + tz_datas, hiddenimports=['keyring.backends.Windows', 'tzdata'],
              hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=[])
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='Smail',

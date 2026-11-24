@@ -12,7 +12,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from mailclient.core.parser import Mail
 from mailclient.core.html_security import safe_document, dangerous_filename
 from mailclient.core.unsubscribe import options as unsubscribe_options
-from mailclient.ui.components import label, Button, Banner, Card
+from mailclient.ui.components import label, Button, Banner, Card, IconLabel
 from mailclient.ui.dialog_shell import appearance
 from mailclient.ui.attachment_widgets import AttachmentGrid, thumbnail
 from mailclient.core.sync import Runner
@@ -103,6 +103,8 @@ class MailView(QWidget):
     readRequested = Signal()
     threadMessageRequested = Signal(int)
     unsubscribeRequested = Signal()
+    inviteAnswered = Signal(str)
+    inviteImportRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -222,6 +224,32 @@ class MailView(QWidget):
                                          self.theme,'Info','mail-minus','Se désabonner')
         self.unsubscribe_banner.action.clicked.connect(self.unsubscribeRequested.emit)
         message_layout.addWidget(self.unsubscribe_banner)
+        # Invitation de calendrier : résumé et réponse à l’organisateur.
+        self.invite = None
+        self.invite_card = Card('Info',12)
+        invite_row = QHBoxLayout()
+        invite_row.addWidget(IconLabel('clock',self.theme,'accent'),0,Qt.AlignTop)
+        invite_text = QVBoxLayout()
+        self.invite_title = label('','Bold',True)
+        self.invite_details = label('','Small',True)
+        invite_text.addWidget(self.invite_title)
+        invite_text.addWidget(self.invite_details)
+        invite_row.addLayout(invite_text,1)
+        self.invite_card.box.addLayout(invite_row)
+        invite_buttons = QHBoxLayout()
+        self.invite_buttons = {}
+        for partstat,text,role in (('ACCEPTED','Accepter','Primary'),('TENTATIVE','Provisoire','Secondary'),('DECLINED','Refuser','Secondary')):
+            button = Button(text,self.theme,role=role,tooltip='Envoie votre réponse à l’organisateur')
+            button.clicked.connect(lambda checked=False,value=partstat:self.inviteAnswered.emit(value))
+            invite_buttons.addWidget(button)
+            self.invite_buttons[partstat] = button
+        self.invite_import = Button('Ajouter au calendrier',self.theme,'download','Secondary',
+                                    'Ouvre l’invitation dans l’application de calendrier de Windows')
+        self.invite_import.clicked.connect(self.inviteImportRequested.emit)
+        invite_buttons.addStretch()
+        invite_buttons.addWidget(self.invite_import)
+        self.invite_card.box.addLayout(invite_buttons)
+        message_layout.addWidget(self.invite_card)
         self.empty_message = label('Sélectionnez un message pour le lire.','Subtitle',True)
         self.empty_message.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.empty_message,1)
@@ -384,6 +412,8 @@ class MailView(QWidget):
         self.remote_banner.hide()
         self.danger_banner.hide()
         self.unsubscribe_banner.hide()
+        self.invite = None
+        self.invite_card.hide()
         self.attachment_title.hide()
         self.attachment_section.hide()
         self.attachments.hide()
@@ -426,6 +456,7 @@ class MailView(QWidget):
         self.remote_banner.setVisible(self.has_remote_images)
         self.danger_banner.setVisible(any(dangerous_filename(a.name) for a in mail.attachments))
         self.unsubscribe_banner.setVisible(bool(unsubscribe_options(mail.list_unsubscribe, mail.list_unsubscribe_post)))
+        self.show_invite(mail)
         self.attachment_title.setVisible(bool(mail.attachments))
         self.attachments.hide()
         self.save_button.setVisible(bool(mail.attachments))
@@ -491,6 +522,32 @@ class MailView(QWidget):
         self.layout().setContentsMargins(0,0,0,0)
         if self.mail is not None:
             self.render_html(self.interceptor.remote)
+
+    def show_invite(self, mail):
+        from mailclient.core import invite as invites
+        self.invite, self.invite_attachment = invites.find(mail)
+        if self.invite is None:
+            self.invite_card.hide()
+            return
+        invite = self.invite
+        title = invite.summary or 'Invitation'
+        self.invite_title.setText(('Événement annulé : ' if invite.cancelled else 'Invitation : ') + title)
+        details = [invites.when(invite)]
+        if invite.location:
+            details.append('Lieu : ' + invite.location)
+        if invite.organizer:
+            details.append('Organisateur : ' + (f'{invite.organizer_name} <{invite.organizer}>' if invite.organizer_name else invite.organizer))
+        self.invite_details.setText('\n'.join(details))
+        for button in self.invite_buttons.values():
+            button.setVisible(invite.answerable)
+            button.setEnabled(True)
+        self.invite_card.show()
+
+    def invite_answered(self, label_text):
+        """Après l’envoi : la réponse donnée remplace les boutons."""
+        for button in self.invite_buttons.values():
+            button.hide()
+        self.invite_details.setText(self.invite_details.text() + f'\nVotre réponse « {label_text} » a été envoyée.')
 
     def update_preview_button(self, row):
         from mailclient.ui.attachment_preview import preview_kind

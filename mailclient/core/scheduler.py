@@ -42,7 +42,8 @@ def decode_files(items) -> list:
 def send_and_record(service, account, state, files):
     """Envoi SMTP puis copie locale et carnet d’adresses ; renvoie (brut, refusés, id de copie locale)."""
     message, recipients = build_message(account, state['to'], state['cc'], state['bcc'], state['subject'], state['body'], files,
-                                        state.get('reply_id', ''), state.get('references', ''), html=state.get('mail_html', ''))
+                                        state.get('reply_id', ''), state.get('references', ''), html=state.get('mail_html', ''),
+                                        calendar=state.get('calendar', ''))
     refused = send_message(account, service.oauth.credential(account), service.tls, message, recipients)
     raw = message.as_bytes()
     local_id = str(uuid4())

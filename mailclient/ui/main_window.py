@@ -330,6 +330,8 @@ class MainWindow(QMainWindow):
         self.reader.readRequested.connect(lambda:self.trigger_command('Lu / non lu'))
         self.reader.threadMessageRequested.connect(self.open_thread_message)
         self.reader.unsubscribeRequested.connect(self.unsubscribe)
+        self.reader.inviteAnswered.connect(self.answer_invite)
+        self.reader.inviteImportRequested.connect(self.import_invite)
         # Parcours de la conversation au clavier, sans quitter la liste.
         QShortcut(QKeySequence('Alt+Down'),self,activated=lambda:self.step_thread(1))
         QShortcut(QKeySequence('Alt+Up'),self,activated=lambda:self.step_thread(-1))
@@ -490,6 +492,50 @@ class MainWindow(QMainWindow):
         accounts = list(self.accounts)
         self.run_and_reload(lambda: sum(self.service.apply_filters_now(account) for account in accounts),
                             lambda count: f'Règles appliquées : {count} message(s) traité(s).')
+
+    def answer_invite(self, partstat):
+        """Réponse à une invitation : e-mail iTIP (METHOD:REPLY) à l’organisateur, après confirmation."""
+        from mailclient.core import invite as invites, scheduler
+        invite, account = self.reader.invite, self.displayed_account()
+        if self.busy or invite is None or account is None or not invite.answerable:
+            return
+        if self.offline.isChecked():
+            self.statusBar().showMessage('Reconnectez-vous pour répondre à cette invitation.')
+            return
+        label_text = invites.PARTSTAT[partstat]
+        if QMessageBox.question(self, 'Répondre à l’invitation',
+                                f'Envoyer la réponse « {label_text} » à {invite.organizer} depuis {account.email} ?',
+                                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes) != QMessageBox.Yes:
+            return
+        state = invites.response_state(invite, account, partstat)
+        def operation():
+            raw, refused, local_id = scheduler.send_and_record(self.service, account, state, [])
+            if refused:
+                raise RuntimeError('L’organisateur a été refusé par le serveur d’envoi.')
+            try:
+                scheduler.copy_to_sent(self.service, account, raw, local_id)
+            except Exception:
+                pass  # Réponse envoyée : la copie dans Envoyés est accessoire.
+        def done(_):
+            self.set_busy(False)
+            self.reader.invite_answered(label_text)
+            self.statusBar().showMessage(f'Réponse « {label_text} » envoyée à {invite.organizer}.')
+        self.set_busy(True)
+        self.runner.run(operation, done, self.failure)
+
+    def import_invite(self):
+        """Ouvre l’invitation dans l’application de calendrier associée aux fichiers .ics."""
+        attachment = getattr(self.reader, 'invite_attachment', None)
+        if attachment is None:
+            return
+        import tempfile
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        handle = tempfile.NamedTemporaryFile('wb', suffix='.ics', prefix='invitation-', delete=False)
+        with handle:
+            handle.write(attachment.data)
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(handle.name)):
+            self.statusBar().showMessage('Aucune application de calendrier n’est associée aux fichiers .ics sur ce PC.')
 
     def unsubscribe(self):
         """Désabonnement d’une liste : un clic (RFC 8058), sinon e-mail, sinon page web — toujours après confirmation."""
