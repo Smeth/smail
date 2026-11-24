@@ -24,6 +24,7 @@
 - Invitations de calendrier : résumé en heure locale, réponse iTIP (accepter, provisoire, refuser), ajout au calendrier Windows ; dépendance `tzdata`.
 - Recherche avancée : opérateurs (de:, à:, objet:, a:pj, est:, après:, avant:, expressions), recherche dans tous les dossiers.
 - Identifiants de connexion IMAP et SMTP distincts de l’adresse, mot de passe SMTP distinct.
+- Liste des messages sans pagination : les messages plus anciens se chargent en arrivant en bas de la liste (la barre « Précédents / Suivants » disparaît) ; sélection et message ouvert conservés.
 - Désabonnement des listes de diffusion (un clic RFC 8058, e-mail ou page web), toujours après confirmation.
 - Vue par conversation : regroupement par références, lecture empilée (messages repliés avec extrait au-dessus et en dessous du message ouvert) incluant vos réponses envoyées, actions sur toute la conversation, navigation Alt+Bas / Alt+Haut.
 - Aperçus de la liste calculés à la synchronisation (sans citation ni signature) ; l’adresse du compte n’est plus affichée à la place d’un aperçu absent.

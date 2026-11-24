@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, Q
     QLineEdit, QCheckBox, QToolBar, QInputDialog, QMessageBox, QSystemTrayIcon, QMenu,
     QStyle, QApplication, QFileDialog, QFrame, QScrollArea, QStackedWidget, QListWidgetItem, QButtonGroup,
     QAbstractItemView)
-from PySide6.QtCore import Qt, QTimer, QSaveFile, QIODevice, QEvent
+from PySide6.QtCore import Qt, QTimer, QSaveFile, QIODevice, QEvent, QItemSelectionModel
 from PySide6.QtGui import QFont, QAction, QActionGroup, QShortcut, QKeySequence
 from mailclient.ui.account_dialog import AccountDialog
 from mailclient.ui.settings_dialog import SettingsDialog
@@ -27,6 +27,9 @@ class MainWindow(QMainWindow):
         self.runner = Runner(self, tls)
         self.accounts, self.rows, self.folder_data = [], [], []
         self.page = self.total = 0
+        # Chargement au défilement : self.page = dernière page de 50 chargée dans la liste.
+        self.list_generation = self.auto_loads = 0
+        self.loading_more = self.list_exhausted = self.list_all_folders = self.rendering = False
         self.busy = self.quitting = self.sync_requested = False
         self.sync_thread = None
         self.idle_threads = []
@@ -143,7 +146,7 @@ class MainWindow(QMainWindow):
             button = Button(title,self.appearance,role='Nav')
             button.setCheckable(True)
             button.setChecked(title == 'Tous')
-            button.clicked.connect(lambda checked=False,value=title:self.filter_page(value))
+            button.clicked.connect(lambda checked=False,value=title:self.user_filter(value))
             self.filter_group.addButton(button)
             filter_row.addWidget(button)
         self.list_panel.box.addLayout(filter_row)
@@ -163,8 +166,8 @@ class MainWindow(QMainWindow):
         self.result_date.addItems(['Toutes les dates','Aujourd’hui','7 derniers jours'])
         self.result_date.setAccessibleName('Filtrer la page par date')
         for widget in (self.result_account,self.result_date):
-            widget.setToolTip('Filtre limité aux messages chargés de la page courante.')
-            widget.currentIndexChanged.connect(lambda index:self.filter_page(self.page_filter))
+            widget.setToolTip('Filtre limité aux messages déjà chargés dans la liste.')
+            widget.currentIndexChanged.connect(lambda index:self.user_filter(self.page_filter))
             search_filters.addWidget(widget,1)
         self.list_panel.box.addWidget(self.search_filters)
         self.search_filters.hide()
@@ -186,19 +189,15 @@ class MainWindow(QMainWindow):
         empty.box.addStretch()
         self.list_stack.addWidget(empty)
         self.list_panel.box.addWidget(self.list_stack,1)
+        # Pas de pagination : les messages plus anciens se chargent en arrivant en bas de la liste.
+        self.page_label = label('Aucun message','Subtitle')
+        self.page_label.setAccessibleName('État de la liste des messages')
+        self.list_panel.box.addWidget(self.page_label)
         self.reader = MailView()
         for widget in (self.sidebar, self.list_panel, self.reader):
             split.addWidget(widget)
         split.setSizes([230,430,740])
         layout.addWidget(split, 1)
-        pagination = QHBoxLayout()
-        self.previous = Button('Précédents',self.appearance,'chevron-left')
-        self.next = Button('Suivants',self.appearance,'chevron-right')
-        self.page_label = QLabel('Aucun message')
-        pagination.addWidget(self.previous)
-        pagination.addWidget(self.page_label, 1)
-        pagination.addWidget(self.next)
-        layout.addLayout(pagination)
         self.setCentralWidget(root)
         self.menuBar().setNativeMenuBar(False)
         file_menu = self.menuBar().addMenu('Fichier')
@@ -313,8 +312,8 @@ class MainWindow(QMainWindow):
         self.refresh.clicked.connect(self.load_folders)
         self.account_box.currentIndexChanged.connect(self.load_folders)
         self.folders.currentRowChanged.connect(self.folder_changed)
-        self.previous.clicked.connect(lambda: self.change_page(-1))
-        self.next.clicked.connect(lambda: self.change_page(1))
+        self.table.verticalScrollBar().valueChanged.connect(lambda value: self.maybe_load_more())
+        self.table.verticalScrollBar().rangeChanged.connect(lambda low, high: self.maybe_load_more(auto=True))
         self.search.returnPressed.connect(self.new_search)
         self.offline.toggled.connect(self.offline_changed)
         self.table.itemSelectionChanged.connect(self.read_selected)
@@ -771,8 +770,6 @@ class MainWindow(QMainWindow):
             self.list_stack.setCurrentIndex(1)
         elif not busy:
             self.list_stack.setCurrentIndex(0 if self.table.count() else 2)
-        self.previous.setEnabled(not busy and self.page > 0)
-        self.next.setEnabled(not busy and (self.page+1)*50 < self.total)
         self.update_actions()
 
     def update_actions(self):
@@ -812,6 +809,8 @@ class MainWindow(QMainWindow):
         self.folders.blockSignals(False)
         self.table.setRowCount(0)
         self.page = self.total = 0
+        self.list_generation += 1
+        self.loading_more = False
         self.search.clear()
         account = self.account()
         self.heading.setText(account.name if account else 'Réception unifiée' if self.accounts else 'Bienvenue')
@@ -859,25 +858,120 @@ class MainWindow(QMainWindow):
         self.page = 0
         self.load_messages()
 
-    def change_page(self, offset):
-        self.page = max(0, self.page + offset)
-        self.load_messages()
+    @staticmethod
+    def row_key(row):
+        return row.get('account'), row.get('folder'), row.get('uid')
+
+    def page_fetcher(self, cache_only=False):
+        """Fonction (page -> résultat) pour le dossier et la recherche affichés ; None pour « tous les dossiers »."""
+        index = self.folders.currentRow()
+        account, query = self.account(), self.search.text().strip()
+        if bool(query) and account is not None and self.result_scope.currentIndex() == 1:
+            return None
+        offline = self.offline.isChecked() or cache_only
+        if account:
+            folder = self.folder_data[index][0]
+            return lambda page: self.service.messages(account, folder, page, query, offline)
+        accounts = list(self.accounts)
+        return lambda page: self.service.unified(accounts, page, query)
+
+    def merge_rows(self, rows, more):
+        """Ajoute les messages d’une page suivante, sans doublon si la boîte a bougé entre deux pages."""
+        known = {self.row_key(row) for row in rows}
+        added = [row for row in more if self.row_key(row) not in known]
+        rows.extend(added)
+        return added
+
+    def update_list_status(self):
+        if self.list_all_folders:
+            return
+        loaded, conversations = len(self.rows), self.table.count()
+        grouped = f' · {conversations} conversation(s)' if conversations != loaded else ''
+        if self.loading_more:
+            text = 'Chargement des messages plus anciens…'
+        elif not self.total:
+            text = 'Aucun message'
+        elif loaded < self.total and not self.list_exhausted:
+            text = f'{loaded} sur {self.total} message(s) — faites défiler pour la suite{grouped}'
+        elif loaded < self.total:
+            text = f'{loaded} sur {self.total} message(s) — la suite n’est pas en cache{grouped}'
+        else:
+            text = f'{self.total} message(s){grouped}'
+        self.page_label.setText(text)
+
+    def can_load_more(self):
+        return (not self.list_all_folders and not self.list_exhausted and len(self.rows) < self.total
+                and self.folders.currentRow() >= 0)
+
+    def maybe_load_more(self, auto=False):
+        """Bas de liste atteint (ou liste trop courte pour défiler) : charge les 50 messages suivants."""
+        if self.busy or self.loading_more or self.rendering or self.quitting or not self.can_load_more():
+            return
+        bar = self.table.verticalScrollBar()
+        short = bar.maximum() == 0 or self.list_stack.currentIndex() != 0  # Rien à faire défiler (ou filtre vide).
+        if not short and bar.maximum() - bar.value() > max(bar.pageStep() // 3, 40):
+            return
+        if not auto:
+            self.auto_loads = 0
+        elif short:
+            # Liste trop courte (filtre « Non lus »…) : quelques pages au plus sans geste de l’utilisateur.
+            if self.auto_loads >= 4:
+                return
+            self.auto_loads += 1
+        self.load_more()
+
+    def load_more(self):
+        fetch = self.page_fetcher()
+        if fetch is None:
+            return
+        page, generation = self.page + 1, self.list_generation
+        self.loading_more = True
+        self.update_list_status()
+        def done(result):
+            if generation != self.list_generation:
+                return  # Dossier ou recherche changé entre-temps.
+            self.loading_more = False
+            self.total = result['total']
+            added = self.merge_rows(self.rows, result['rows'])
+            if result['rows']:
+                self.page = page
+            if not added:
+                self.list_exhausted = True
+            else:
+                self.render_rows(keep_view=True)
+                self.filter_page(self.page_filter)
+            self.update_list_status()
+            QTimer.singleShot(0, lambda: self.maybe_load_more(auto=True))
+        def failed(message):
+            if generation != self.list_generation:
+                return
+            self.loading_more = False
+            self.update_list_status()
+            self.statusBar().showMessage('Messages plus anciens indisponibles : ' + message)
+        self.runner.run(lambda: fetch(page), done, failed)
 
     def load_messages(self, cache_only=False):
+        """Recharge la liste ; après une action, garde la profondeur déjà chargée (self.page)."""
         index = self.folders.currentRow()
         if self.busy or self.quitting or index < 0:
             return
+        scroll = self.table.verticalScrollBar().value() if self.page else 0
+        self.list_generation += 1
+        self.loading_more = self.list_exhausted = False
+        self.auto_loads = 0
         self.reader.clear()
         self.local_copy = None
         self.rows = []
         self.table.setRowCount(0)
-        account, query, page = self.account(), self.search.text().strip(), self.page
+        account, query, depth = self.account(), self.search.text().strip(), self.page
+        fetch = self.page_fetcher(cache_only)
+        all_folders = fetch is None
+        self.list_all_folders = all_folders
         self.set_busy(True)
         def done(result):
             self.rows, self.total = result['rows'], result['total']
+            self.page = result.get('page', 0)
             self.render_rows()
-            conversations = self.table.count()
-            grouped = f' · {conversations} conversation(s) sur cette page' if conversations != len(self.rows) else ''
             if all_folders:
                 labels = dict(self.database.cache_get('folders', account.id, []) or [])
                 for row in self.rows:  # Dossier d’origine visible dans la liste.
@@ -885,29 +979,39 @@ class MainWindow(QMainWindow):
                 self.render_rows()
                 self.page_label.setText(f'{len(self.rows)} résultat(s) dans tous les dossiers' +
                                         (' — les 100 plus récents' if result.get('truncated') else ''))
-            else:
-                self.page_label.setText(f'Page {page+1} — {self.total} message(s), 50 par page{grouped}')
             self.cache_status.setText('Cache local — recherche limitée aux messages synchronisés' if result['offline'] else
                                       'Serveur — recherche dans tous les dossiers' if all_folders else 'Serveur — recherche dans tout le dossier')
             if not self.rows and result['offline'] and self.total:
                 self.cache_status.setText('Cette page n’est pas encore en cache. Reconnectez-vous ou augmentez la limite dans Préférences.')
+            self.list_exhausted = not self.rows
             self.set_busy(False)
             self.filter_page(self.page_filter)
+            self.update_list_status()
+            if scroll:
+                self.table.verticalScrollBar().setValue(scroll)
             self.empty_title.setText('Aucun résultat' if query else 'Aucun message')
             self.empty_description.setText('Essayez un autre terme ou retirez un filtre.' if query else 'Ce dossier ne contient aucun message disponible.')
             if not self.rows and result['offline'] and self.total:
                 self.empty_title.setText('Page non téléchargée')
                 self.empty_description.setText(self.cache_status.text())
-        offline = self.offline.isChecked() or cache_only
-        folder = self.folder_data[index][0]
-        all_folders = bool(query) and account is not None and self.result_scope.currentIndex() == 1
+            QTimer.singleShot(0, lambda: self.maybe_load_more(auto=True))
         if all_folders:
+            offline = self.offline.isChecked() or cache_only
             operation = lambda: self.service.search_all(account, query, offline)
-        elif account:
-            operation = lambda: self.service.messages(account, folder, page, query, offline)
         else:
-            accounts = list(self.accounts)
-            operation = lambda: self.service.unified(accounts, page, query)
+            def operation():
+                # Rechargement après une action : mêmes pages qu’avant, pour ne pas perdre sa place.
+                result = fetch(0)
+                rows, loaded = list(result['rows']), 0
+                for page in range(1, depth + 1):
+                    if len(rows) >= result['total']:
+                        break
+                    more = fetch(page)
+                    if not more['rows']:
+                        break
+                    self.merge_rows(rows, more['rows'])
+                    loaded = page
+                return dict(result, rows=rows, page=loaded)
         self.runner.run(operation, done, self.failure)
 
     def conversations_enabled(self):
@@ -920,12 +1024,37 @@ class MainWindow(QMainWindow):
             self.render_rows()
             self.filter_page(self.page_filter)
 
-    def render_rows(self):
-        """Une ligne par conversation (ou par message si le regroupement est désactivé)."""
+    def render_rows(self, keep_view=False):
+        """Une ligne par conversation (ou par message si le regroupement est désactivé).
+
+        keep_view : messages ajoutés au défilement, la sélection, le message lu et la position sont conservés."""
         from mailclient.core.threads import group_threads
+        selected = {self.row_key(row) for row in self.selected_rows()} if keep_view else set()
+        current = self.table.currentItem() if keep_view else None
+        current_view = current.data(Qt.UserRole) if current else None
+        current_keys = {self.row_key(row) for row in current_view.rows} if isinstance(current_view, MessageRow) else set()
+        scroll = self.table.verticalScrollBar().value()
+        self.rendering = True  # La liste vidée puis remplie ne doit pas déclencher de chargement.
         self.table.blockSignals(True)
-        self.table.clear()
-        groups = group_threads(self.rows) if self.conversations_enabled() else [[row] for row in self.rows]
+        try:
+            self.table.clear()
+            self.populate_rows(group_threads(self.rows) if self.conversations_enabled() else [[row] for row in self.rows])
+            if keep_view:
+                for index in range(self.table.count()):
+                    item = self.table.item(index)
+                    keys = {self.row_key(row) for row in item.data(Qt.UserRole).rows}
+                    if keys & current_keys:
+                        self.table.setCurrentItem(item, QItemSelectionModel.NoUpdate)
+                    if keys & selected:
+                        item.setSelected(True)
+                self.table.doItemsLayout()  # Plage de défilement à jour avant de restaurer la position.
+                self.table.verticalScrollBar().setValue(scroll)
+        finally:
+            self.table.blockSignals(False)
+            self.rendering = False
+
+    def populate_rows(self, groups):
+        """Remplit la liste ; les signaux de self.table sont déjà bloqués par l’appelant."""
         for group in groups:
             row = group[0]
             row_account = self.row_account(row)
@@ -934,9 +1063,8 @@ class MainWindow(QMainWindow):
                                    + (f' · {view.count} messages' if view.count > 1 else ''))
             item.setData(Qt.UserRole,view)
             item.setToolTip(f'{row["sender"]}\n{view.subject}\n{view.account_name}\n{row["date"]}'
-                            + (f'\nConversation de {view.count} messages dans cette page' if view.count > 1 else ''))
+                            + (f'\nConversation de {view.count} messages chargés' if view.count > 1 else ''))
             self.table.addItem(item)
-        self.table.blockSignals(False)
 
     def selected_view(self):
         item = self.table.currentItem()
@@ -1512,6 +1640,12 @@ class MainWindow(QMainWindow):
         if 0 <= row < self.table.count():
             self.table.setCurrentRow(row)
 
+    def user_filter(self, value):
+        """Filtre choisi par l’utilisateur : la liste filtrée se complète si elle est trop courte."""
+        self.filter_page(value)
+        self.auto_loads = 0
+        QTimer.singleShot(0, lambda: self.maybe_load_more(auto=True))
+
     def filter_page(self, value):
         self.page_filter = value
         visible = 0
@@ -1540,7 +1674,7 @@ class MainWindow(QMainWindow):
         if not self.busy:
             self.list_stack.setCurrentIndex(0 if visible else 2)
         if value != 'Tous':
-            self.statusBar().showMessage(f'{visible} message(s) visible(s) — filtre limité à la page courante.')
+            self.statusBar().showMessage(f'{visible} message(s) visible(s) — filtre limité aux messages chargés.')
         self.update_actions()
 
     def trigger_command(self, title):
