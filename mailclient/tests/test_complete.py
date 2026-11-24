@@ -49,11 +49,12 @@ def test_subject_injection_rejected(account):
         build_message(account, 'a@example.com', '', '', 'Hi\nBcc: x@y.com', 'body')
 
 def test_no_smtp_retry_after_uncertain_delivery(account, monkeypatch):
+    from mailclient.core.smtp_client import DeliveryUncertain
     client = MagicMock()
     client.send_message.side_effect = ConnectionResetError()
     monkeypatch.setattr('mailclient.core.smtp_client.open_connection', lambda *args: client)
     message, recipients = build_message(account, 'b@example.com', '', '', 'Test', 'Bonjour')
-    with pytest.raises(ConnectionResetError):
+    with pytest.raises(DeliveryUncertain):
         send_message(account, 'secret', None, message, recipients)
     assert client.send_message.call_count == 1
     client.close.assert_called_once()

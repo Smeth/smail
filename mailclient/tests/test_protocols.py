@@ -59,3 +59,20 @@ def test_folder_special_use_and_spaces(monkeypatch):
     client.list.return_value = ('OK', [b'(\\HasNoChildren) "/" "INBOX"', b'(\\Sent) "/" "Sent Items"', b'(\\Noselect) "/" "Hidden"'])
     monkeypatch.setattr(IMAPClient, 'open', lambda self: client)
     assert IMAPClient(account(), 'secret', None).folders() == [('INBOX', 'Boîte de réception'), ('Sent Items', 'Envoyés')]
+
+
+def test_send_waits_for_slow_server_and_reports_uncertain_delivery(monkeypatch):
+    """Analyse antivirus après DATA : réponse lente acceptée ; coupure signalée comme envoi incertain."""
+    import smtplib
+    from email.message import EmailMessage
+    from mailclient.core import smtp_client
+    client = MagicMock()
+    monkeypatch.setattr(smtp_client, 'open_connection', lambda *args: client)
+    client.send_message.return_value = {}
+    assert smtp_client.send_message(account(), 'pw', None, EmailMessage(), ['a@example.com']) == {}
+    client.sock.settimeout.assert_called_once_with(smtp_client.SEND_TIMEOUT)
+    assert smtp_client.SEND_TIMEOUT >= 300
+    client.send_message.side_effect = smtplib.SMTPServerDisconnected('Connection unexpectedly closed: timed out')
+    with pytest.raises(smtp_client.DeliveryUncertain, match='peut-être été envoyé'):
+        smtp_client.send_message(account(), 'pw', None, EmailMessage(), ['a@example.com'])
+    assert client.close.call_count == 2

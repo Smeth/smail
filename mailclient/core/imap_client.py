@@ -74,12 +74,12 @@ def folder_prefix(names, delimiter, namespace=''):
     others = [name for name in names if name.upper() != 'INBOX']
     return prefix if others and all(name.upper().startswith(prefix.upper()) for name in others) else ''
 
-def folder_label(name, delimiter, prefix=''):
+def folder_label(name, delimiter, prefix='', translate=True):
     """Libellé lisible : préfixe serveur retiré, hiérarchie en « Parent › Enfant », noms usuels traduits."""
     if prefix and name.upper().startswith(prefix.upper()) and len(name) > len(prefix):
         name = name[len(prefix):]
     parts = [decode_folder(part) for part in (name.split(delimiter) if delimiter else [name]) if part]
-    if len(parts) == 1:
+    if len(parts) == 1 and translate:
         return COMMON_LABELS.get(parts[0].casefold(), parts[0])
     return ' › '.join(parts) or decode_folder(name)
 
@@ -265,12 +265,20 @@ class IMAPClient:
             delimiter = delimiter or separator
             prefix = folder_prefix([name for name, _ in entries], delimiter, namespace)
             labels = {b'\\sent': 'Envoyés', b'\\drafts': 'Brouillons', b'\\trash': 'Corbeille', b'\\junk': 'Spam', b'\\archive': 'Archives'}
-            folders = []
+            folders, special = [], set()
             for name, flags in entries:
                 label = 'Boîte de réception' if name.upper() == 'INBOX' else \
-                        next((v for k, v in labels.items() if k in flags), None) or folder_label(name, delimiter, prefix)
-                folders.append((name, label))
-            return folders
+                        next((v for k, v in labels.items() if k in flags), None)
+                special.add(name) if label else None
+                folders.append((name, label or folder_label(name, delimiter, prefix)))
+            # Deux dossiers traduits pareil (« Junk » et « spam » -> « Spam ») : leurs vrais noms restent
+            # affichés, sauf pour celui que le serveur désigne lui-même (SPECIAL-USE).
+            counts = {}
+            for _, label in folders:
+                counts[label] = counts.get(label, 0) + 1
+            return [(name, folder_label(name, delimiter, prefix, translate=False)
+                     if counts[label] > 1 and name not in special and name.upper() != 'INBOX' else label)
+                    for name, label in folders]
 
     def hierarchy(self, client):
         """(préfixe imposé, séparateur) pour créer et renommer les dossiers au bon endroit."""

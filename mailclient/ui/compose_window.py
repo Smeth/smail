@@ -557,7 +557,8 @@ class ComposeWindow(QDialog):
                 self.set_busy(False)
             self.copy_to_server(raw, draft=False, close_after=not refused)
         def failed(message):
-            self.failure(message + ' Si la connexion a été coupée pendant l’envoi, vérifiez la réception avant de réessayer : aucun renvoi automatique n’a été effectué.')
+            uncertain = message.startswith('Le serveur d’envoi n’a pas confirmé')
+            self.failure(message if uncertain else message + ' Si la connexion a été coupée pendant l’envoi, vérifiez la réception avant de réessayer : aucun renvoi automatique n’a été effectué.')
             self.save_draft()
         self.runner.run(operation, done, failed)
 

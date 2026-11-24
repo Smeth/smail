@@ -94,10 +94,26 @@ def open_connection(account, password, tls):
 def test_connection(account, password, tls):
     open_connection(account, password, tls).close()
 
+# Après la fin du message (DATA), le serveur analyse souvent le contenu (antivirus, antispam) avant de
+# répondre : la RFC 5321 (4.5.3.2) recommande d’attendre jusqu’à 10 minutes. 20 s suffisent pour se
+# connecter, pas pour cette réponse avec plusieurs pièces jointes.
+SEND_TIMEOUT = 300
+
+
+class DeliveryUncertain(RuntimeError):
+    """Connexion perdue pendant l’envoi : le serveur a pu accepter le message sans pouvoir le confirmer."""
+
+
 def send_message(account, password, tls, message, recipients):
     """Aucun nouvel essai automatique après DATA : risque de double envoi."""
     client = open_connection(account, password, tls)
     try:
+        if client.sock is not None:
+            client.sock.settimeout(SEND_TIMEOUT)
         return client.send_message(message, from_addr=account.email, to_addrs=recipients)
+    except (smtplib.SMTPServerDisconnected, TimeoutError, ConnectionError) as error:
+        raise DeliveryUncertain(
+            'Le serveur d’envoi n’a pas confirmé la réception du message (connexion coupée ou réponse trop lente). '
+            'Il a peut-être été envoyé : vérifiez auprès du destinataire ou dans les Envoyés avant de réessayer.') from error
     finally:
         client.close()

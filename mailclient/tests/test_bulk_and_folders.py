@@ -246,3 +246,16 @@ def test_folder_label_without_prefix():
     assert folder_label('Projets/2026', '/') == 'Projets › 2026'
     assert folder_label('[Gmail]/Tous les messages', '/') == '[Gmail] › Tous les messages'
     assert folder_label('Sent Messages', '/') == 'Envoyés'
+
+
+class TwoSpamFolders(PrefixedIMAP):
+    def list(self, *args):
+        return 'OK', [rb'(\HasNoChildren) "." INBOX', rb'(\HasNoChildren \Junk) "." INBOX.Junk',
+                      rb'(\HasNoChildren) "." INBOX.spam', rb'(\HasNoChildren) "." INBOX.Trash',
+                      rb'(\HasNoChildren) "." INBOX.Deleted Items']
+
+
+def test_translation_never_creates_two_identical_folder_names():
+    assert client_with(TwoSpamFolders()).folders() == [
+        ('INBOX', 'Boîte de réception'), ('INBOX.Junk', 'Spam'), ('INBOX.spam', 'spam'),  # Désigné par le serveur.
+        ('INBOX.Trash', 'Trash'), ('INBOX.Deleted Items', 'Deleted Items')]  # Aucun désigné : vrais noms.
