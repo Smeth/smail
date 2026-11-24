@@ -1,0 +1,78 @@
+name: Publication
+
+# Pousser un tag vX.Y.Z (voir tools/release.py) construit, signe et publie la version.
+# Les Smail installés la détectent (toutes les 6 heures) et l'installent à leur fermeture.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publier ${{ github.ref_name }}
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+      QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Vérifier la version et les notes
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          python .github/release.py check-tag "${{ github.ref_name }}"
+          if ($LASTEXITCODE -ne 0) { throw "Version incohérente" }
+          python .github/release.py notes $version notes.md
+          if ($LASTEXITCODE -ne 0) { throw "Notes de version absentes" }
+      - name: Installer les dépendances
+        run: python -m pip install -r requirements-dev.txt
+      - name: Tests
+        shell: bash
+        run: |
+          set +e
+          python -m pytest mailclient/tests -q -p no:cacheprovider -rfE --junitxml=test-results.xml
+          code=$?
+          python .github/check_tests.py test-results.xml "$code"
+      - name: Construire
+        run: python -m PyInstaller --clean --noconfirm Smail.spec
+      - name: Diagnostic de l’exécutable
+        shell: pwsh
+        run: |
+          $p = Start-Process .\dist\Smail\Smail.exe -ArgumentList '--smoke-test' -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "Diagnostic en échec : code $($p.ExitCode)" }
+      - name: Construire l’installateur
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
+          & $iscc "/DAppVersion=$version" installer\Smail.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC en échec : $LASTEXITCODE" }
+      - name: Signer le manifeste de mise à jour
+        shell: pwsh
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          python .github/release.py manifest "dist\installer\Smail-$version-installation.exe" $version dist\installer
+          if ($LASTEXITCODE -ne 0) { throw "Signature impossible" }
+      - name: Publier sur GitHub
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          gh release create "${{ github.ref_name }}" --title "Smail $version" --notes-file notes.md --verify-tag `
+            "dist\installer\Smail-$version-installation.exe" dist\installer\smail-update.json dist\installer\smail-update.json.sig
+          if ($LASTEXITCODE -ne 0) { throw "Publication impossible" }

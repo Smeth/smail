@@ -200,6 +200,20 @@ L’autorisation OAuth réelle doit être validée avec votre propre identifiant
 
 Références de sécurité : [nettoyage Bleach](https://bleach.readthedocs.io/en/latest/clean.html), [interception WebEngine](https://doc.qt.io/qt-6.8/qwebengineurlrequestinterceptor.html) et [schéma interne WebEngine](https://doc.qt.io/qtforpython-6/PySide6/QtWebEngineCore/QWebEngineUrlSchemeHandler.html).
 
+## Mises à jour automatiques et publication d’une version
+
+Smail installé par l’installateur vérifie toutes les 6 heures (et 45 secondes après le démarrage) la dernière publication GitHub du dépôt, par une requête anonyme. Une version plus récente est téléchargée en arrière-plan puis installée en silence **à la fermeture de Smail** ; le bandeau « Smail X est prêt » propose aussi « Redémarrer maintenant ». Les comptes, le cache et les réglages sont conservés. Désactivable dans Préférences › Sécurité ; vérification manuelle par Outils › Rechercher des mises à jour.
+
+Sécurité : chaque publication contient `smail-update.json` (version, nom, taille et SHA-256 de l’installateur) signé en Ed25519 par la CI. Smail n’installe rien si la signature ne correspond pas à la clé publique embarquée (`mailclient/core/updater.py`) ou si l’empreinte du fichier téléchargé diffère. Seuls les hôtes HTTPS de GitHub sont acceptés. Après deux échecs d’installation d’une même version, Smail cesse de réessayer et propose la page de téléchargement. Une copie lancée depuis les sources ou un dossier copié signale seulement la nouvelle version.
+
+**Publier une version :**
+
+1. Décrivez les changements dans la section `## Non publié` de `CHANGELOG.md` et faites un commit.
+2. `python tools/release.py 1.2.0 --push` : numéro de version, CHANGELOG daté, commit, tag `v1.2.0` et envoi.
+3. Le workflow `.github/workflows/release.yml` teste, construit, signe et publie l’installateur. Les Smail installés se mettent à jour d’eux-mêmes.
+
+**Clé de signature (une seule fois) :** la clé privée est le secret `UPDATE_SIGNING_KEY` du dépôt (contenu PEM complet), à ajouter par `gh secret set UPDATE_SIGNING_KEY < chemin\update-signing-key.pem` ou dans Settings › Secrets and variables › Actions. Gardez une sauvegarde hors ligne de ce fichier : sans lui, aucune mise à jour ne peut plus être signée pour les copies installées. Ne le placez jamais dans le dépôt.
+
 ## Licence
 
 Smail est distribué sous licence MIT : voir [LICENSE](LICENSE). Les icônes Lucide restent sous leur propre licence (`mailclient/ui/assets/LICENSE-LUCIDE.txt`).

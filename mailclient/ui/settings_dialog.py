@@ -201,7 +201,12 @@ class SettingsDialog(QDialog):
         self.notifications.setChecked(self.database.setting('notifications',True))
         self.tray = QCheckBox('Réduire dans la zone de notification à la fermeture')
         self.tray.setChecked(self.database.setting('close_to_tray',True))
-        for control in (self.encrypt,self.idle,self.notifications,self.tray):
+        from mailclient import __version__
+        self.auto_update = QCheckBox(f'Installer automatiquement les mises à jour (version actuelle : {__version__})')
+        self.auto_update.setToolTip('Vérifiées toutes les 6 heures sur GitHub ; installées à la fermeture de Smail, '
+                                    'uniquement si leur signature est valide.')
+        self.auto_update.setChecked(self.database.setting('auto_update',True))
+        for control in (self.encrypt,self.idle,self.notifications,self.tray,self.auto_update):
             box.addWidget(control)
         self.minutes = QSpinBox()
         self.minutes.setRange(1,120)

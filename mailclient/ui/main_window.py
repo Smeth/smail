@@ -107,6 +107,10 @@ class MainWindow(QMainWindow):
         self.security_frame.box.addLayout(security_row)
         self.security_frame.hide()
         layout.addWidget(self.security_frame)
+        self.update_slot = QVBoxLayout()  # Bandeau « mise à jour prête », ajouté à la demande.
+        self.update_slot.setContentsMargins(0,0,0,0)
+        self.update_banner = None
+        layout.addLayout(self.update_slot)
         layout.addWidget(self.cache_status)
         split = self.splitter = QSplitter()
         split.setChildrenCollapsible(False)
@@ -272,6 +276,7 @@ class MainWindow(QMainWindow):
         action('Synchroniser', self.sync_now, 'F5', menu=tools_menu, icon_name='refresh-cw')
         tools_menu.addSeparator()
         action('Préférences', self.preferences, 'Ctrl+,', menu=tools_menu, icon_name='settings-2')
+        action('Rechercher des mises à jour', lambda: self.updates.check(manual=True), menu=tools_menu, icon_name='download')
         action('Rechercher', self.search.setFocus, 'Ctrl+F', menu=view_menu, icon_name='search')
         action('Palette de commandes', self.open_palette, 'Ctrl+K', menu=view_menu, icon_name='command')
         view_menu.addSeparator()
@@ -369,7 +374,11 @@ class MainWindow(QMainWindow):
             self.tray.show()
             QApplication.instance().setQuitOnLastWindowClosed(False)
         self.apply_theme()
+        from pathlib import Path
+        from mailclient.ui.updates import UpdateManager
+        self.updates = UpdateManager(self, database, self.runner, Path(database.path).parent)
         if auto_load:
+            self.updates.start()
             from mailclient.core import scheduler
             uncertain = scheduler.recover(database)
             self.reload_accounts()
@@ -1536,7 +1545,8 @@ class MainWindow(QMainWindow):
                       idle=dialog.idle.isChecked(), notifications=dialog.notifications.isChecked(), close_to_tray=dialog.tray.isChecked(),
                       ui_style=dialog.style_combo.currentData(),ui_density=dialog.density.currentText(),
                       ui_accent=dialog.accent.currentText(),ui_custom_accent=dialog.custom_accent,
-                      ui_reduced_motion=dialog.motion.isChecked(),undo_send_seconds=dialog.undo_send.value())
+                      ui_reduced_motion=dialog.motion.isChecked(),undo_send_seconds=dialog.undo_send.value(),
+                      auto_update=dialog.auto_update.isChecked())
         encrypt = dialog.encrypt.isChecked()
         self.set_busy(True)
         def operation():
@@ -1548,6 +1558,8 @@ class MainWindow(QMainWindow):
             self.set_busy(False)
             self.apply_theme()
             self.start_background()
+            if self.auto_load:
+                self.updates.settings_changed()
             self.statusBar().showMessage('Préférences enregistrées.')
         self.runner.run(operation, done, self.failure)
 
@@ -1692,6 +1704,13 @@ class MainWindow(QMainWindow):
         self.palette_dialog = CommandPalette(self.appearance,commands,self)
         self.palette_dialog.open()
 
+    def show_update_banner(self, title, description, action_text, callback):
+        if self.update_banner is not None:
+            self.update_banner.deleteLater()
+        self.update_banner = Banner(title, description, self.appearance, icon_name='download', action=action_text)
+        self.update_banner.action.clicked.connect(callback)
+        self.update_slot.addWidget(self.update_banner)
+
     def request_quit(self):
         self.quitting = True
         self.close()
@@ -1725,5 +1744,6 @@ class MainWindow(QMainWindow):
             self.tray.hide()
         self.reader.shutdown()
         event.accept()
+        self.updates.install_on_exit()  # Mise à jour téléchargée et vérifiée : installée maintenant, en silence.
         if self.tray:
             QTimer.singleShot(0, QApplication.instance().quit)

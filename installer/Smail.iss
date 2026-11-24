@@ -46,7 +46,15 @@ Name: "{autodesktop}\Smail"; Filename: "{app}\Smail.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\Smail.exe"; Description: "{cm:LaunchProgram,Smail}"; Flags: nowait postinstall skipifsilent
+; Mise à jour automatique (installation silencieuse lancée par Smail avec /RELAUNCH=1) : Smail redémarre.
+Filename: "{app}\Smail.exe"; Flags: nowait; Check: RelaunchRequested
 
 ; La désinstallation retire le programme seulement. Les comptes, le cache (%LOCALAPPDATA%\SmailDesktop\Smail)
 ; et les secrets du Gestionnaire d’identifiants Windows sont conservés : supprimez d’abord vos comptes dans
 ; Smail pour tout effacer.
+
+[Code]
+function RelaunchRequested: Boolean;
+begin
+  Result := WizardSilent and (ExpandConstant('{param:RELAUNCH|0}') = '1');
+end;
