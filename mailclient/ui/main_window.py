@@ -377,6 +377,8 @@ class MainWindow(QMainWindow):
         from pathlib import Path
         from mailclient.ui.updates import UpdateManager
         self.updates = UpdateManager(self, database, self.runner, Path(database.path).parent)
+        from mailclient.ui.send_queue import SendQueue
+        self.send_queue = SendQueue(self, self.service, database)
         if auto_load:
             self.updates.start()
             from mailclient.core import scheduler
@@ -1454,14 +1456,14 @@ class MainWindow(QMainWindow):
         from mailclient.core import scheduler
         self.due_running = True
         accounts = list(self.accounts)
+        self.send_queue.tick()  # Envois programmés arrivés à échéance : même file, avec progression.
         def operation():
-            return scheduler.process_outbox(self.service, accounts) + scheduler.process_snoozes(self.service, accounts)
+            return scheduler.process_snoozes(self.service, accounts)
         def done(events):
             self.due_running = False
             if not events:
                 return
-            texts = {'sent': 'Envoi programmé effectué', 'partial': 'Envoi programmé partiel', 'failed': 'Échec d’un envoi programmé',
-                     'returned': 'Message reporté de retour'}
+            texts = {'returned': 'Message reporté de retour'}
             summary = ' · '.join(f'{texts[kind]} : {subject}' for kind, subject, _ in events)
             self.statusBar().showMessage(summary)
             if self.tray and self.database.setting('notifications', True):
@@ -1498,9 +1500,12 @@ class MainWindow(QMainWindow):
         dialog = OutboxDialog(self.database, self.accounts, self)
         dialog.exec()
         if dialog.reopen:
-            window = ComposeWindow(self.service, self.accounts, draft=dialog.reopen, parent=self, offline=self.offline.isChecked)
-            self.composers.add(window)
-            window.show()
+            self.reopen_draft(dialog.reopen)
+
+    def reopen_draft(self, draft):
+        window = ComposeWindow(self.service, self.accounts, draft=draft, parent=self, offline=self.offline.isChecked)
+        self.composers.add(window)
+        window.show()
 
     def start_background(self):
         if self.auto_load and not self.offline.isChecked():
@@ -1533,6 +1538,7 @@ class MainWindow(QMainWindow):
         else:
             self.start_background()
             self.sync_now()
+        self.send_queue.tick()  # Hors ligne : les envois attendent ; reconnexion : ils partent.
         self.load_folders()
 
     def preferences(self):
@@ -1733,9 +1739,11 @@ class MainWindow(QMainWindow):
                 window.close()
         for window in list(self.message_windows):
             window.close()
-        pending = self.busy or self.runner.tasks or any(thread.isRunning() for thread in self.idle_threads) or (self.sync_thread and self.sync_thread.isRunning()) or any(window.isVisible() for window in self.composers)
+        sending = self.send_queue.flush_for_quit()
+        pending = sending or self.busy or self.runner.tasks or any(thread.isRunning() for thread in self.idle_threads) or (self.sync_thread and self.sync_thread.isRunning()) or any(window.isVisible() for window in self.composers)
         if pending:
-            self.statusBar().showMessage('Fermeture : attente des connexions et de l’enregistrement des brouillons…')
+            self.statusBar().showMessage('Fermeture : envoi du message en cours…' if sending else
+                                         'Fermeture : attente des connexions et de l’enregistrement des brouillons…')
             QTimer.singleShot(250, self.close)
             event.ignore()
             return

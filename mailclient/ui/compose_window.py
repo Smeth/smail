@@ -457,10 +457,33 @@ class ComposeWindow(QDialog):
             self.status.setText(str(error))
             return
         delay = int(self.service.db.setting('undo_send_seconds', 10) or 0) if hasattr(self.service, 'db') else 0
-        if delay > 0:
+        queue = getattr(self.parent(), 'send_queue', None)
+        if queue is not None:
+            self.hand_over(queue, state, files, account, delay)
+        elif delay > 0:
             self.start_countdown(state, files, account, delay)
         else:
             self.deliver(state, files, account)
+
+    def hand_over(self, queue, state, files, account, delay):
+        """Envoi en arrière-plan : le message rejoint la boîte d’envoi et la fenêtre se ferme aussitôt.
+
+        Le délai d’annulation et la progression s’affichent en bas de la fenêtre principale ;
+        « Annuler » y rouvre le message en brouillon."""
+        try:
+            queue.enqueue(account, state, files, delay, self.id)
+        except (ValueError, RuntimeError) as error:
+            self.status.setText(str(error))
+            return
+        try:
+            self.service.db.cache_delete('draft', self.id)  # Le message vit désormais dans la boîte d’envoi.
+        except Exception:
+            pass
+        self.delivered = True
+        self.saved_revision = self.revision
+        self.debounce.stop()
+        self.periodic.stop()
+        self.close()
 
     # Annulation d’envoi : le message part à la fin du délai, ou tout de suite si la fenêtre est fermée.
     def start_countdown(self, state, files, account, delay):

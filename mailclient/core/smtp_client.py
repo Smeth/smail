@@ -104,12 +104,42 @@ class DeliveryUncertain(RuntimeError):
     """Connexion perdue pendant l’envoi : le serveur a pu accepter le message sans pouvoir le confirmer."""
 
 
-def send_message(account, password, tls, message, recipients):
-    """Aucun nouvel essai automatique après DATA : risque de double envoi."""
+UPLOAD_CHUNK = 64 * 1024
+
+
+def report_upload(client, progress):
+    """Envoie le contenu du message (DATA) par blocs et signale l’avancement.
+
+    smtplib transmet tout le message en un seul appel à send(), terminé par CRLF.CRLF : seul cet appel
+    est découpé ; les commandes (MAIL, RCPT, DATA) passent telles quelles."""
+    original = client.send
+    def send(data):
+        if not (isinstance(data, bytes) and data.endswith(b'\r\n.\r\n')) or client.sock is None:
+            return original(data)
+        total = len(data)
+        try:
+            for start in range(0, total, UPLOAD_CHUNK):
+                client.sock.sendall(data[start:start + UPLOAD_CHUNK])
+                progress('upload', min(start + UPLOAD_CHUNK, total), total)
+        except OSError:
+            client.close()
+            raise smtplib.SMTPServerDisconnected('Server not connected')
+        progress('verify', total, total)  # Reste la réponse du serveur, souvent après son analyse antivirus.
+    client.send = send
+
+
+def send_message(account, password, tls, message, recipients, progress=None):
+    """Aucun nouvel essai automatique après DATA : risque de double envoi.
+
+    progress(étape, fait, total) : 'connect', 'upload' (octets), 'verify' (attente de la réponse du serveur)."""
+    if progress:
+        progress('connect', 0, 0)
     client = open_connection(account, password, tls)
     try:
         if client.sock is not None:
             client.sock.settimeout(SEND_TIMEOUT)
+        if progress:
+            report_upload(client, progress)
         return client.send_message(message, from_addr=account.email, to_addrs=recipients)
     except (smtplib.SMTPServerDisconnected, TimeoutError, ConnectionError) as error:
         raise DeliveryUncertain(

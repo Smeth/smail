@@ -39,12 +39,13 @@ def decode_files(items) -> list:
     return [Attachment(item['name'], item['type'], base64.b64decode(item['data'])) for item in items or []]
 
 
-def send_and_record(service, account, state, files):
+def send_and_record(service, account, state, files, progress=None):
     """Envoi SMTP puis copie locale et carnet d’adresses ; renvoie (brut, refusés, id de copie locale)."""
     message, recipients = build_message(account, state['to'], state['cc'], state['bcc'], state['subject'], state['body'], files,
                                         state.get('reply_id', ''), state.get('references', ''), html=state.get('mail_html', ''),
                                         calendar=state.get('calendar', ''))
-    refused = send_message(account, service.oauth.credential(account, 'smtp'), service.tls, message, recipients)
+    extra = dict(progress=progress) if progress else {}
+    refused = send_message(account, service.oauth.credential(account, 'smtp'), service.tls, message, recipients, **extra)
     raw = message.as_bytes()
     local_id = str(uuid4())
     try:
@@ -88,6 +89,64 @@ def schedule(db, account, state, files, when: datetime, item_id=None) -> dict:
     return item
 
 
+def enqueue(db, account, state, files, delay=0, item_id=None) -> dict:
+    """Envoi immédiat en arrière-plan : il part dans `delay` secondes (délai d’annulation), par la boîte d’envoi."""
+    from datetime import timedelta
+    item = dict(id=item_id or str(uuid4()), account=account.id, state=dict(state), files=encode_files(files),
+                send_at=iso(now_utc() + timedelta(seconds=max(0, delay))), status='scheduled', error='', immediate=True)
+    db.cache_put('outbox', item['id'], item, account.id)
+    return item
+
+
+def due(db, moment=None) -> list:
+    """Envois arrivés à échéance, du plus ancien au plus récent."""
+    moment = moment or now_utc()
+    return [item for item in outbox(db) if item.get('status') == 'scheduled' and parse(item['send_at']) <= moment]
+
+
+def send_now(db, item_id) -> None:
+    """Avance l’échéance (fermeture de Smail pendant le délai d’annulation : le message part avant)."""
+    item = db.cache_get('outbox', item_id)
+    if item and item.get('status') == 'scheduled':
+        item['send_at'] = iso(now_utc())
+        db.cache_put('outbox', item['id'], item, item['account'])
+
+
+def deliver_item(service, account, item, progress=None) -> tuple:
+    """Envoie un message de la boîte d’envoi ; renvoie (événement, sujet, détail).
+
+    L’état « sending » est enregistré avant SMTP : un arrêt brutal le rend « incertain », jamais renvoyé."""
+    subject = item['state'].get('subject') or '(Sans objet)'
+    item['status'] = 'sending'
+    service.db.cache_put('outbox', item['id'], item, account.id)
+    try:
+        raw, refused, local_id = send_and_record(service, account, item['state'], decode_files(item['files']), progress)
+    except Exception as error:
+        from mailclient.core.sync import friendly_error
+        from mailclient.core.smtp_client import DeliveryUncertain
+        uncertain = isinstance(error, DeliveryUncertain)
+        item.update(status='uncertain' if uncertain else 'failed',
+                    error=friendly_error(error) + ('' if uncertain else ' Aucun renvoi automatique : vérifiez vos Envoyés.'))
+        service.db.cache_put('outbox', item['id'], item, account.id)
+        return ('uncertain' if uncertain else 'failed'), subject, item['error']
+    if refused:
+        item.update(status='partial', error='Destinataires refusés : ' + ', '.join(refused) + '. Les autres ont reçu le message.')
+        service.db.cache_put('outbox', item['id'], item, account.id)
+        event = ('partial', subject, item['error'])
+    else:
+        service.db.cache_delete('outbox', item['id'])
+        event = ('sent', subject, '')
+    if progress:
+        progress('copy', 0, 0)
+    try:
+        copy_to_sent(service, account, raw, local_id)
+    except Exception as error:
+        log.warning('Copie Envoyés d’un envoi non effectuée (%s)', type(error).__name__)
+        if event[0] == 'sent':
+            event = ('sent', subject, 'Copie dans Envoyés non effectuée ; une copie locale est conservée.')
+    return event
+
+
 def outbox(db) -> list:
     return sorted(db.cache_list('outbox'), key=lambda item: item['send_at'])
 
@@ -116,34 +175,10 @@ def process_outbox(service, accounts, moment=None) -> list:
     moment = moment or now_utc()
     by_id = {account.id: account for account in accounts}
     events = []
-    for item in outbox(service.db):
-        if item.get('status') != 'scheduled' or parse(item['send_at']) > moment:
-            continue
+    for item in due(service.db, moment):
         account = by_id.get(item['account'])
-        subject = item['state'].get('subject') or '(Sans objet)'
-        if account is None:
-            continue
-        item['status'] = 'sending'
-        service.db.cache_put('outbox', item['id'], item, account.id)  # Avant SMTP : aucun double envoi possible.
-        try:
-            raw, refused, local_id = send_and_record(service, account, item['state'], decode_files(item['files']))
-        except Exception as error:
-            from mailclient.core.sync import friendly_error
-            item.update(status='failed', error=friendly_error(error) + ' Aucun renvoi automatique : vérifiez vos Envoyés.')
-            service.db.cache_put('outbox', item['id'], item, account.id)
-            events.append(('failed', subject, item['error']))
-            continue
-        if refused:
-            item.update(status='partial', error='Destinataires refusés : ' + ', '.join(refused) + '. Les autres ont reçu le message.')
-            service.db.cache_put('outbox', item['id'], item, account.id)
-            events.append(('partial', subject, item['error']))
-        else:
-            service.db.cache_delete('outbox', item['id'])
-            events.append(('sent', subject, ''))
-        try:
-            copy_to_sent(service, account, raw, local_id)
-        except Exception as error:
-            log.warning('Copie Envoyés d’un envoi programmé non effectuée (%s)', type(error).__name__)
+        if account is not None:
+            events.append(deliver_item(service, account, item))
     return events
 
 

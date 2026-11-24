@@ -20,8 +20,9 @@ class OutboxDialog(QDialog):
         self.setMinimumSize(620, 380)
         layout = QVBoxLayout(self)
         layout.addWidget(label('Envois programmés', 'Title'))
-        layout.addWidget(label('Envoyés par Smail à l’heure prévue s’il est ouvert (sinon au prochain démarrage). '
-                               'Un échec n’est jamais renvoyé automatiquement.', 'Subtitle', True))
+        layout.addWidget(label('Envoyés par Smail à l’heure prévue s’il est ouvert (sinon au prochain démarrage). On y retrouve aussi '
+                               'les envois en échec ou incertains. Un échec n’est jamais renvoyé automatiquement : « Modifier… » '
+                               'rouvre le message pour le corriger et le renvoyer.', 'Subtitle', True))
         self.list = QListWidget()
         self.list.setObjectName('FramedList')
         self.list.setAccessibleName('Envois programmés')

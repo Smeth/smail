@@ -28,6 +28,7 @@
 - Noms de dossiers lisibles sur les serveurs qui imposent un préfixe (« INBOX.Archive » devient « Archives », sous-dossiers en « Parent › Enfant ») ; création et renommage de dossiers sous ce préfixe.
 - Mises à jour automatiques depuis les publications GitHub : vérification toutes les 6 heures, manifeste signé (Ed25519) et empreinte vérifiée, installation silencieuse à la fermeture ou « Redémarrer maintenant » ; publication d’une version par `tools/release.py` et le workflow `release.yml`.
 - Envoi : le serveur dispose de 5 minutes (au lieu de 20 secondes) pour confirmer un message, le temps de son analyse antivirus ; une connexion coupée pendant l’envoi est signalée comme « peut-être envoyé ». Plus de dossiers en double (« Spam » / « Spam ») après traduction.
+- Envoi en arrière-plan : la rédaction se ferme aussitôt ; délai d’annulation et progression réelle (connexion, Mo envoyés, vérification par le serveur, copie dans Envoyés) en bas de la fenêtre principale ; échecs notifiés et conservés dans Envois programmés.
 - Désabonnement des listes de diffusion (un clic RFC 8058, e-mail ou page web), toujours après confirmation.
 - Vue par conversation : regroupement par références, lecture empilée (messages repliés avec extrait au-dessus et en dessous du message ouvert) incluant vos réponses envoyées, actions sur toute la conversation, navigation Alt+Bas / Alt+Haut.
 - Aperçus de la liste calculés à la synchronisation (sans citation ni signature) ; l’adresse du compte n’est plus affichée à la place d’un aperçu absent.
