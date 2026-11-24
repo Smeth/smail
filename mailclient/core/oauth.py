@@ -1,6 +1,7 @@
 """OAuth2 bureau : navigateur système, loopback, state et PKCE S256.
 
-Les identifiants client sont ceux de l'application enregistrée par l'utilisateur.
+Les identifiants client sont ceux de l'application Smail (mailclient/core/oauth_apps.py, connexion en un
+clic) ou ceux d'une application enregistrée par l'utilisateur (réglages avancés).
 Les jetons et le secret client Google restent exclusivement dans keyring.
 """
 import base64
@@ -49,6 +50,9 @@ class OAuth:
                 secret = self.vault.get(account.id + ':oauth-client-secret')
             except RuntimeError:
                 secret = ''
+            if not secret:  # Application Google de Smail (connexion en un clic).
+                from mailclient.core.oauth_apps import google_secret
+                secret = google_secret(account.oauth_client_id)
             if secret:
                 values['client_secret'] = secret
         try:

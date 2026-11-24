@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Connexion Gmail et Outlook en un clic (« Se connecter avec Google / Microsoft ») avec l’application OAuth2 de Smail, une fois ses identifiants renseignés (`docs/OAUTH.md`) ; identifiants techniques réservés au mode avancé.
+
 ## 1.2.0 — 2026-11-25
 
 

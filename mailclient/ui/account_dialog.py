@@ -52,6 +52,26 @@ class AccountDialog(QDialog):
         self.authorize_button.clicked.connect(self.authorize)
         form.addRow('Authentification', self.auth)
         layout.addLayout(form)
+        # Connexion en un clic avec l’application Smail : aucun identifiant technique à saisir.
+        from mailclient.core import oauth_apps
+        self.quick = QWidget()
+        quick_row = QHBoxLayout(self.quick)
+        quick_row.setContentsMargins(0, 0, 0, 0)
+        quick_row.addWidget(label('Compte Gmail, Outlook ou Microsoft 365 ?', 'Bold'))
+        self.quick_buttons = {}
+        for provider, text in (('google', 'Se connecter avec Google'), ('microsoft', 'Se connecter avec Microsoft')):
+            button = Button(text, self.appearance, 'arrow-up-right', 'Secondary',
+                            'Ouvre la page de connexion dans votre navigateur ; Smail ne voit jamais votre mot de passe.')
+            button.clicked.connect(lambda checked=False, p=provider: self.one_click(p))
+            button.setVisible(oauth_apps.available(provider))
+            quick_row.addWidget(button)
+            self.quick_buttons[provider] = button
+        quick_row.addStretch()
+        self.quick.setVisible(any(oauth_apps.available(p) for p in ('google', 'microsoft')))
+        layout.addWidget(self.quick)
+        self.own_app = QCheckBox('Utiliser ma propre application OAuth2 (avancé)')
+        self.own_app.toggled.connect(self.auth_changed)
+        layout.addWidget(self.own_app)
         self.oauth_group = QGroupBox('Autorisation OAuth2')
         oauth_form = QFormLayout(self.oauth_group)
         oauth_form.addRow('Identifiant client OAuth2',self.client_id)
@@ -174,9 +194,23 @@ class AccountDialog(QDialog):
         self.auth_changed()
         self.show_servers(account is not None)  # Nouveau compte : la détection les remplit d’abord.
 
+    def uses_smail_app(self):
+        """Vrai si le compte utilise l’application OAuth2 de Smail (champs techniques inutiles)."""
+        from mailclient.core import oauth_apps
+        provider = {1: 'google', 2: 'microsoft'}.get(self.auth.currentIndex())
+        return bool(provider) and oauth_apps.available(provider) and \
+            self.client_id.text().strip() in ('', oauth_apps.client_id(provider))
+
     def auth_changed(self, *_):
         oauth = self.auth.currentIndex() != 0
-        self.oauth_group.setVisible(oauth)
+        from mailclient.core import oauth_apps
+        provider = {1: 'google', 2: 'microsoft'}.get(self.auth.currentIndex())
+        smail_ids = {'', oauth_apps.client_id('google'), oauth_apps.client_id('microsoft')}
+        if provider and not self.own_app.isChecked() and oauth_apps.available(provider) and self.client_id.text().strip() in smail_ids:
+            self.client_id.setText(oauth_apps.client_id(provider))  # Application de Smail du bon fournisseur.
+        # Identifiants techniques montrés seulement pour sa propre application (ou sans application Smail).
+        self.oauth_group.setVisible(oauth and (self.own_app.isChecked() or not self.uses_smail_app()))
+        self.own_app.setVisible(oauth and self.quick.isVisible())
         self.password.setEnabled(not oauth and not self.busy)
         self.client_id.setEnabled(oauth and not self.busy)
         self.client_secret.setEnabled(self.auth.currentIndex() == 1 and not self.busy)
@@ -211,6 +245,12 @@ class AccountDialog(QDialog):
             self.logins[protocol].setText(getattr(found, protocol + '_login'))
         self.detect_status.setText(f'Réglages trouvés ({found.source}) : réception {found.imap.host}:{found.imap.port}, '
                                    f'envoi {found.smtp.host}:{found.smtp.port}. Utilisez « Tester la connexion » pour vérifier.')
+        from mailclient.core import oauth_apps
+        provider = oauth_apps.provider_for(found.imap.host)
+        if provider and oauth_apps.available(provider) and self.auth.currentIndex() == 0:
+            name = 'Google' if provider == 'google' else 'Microsoft'
+            self.detect_status.setText(f'Compte {name} : le plus simple est « Se connecter avec {name} », '
+                                       'sans mot de passe à saisir dans Smail.')
 
     def preset(self):
         """Fournisseurs connus : réglages immédiats, sans réseau."""
@@ -281,19 +321,40 @@ class AccountDialog(QDialog):
                 field.setEnabled(not busy)
         self.auth_changed()
 
+    def one_click(self, provider):
+        """« Se connecter avec Google / Microsoft » : application Smail, serveurs du fournisseur, navigateur."""
+        from mailclient.core import autoconfig, oauth_apps
+        address = self.address.text().strip()
+        if not autoconfig.domain_of(address):
+            self.status.setText('Saisissez d’abord votre adresse e-mail (et votre nom), puis cliquez de nouveau.')
+            self.address.setFocus()
+            return
+        self.own_app.setChecked(False)
+        self.client_secret.clear()
+        self.tenant.setText('common')
+        self.client_id.setText(oauth_apps.client_id(provider))
+        self.auth.setCurrentIndex(1 if provider == 'google' else 2)
+        if oauth_apps.provider_for(self.servers['imap'][0].text()) != provider:
+            # Domaine personnel (Workspace, Microsoft 365) ou serveurs vides : serveurs du fournisseur.
+            self.apply_detected(autoconfig.known('x@gmail.com' if provider == 'google' else 'x@outlook.com'))
+        self.authorize()
+
     def authorize(self):
         try:
             account, _ = self.values()
             if self.client_secret.text():
                 self.secrets.set(account.id + ':oauth-client-secret', self.client_secret.text())
+        except ValueError as error:
+            self.status.setText(str(error))
+            return
         except Exception:
             self.status.setText('Vérifiez les paramètres du compte, l’identifiant client et le coffre Windows.')
             return
         self.oauth_cancelled.clear()
         self.set_busy(True)
-        self.status.setText('Autorisez l’accès dans votre navigateur. Délai maximal : 3 minutes. Annuler permet d’interrompre.')
+        self.status.setText('Connectez-vous et autorisez Smail dans votre navigateur (3 minutes au plus). Annuler permet d’interrompre.')
         self.runner.run(lambda: self.oauth.authorize(account, self.oauth_cancelled),
-                        lambda _: self.finished_test('Autorisation OAuth2 enregistrée dans le coffre Windows.'), self.finished_test)
+                        lambda _: self.finished_test('Connexion autorisée. Cliquez sur « Enregistrer » pour terminer.'), self.finished_test)
 
     def test_servers(self):
         try:
