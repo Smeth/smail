@@ -2,37 +2,51 @@
 
 ## Non publié
 
-- Suppression d’un compte (menu Comptes ou Préférences) : configuration, cache, brouillons, copies d’envoi, certificats approuvés et secrets du coffre Windows sont effacés de ce PC.
-- Liste et retrait des certificats approuvés dans Préférences › Sécurité.
-- Sélection multiple des messages ; actions groupées en une commande IMAP par dossier.
-- Tout marquer comme lu, suppression définitive depuis la corbeille, vidage de la corbeille et du spam.
-- Création, renommage et suppression de dossiers (noms accentués encodés en UTF-7 modifié).
-- Performances : réutilisation des sessions IMAP et téléchargement des listes et de la synchronisation par lots.
-- Schéma SQLite versionné avec migrations automatiques ; compatibilité conservée avec Smail 1.0.0.
-- Icône de l’application, informations de version de l’exécutable, gestionnaire d’erreurs inattendues.
-- Dépendances de développement séparées (`requirements-dev.txt`) et intégration continue GitHub Actions.
-- Synchronisation incrémentale : dossiers inchangés ignorés grâce à CONDSTORE, contenus déjà en cache non réécrits.
-- Recherche hors ligne indexée (SQLite FTS5) lorsque le cache n’est pas chiffré.
-- Carnet d’adresses et autocomplétion des destinataires ; virgule finale acceptée dans les champs d’adresses.
-- Installateur Windows par utilisateur (Inno Setup), construit par l’intégration continue.
-- Licence MIT.
-- Rédaction HTML : gras, italique, souligné, listes, liens ; HTML reconstruit et texte brut équivalent ; signature mise en forme par compte.
+Smail 1.1.0 est une mise à jour majeure. **Depuis la 1.0.0, installez-la une fois manuellement** (l’installateur conserve vos comptes, votre cache et vos réglages) : les versions suivantes s’installeront ensuite toutes seules.
+
+### Rédaction et envoi
+- Rédaction mise en forme : gras, italique, souligné, listes et liens, avec une version texte équivalente pour les destinataires qui n’affichent pas le HTML ; signature mise en forme par compte.
+- Envoi en arrière-plan : la fenêtre de rédaction se ferme dès « Envoyer ». En bas de la fenêtre principale, « Annuler » reste possible pendant le délai d’annulation (réglable de 0 à 30 s), puis la progression s’affiche : connexion, Mo envoyés, vérification par le serveur, copie dans Envoyés.
+- Envoi programmé (« Envoyer plus tard ») et boîte d’envoi locale (Fichier › Envois programmés), où sont aussi conservés les envois en échec. Un message n’est jamais renvoyé automatiquement.
+- Alerte avant d’envoyer un message de plus de 25 Mo, taille refusée par Gmail, Outlook et la plupart des messageries.
+- Carnet d’adresses et autocomplétion des destinataires.
+- Invitations de calendrier : résumé en heure locale, réponse Accepter / Provisoire / Refuser, ajout au calendrier Windows.
+
+### Lecture et organisation
+- Vue par conversation : messages regroupés, lecture empilée avec extraits, vos réponses incluses, actions sur toute la conversation (Alt+Bas / Alt+Haut pour naviguer).
+- Liste des messages sans pages : les messages plus anciens se chargent en arrivant en bas de la liste.
+- Sélection multiple, glisser-déposer vers un dossier, tout marquer comme lu, vider la corbeille et le spam.
+- Création, renommage et suppression de dossiers ; noms lisibles sur les serveurs qui ajoutent « INBOX. » devant chaque dossier.
+- Aperçu des pièces jointes (images, PDF, textes), message dans une fenêtre séparée, impression.
+- Report de messages : un message quitte la réception et y revient à l’heure choisie.
+- Aperçus des messages dans la liste, sans citations ni signature.
+
+### Tri, spam et désabonnement
 - Règles de tri, expéditeurs bloqués et approuvés, spam signalé par le serveur, actions « Signaler comme spam » et « Ce n’est pas un spam ».
-- Annulation d’envoi (délai réglable), envoi programmé avec boîte d’envoi locale, report de messages (dossier « Reportés »).
-- Confort de lecture : aperçu des pièces jointes (images, PDF, textes en source brute), message dans une fenêtre séparée, impression, glisser-déposer vers un dossier.
-- Réponses : les noms accentués s’affichent en clair dans les champs À/Cc (ils étaient affichés encodés, « =?utf-8?q?… »).
-- Invitations de calendrier : résumé en heure locale, réponse iTIP (accepter, provisoire, refuser), ajout au calendrier Windows ; dépendance `tzdata`.
-- Recherche avancée : opérateurs (de:, à:, objet:, a:pj, est:, après:, avant:, expressions), recherche dans tous les dossiers.
-- Identifiants de connexion IMAP et SMTP distincts de l’adresse, mot de passe SMTP distinct.
-- Liste des messages sans pagination : les messages plus anciens se chargent en arrivant en bas de la liste (la barre « Précédents / Suivants » disparaît) ; sélection et message ouvert conservés.
-- Noms de dossiers lisibles sur les serveurs qui imposent un préfixe (« INBOX.Archive » devient « Archives », sous-dossiers en « Parent › Enfant ») ; création et renommage de dossiers sous ce préfixe.
-- Mises à jour automatiques depuis les publications GitHub : vérification toutes les 6 heures, manifeste signé (Ed25519) et empreinte vérifiée, installation silencieuse à la fermeture ou « Redémarrer maintenant » ; publication d’une version par `tools/release.py` et le workflow `release.yml`.
-- Envoi : le serveur dispose de 5 minutes (au lieu de 20 secondes) pour confirmer un message, le temps de son analyse antivirus ; une connexion coupée pendant l’envoi est signalée comme « peut-être envoyé ». Plus de dossiers en double (« Spam » / « Spam ») après traduction.
-- Envoi en arrière-plan : la rédaction se ferme aussitôt ; délai d’annulation et progression réelle (connexion, Mo envoyés, vérification par le serveur, copie dans Envoyés) en bas de la fenêtre principale ; échecs notifiés et conservés dans Envois programmés.
-- Copie dans Envoyés des gros messages : délai de téléversement allongé (le délai de 20 s bornait tout l’envoi) ; copies en échec réessayées automatiquement, sans doublon (recherche du Message-ID). Alerte avant d’envoyer un message de plus de 25 Mo. Autocomplétion : l’adresse choisie n’est plus insérée deux fois.
-- Désabonnement des listes de diffusion (un clic RFC 8058, e-mail ou page web), toujours après confirmation.
-- Vue par conversation : regroupement par références, lecture empilée (messages repliés avec extrait au-dessus et en dessous du message ouvert) incluant vos réponses envoyées, actions sur toute la conversation, navigation Alt+Bas / Alt+Haut.
-- Aperçus de la liste calculés à la synchronisation (sans citation ni signature) ; l’adresse du compte n’est plus affichée à la place d’un aperçu absent.
+- Désabonnement des listes de diffusion en un clic, toujours après confirmation.
+
+### Recherche
+- Recherche avancée : `de:`, `à:`, `objet:`, `a:pj`, `est:nonlu`, `après:`, `avant:`, expressions entre guillemets ; recherche dans tous les dossiers.
+- Recherche hors ligne plus rapide (index local) lorsque le cache n’est pas chiffré.
+
+### Comptes, sécurité et mises à jour
+- Mises à jour automatiques : vérification toutes les 6 heures, téléchargement en arrière-plan, installation à la fermeture de Smail (ou « Redémarrer maintenant »). Chaque mise à jour est signée et vérifiée avant installation.
+- Identifiants de connexion IMAP et SMTP distincts de l’adresse, mot de passe d’envoi distinct (hébergeurs qui l’exigent).
+- Suppression complète d’un compte de ce PC : configuration, cache, brouillons, certificats approuvés et mots de passe du coffre Windows.
+- Liste et retrait des certificats approuvés (Préférences › Sécurité).
+- Installateur Windows sans droits administrateur ; nouvelle icône.
+
+### Corrections
+- Envoi des messages volumineux : le délai d’attente de 20 s coupait l’envoi et la copie dans Envoyés. Le serveur dispose maintenant de 5 minutes ; une connexion coupée pendant l’envoi est signalée « peut-être envoyé » ; les copies dans Envoyés manquées sont rattrapées automatiquement, sans doublon.
+- Réponses : les noms accentués s’affichent en clair dans les champs À et Cc.
+- Autocomplétion : l’adresse choisie n’est plus insérée deux fois ; virgule finale acceptée.
+- Boutons : plus de cadre de focus après un clic.
+- Plus de dossiers affichés en double après traduction de leur nom.
+
+### Technique
+- Synchronisation incrémentale (CONDSTORE), sessions IMAP réutilisées, téléchargements par lots.
+- Base locale versionnée avec migrations automatiques ; données compatibles avec Smail 1.0.0.
+- Licence MIT ; intégration continue et publication automatisées (GitHub Actions) ; journal des erreurs inattendues sans contenu de message.
 
 ## V1 — 1.0.0
 
