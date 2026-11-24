@@ -206,6 +206,10 @@ class SettingsDialog(QDialog):
         self.auto_update.setToolTip('Vérifiées toutes les 6 heures sur GitHub ; installées à la fermeture de Smail, '
                                     'uniquement si leur signature est valide.')
         self.auto_update.setChecked(self.database.setting('auto_update',True))
+        from mailclient.core.updater import packaged
+        if packaged():
+            self.auto_update.setText(f'Mises à jour installées par le Microsoft Store (version actuelle : {__version__})')
+            self.auto_update.setEnabled(False)
         for control in (self.encrypt,self.idle,self.notifications,self.tray,self.auto_update):
             box.addWidget(control)
         self.minutes = QSpinBox()

@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Paquet MSIX pour le Microsoft Store (`tools/build_msix.py`, construit par la CI) ; la version Store laisse ses mises à jour au Store. Politique de confidentialité (`PRIVACY.md`).
+
 ## 1.1.1 — 2026-11-24
 
 

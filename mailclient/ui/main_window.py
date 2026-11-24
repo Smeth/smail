@@ -1718,8 +1718,12 @@ class MainWindow(QMainWindow):
         from pathlib import Path
         from mailclient import __version__
         from mailclient.core import updater
-        mode = ('installé — mises à jour automatiques ' + ('activées' if self.database.setting('auto_update', True) else 'désactivées')
-                if updater.installed_copy() else 'lancé depuis les sources ou un dossier copié — pas de mise à jour automatique')
+        if updater.packaged():
+            mode = 'Microsoft Store — mises à jour installées par le Store'
+        elif updater.installed_copy():
+            mode = 'installé — mises à jour automatiques ' + ('activées' if self.database.setting('auto_update', True) else 'désactivées')
+        else:
+            mode = 'lancé depuis les sources ou un dossier copié — pas de mise à jour automatique'
         return (f'Smail {__version__}\n\nClient mail de bureau Windows (IMAP/SMTP).\n\n'
                 f'Cette copie : {mode}.\nDonnées locales : {Path(self.database.path).parent}\n\n'
                 f'Licence MIT — https://github.com/{updater.REPOSITORY}')

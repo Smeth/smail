@@ -27,7 +27,8 @@ class UpdateManager(QObject):
         self.forget_installed()
 
     def enabled(self):
-        return bool(self.database.setting('auto_update', True))
+        # Version du Microsoft Store : le Store installe lui-même les mises à jour.
+        return bool(self.database.setting('auto_update', True)) and not updater.packaged()
 
     def start(self):
         if self.enabled():
@@ -60,6 +61,11 @@ class UpdateManager(QObject):
 
     def check(self, manual=False):
         if self.window.quitting:
+            return
+        if updater.packaged():
+            if manual:
+                self.inform('Mises à jour', 'Cette copie de Smail vient du Microsoft Store : ses mises à jour sont '
+                            'installées par le Store (Microsoft Store › Bibliothèque › Obtenir les mises à jour).')
             return
         if self.checking:
             if manual:

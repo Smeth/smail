@@ -214,6 +214,14 @@ Sécurité : chaque publication contient `smail-update.json` (version, nom, tail
 
 **Clé de signature (une seule fois) :** la clé privée est le secret `UPDATE_SIGNING_KEY` du dépôt (contenu PEM complet), à ajouter par `gh secret set UPDATE_SIGNING_KEY < chemin\update-signing-key.pem` ou dans Settings › Secrets and variables › Actions. Gardez une sauvegarde hors ligne de ce fichier : sans lui, aucune mise à jour ne peut plus être signée pour les copies installées. Ne le placez jamais dans le dépôt.
 
+## Microsoft Store (paquet MSIX)
+
+`python tools/build_msix.py` transforme le dossier `dist\Smail` de PyInstaller en paquet `dist\msix\Smail-X.Y.Z.msix`, construit aussi par la CI à chaque version (artefact « Smail-msix-vX.Y.Z », à téléverser dans Partner Center). Le paquet n’est pas signé : le Microsoft Store le signe lors de la publication, ce qui supprime l’avertissement SmartScreen. L’identité du paquet (`packaging/msix/identity.json`) doit reprendre les valeurs de Partner Center › Gestion des produits › Identité du produit. Dans la version Store, Smail détecte son paquet et laisse les mises à jour au Store. Les données d’une copie Store sont rangées par Windows dans le dossier du paquet, séparément de la version installée par l’installateur.
+
+Test local sans Store : activez le mode développeur de Windows, puis `python tools/build_msix.py --layout-only` et `Add-AppxPackage -Register dist\msix\layout\AppxManifest.xml` (retrait : `Get-AppxPackage *Smail* | Remove-AppxPackage`).
+
+Politique de confidentialité (exigée par le Store) : [PRIVACY.md](PRIVACY.md).
+
 ## Licence
 
 Smail est distribué sous licence MIT : voir [LICENSE](LICENSE). Les icônes Lucide restent sous leur propre licence (`mailclient/ui/assets/LICENSE-LUCIDE.txt`).

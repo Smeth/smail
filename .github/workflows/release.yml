@@ -59,6 +59,15 @@ jobs:
           if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
           & $iscc "/DAppVersion=$version" installer\Smail.iss
           if ($LASTEXITCODE -ne 0) { throw "ISCC en échec : $LASTEXITCODE" }
+      - name: Construire le paquet MSIX (Microsoft Store)
+        run: python tools/build_msix.py
+      - name: Conserver le paquet MSIX
+        # Non publié dans la Release : il est destiné au Partner Center (le Store le signe lui-même).
+        uses: actions/upload-artifact@v4
+        with:
+          name: Smail-msix-${{ github.ref_name }}
+          path: dist/msix/*.msix
+          retention-days: 90
       - name: Signer le manifeste de mise à jour
         shell: pwsh
         env:

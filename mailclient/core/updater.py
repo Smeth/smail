@@ -152,9 +152,22 @@ def download(update: Update, directory: Path, opener=None, cancelled=lambda: Fal
     return target
 
 
+APPMODEL_ERROR_NO_PACKAGE = 15700
+
+
+def packaged() -> bool:
+    """Vrai pour Smail installé depuis le Microsoft Store (paquet MSIX) : le Store gère alors les mises à jour."""
+    try:
+        import ctypes
+        length = ctypes.c_uint32(0)
+        return ctypes.windll.kernel32.GetCurrentPackageFullName(ctypes.byref(length), None) != APPMODEL_ERROR_NO_PACKAGE
+    except (AttributeError, OSError):
+        return False  # Hors Windows ou Windows trop ancien : jamais un paquet.
+
+
 def installed_copy() -> bool:
-    """Vrai pour Smail installé par l’installateur (et non lancé depuis les sources ou un dossier copié)."""
-    if not getattr(sys, 'frozen', False):
+    """Vrai pour Smail installé par l’installateur (et non lancé depuis les sources, un dossier copié ou le Store)."""
+    if not getattr(sys, 'frozen', False) or packaged():
         return False
     folder = Path(sys.executable).parent
     return any(folder.glob('unins*.exe'))
