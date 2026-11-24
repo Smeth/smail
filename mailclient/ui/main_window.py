@@ -1457,13 +1457,16 @@ class MainWindow(QMainWindow):
         self.due_running = True
         accounts = list(self.accounts)
         self.send_queue.tick()  # Envois programmés arrivés à échéance : même file, avec progression.
+        retry_copies = not self.send_queue.busy()
         def operation():
-            return scheduler.process_snoozes(self.service, accounts)
+            events = scheduler.process_snoozes(self.service, accounts)
+            copied = scheduler.retry_sent_copies(self.service, accounts) if retry_copies else 0
+            return events + ([('copied', f'{copied} message(s) envoyé(s)', '')] if copied else [])
         def done(events):
             self.due_running = False
             if not events:
                 return
-            texts = {'returned': 'Message reporté de retour'}
+            texts = {'returned': 'Message reporté de retour', 'copied': 'Copie enregistrée dans Envoyés'}
             summary = ' · '.join(f'{texts[kind]} : {subject}' for kind, subject, _ in events)
             self.statusBar().showMessage(summary)
             if self.tray and self.database.setting('notifications', True):

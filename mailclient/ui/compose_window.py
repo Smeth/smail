@@ -22,6 +22,8 @@ from mailclient.ui.rich_text import FormatBar
 from PySide6.QtGui import QTextCharFormat
 from shiboken6 import isValid
 
+SIZE_WARNING = 25_000_000  # Limite courante des messageries (Gmail, Outlook), encodage compris.
+
 def reply_fields(mail, account, mode):
     text = mail.text or bleach.clean(mail.html, tags=set(), strip=True)
     quoted = '\n'.join('> ' + line for line in text.splitlines())
@@ -452,9 +454,18 @@ class ComposeWindow(QDialog):
             return
         state, files, account = self.state(), list(self.files), self.current_account()
         try:
-            self.message(state, files)  # Adresses et en-têtes vérifiés avant tout délai d’annulation.
+            message, _ = self.message(state, files)  # Adresses et en-têtes vérifiés avant tout délai d’annulation.
         except ValueError as error:
             self.status.setText(str(error))
+            return
+        size = len(message.as_bytes())
+        if size > SIZE_WARNING and QMessageBox.warning(
+                self, 'Message volumineux',
+                f'Ce message fait {size / 1_000_000:.1f} Mo une fois encodé'.replace('.', ',') + f' (les pièces jointes grossissent d’environ un tiers).\n\n'
+                'Gmail, Outlook et la plupart des messageries refusent les messages de plus de 25 Mo : il risque de ne jamais '
+                'arriver, et le refus n’apparaît que plus tard, par un message d’erreur dans votre boîte de réception.\n\n'
+                'Conseil : retirez des pièces jointes ou partagez-les par un lien (OneDrive, Google Drive…).\n\n'
+                'Envoyer quand même ?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
             return
         delay = int(self.service.db.setting('undo_send_seconds', 10) or 0) if hasattr(self.service, 'db') else 0
         queue = getattr(self.parent(), 'send_queue', None)

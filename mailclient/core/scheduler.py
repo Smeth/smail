@@ -78,6 +78,43 @@ def copy_to_sent(service, account, raw, local_id=None) -> str:
     return folder
 
 
+COPY_ATTEMPTS = 3
+
+
+def retry_sent_copies(service, accounts) -> int:
+    """Copies dans Envoyés restées en échec (connexion coupée…) : nouvel essai, au plus COPY_ATTEMPTS fois.
+
+    Le serveur a pu enregistrer la copie sans pouvoir le confirmer : on cherche d’abord le Message-ID dans
+    Envoyés pour ne jamais créer de doublon. Renvoie le nombre de copies désormais enregistrées."""
+    from email import message_from_bytes
+    by_id = {account.id: account for account in accounts}
+    saved = 0
+    for copy in service.db.cache_list('sent-copy'):
+        account = by_id.get(copy.get('account'))
+        if copy.get('server_saved') or account is None or copy.get('attempts', 0) >= COPY_ATTEMPTS:
+            continue
+        try:
+            if gmail(account):
+                folder = None
+            else:
+                raw = base64.b64decode(copy['raw'])
+                folders, _ = service.folders(account)
+                folder = next((name for name, label in folders if any(word in (name + ' ' + label).casefold() for word in ('envoyés', 'sent'))), None)
+                if not folder:
+                    raise RuntimeError('Dossier Envoyés introuvable.')
+                message_id = (message_from_bytes(raw[:65536]).get('Message-ID') or '').strip()
+                found = service.client(account).find_by_message_id(folder, message_id)[0] if message_id else ''
+                if not found:
+                    service.client(account).append(folder, raw, False)
+            copy['server_saved'] = True
+            saved += 1
+        except Exception as error:
+            copy['attempts'] = copy.get('attempts', 0) + 1
+            log.warning('Nouvel essai de copie dans Envoyés impossible (%s)', type(error).__name__)
+        service.db.cache_put('sent-copy', copy['id'], copy)
+    return saved
+
+
 # Boîte d’envoi locale ------------------------------------------------------------------------
 
 def schedule(db, account, state, files, when: datetime, item_id=None) -> dict:

@@ -480,9 +480,25 @@ class IMAPClient:
                 raise RuntimeError('Recherche du message refusée par le serveur.')
             return ','.join(uid.decode() for uid in (data[0].split() if data and data[0] else [])), self.uidvalidity
 
+    APPEND_TIMEOUT = 300
+
     def append(self, folder: str, raw: bytes, draft=False):
+        """Copie d’un message (Envoyés, Brouillons). Depuis Python 3.5, le délai d’un socket borne l’envoi COMPLET
+        d’un bloc : 20 s ne suffisent pas pour téléverser un message de plusieurs Mo ; le délai est donc allongé
+        le temps de la copie."""
         with self.session() as client:
-            status, _ = client.append(quote_folder(folder), '(\\Draft)' if draft else '(\\Seen)', None, raw)
+            sock = getattr(client, 'sock', None)
+            previous = sock.gettimeout() if sock is not None else None
+            if sock is not None:
+                sock.settimeout(self.APPEND_TIMEOUT)
+            try:
+                status, _ = client.append(quote_folder(folder), '(\\Draft)' if draft else '(\\Seen)', None, raw)
+            finally:
+                if sock is not None:
+                    try:
+                        sock.settimeout(previous)
+                    except OSError:
+                        pass  # Session coupée : elle sera fermée et non réutilisée.
             if status != 'OK':
                 raise RuntimeError('Le serveur a refusé l’enregistrement de la copie.')
 
