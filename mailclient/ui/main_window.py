@@ -277,6 +277,7 @@ class MainWindow(QMainWindow):
         tools_menu.addSeparator()
         action('Préférences', self.preferences, 'Ctrl+,', menu=tools_menu, icon_name='settings-2')
         action('Rechercher des mises à jour', lambda: self.updates.check(manual=True), menu=tools_menu, icon_name='download')
+        action('À propos de Smail', self.about, menu=tools_menu, icon_name='circle-help')
         action('Rechercher', self.search.setFocus, 'Ctrl+F', menu=view_menu, icon_name='search')
         action('Palette de commandes', self.open_palette, 'Ctrl+K', menu=view_menu, icon_name='command')
         view_menu.addSeparator()
@@ -1712,6 +1713,19 @@ class MainWindow(QMainWindow):
                     for action in self.command_actions if action.isEnabled()]
         self.palette_dialog = CommandPalette(self.appearance,commands,self)
         self.palette_dialog.open()
+
+    def about_text(self):
+        from pathlib import Path
+        from mailclient import __version__
+        from mailclient.core import updater
+        mode = ('installé — mises à jour automatiques ' + ('activées' if self.database.setting('auto_update', True) else 'désactivées')
+                if updater.installed_copy() else 'lancé depuis les sources ou un dossier copié — pas de mise à jour automatique')
+        return (f'Smail {__version__}\n\nClient mail de bureau Windows (IMAP/SMTP).\n\n'
+                f'Cette copie : {mode}.\nDonnées locales : {Path(self.database.path).parent}\n\n'
+                f'Licence MIT — https://github.com/{updater.REPOSITORY}')
+
+    def about(self):
+        QMessageBox.about(self, 'À propos de Smail', self.about_text())
 
     def show_update_banner(self, title, description, action_text, callback):
         if self.update_banner is not None:

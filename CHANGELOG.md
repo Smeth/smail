@@ -2,6 +2,10 @@
 
 ## Non publié
 
+Première mise à jour installée automatiquement depuis la 1.1.0.
+
+- Nouveau : Outils › À propos de Smail affiche la version, le mode de mise à jour de cette copie et le dossier des données locales.
+
 ## 1.1.0 — 2026-11-24
 
 Smail 1.1.0 est une mise à jour majeure. **Depuis la 1.0.0, installez-la une fois manuellement** (l’installateur conserve vos comptes, votre cache et vos réglages) : les versions suivantes s’installeront ensuite toutes seules.

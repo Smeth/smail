@@ -233,3 +233,24 @@ def test_up_to_date_and_unreachable(tmp_path, monkeypatch):
     manager.checking = True
     manager.check(manual=True)  # Double clic pendant une recherche.
     assert informed[-1][0] == 'Mises à jour'
+
+
+def test_about_shows_version_and_update_mode(tmp_path, monkeypatch):
+    from mailclient.tests.test_ui import APP  # noqa: F401
+    from mailclient import __version__
+    from mailclient.storage.database import Database
+    from mailclient.core.tls_policy import TLSPolicy
+    from mailclient.ui.main_window import MainWindow
+    db = Database(tmp_path / 'settings.db')
+    window = MainWindow(db, None, TLSPolicy(db), auto_load=False)
+    try:
+        text = window.about_text()
+        assert text.startswith(f'Smail {__version__}\n') and 'depuis les sources' in text and str(tmp_path) in text
+        monkeypatch.setattr(updater, 'installed_copy', lambda: True)
+        assert 'mises à jour automatiques activées' in window.about_text()
+        assert any(action.text() == 'À propos de Smail' for action in window.command_actions)
+    finally:
+        window.reader.shutdown()
+        window.close()
+        from shiboken6 import delete
+        delete(window)
