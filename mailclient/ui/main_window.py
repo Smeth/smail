@@ -579,7 +579,7 @@ class MainWindow(QMainWindow):
             from mailclient.core.smtp_client import build_message, send_message
             address, subject, body = options.mailto
             message, recipients = build_message(account, address, '', '', subject, body or 'unsubscribe')
-            send_message(account, self.service.oauth.credential(account), self.service.tls, message, recipients)
+            send_message(account, self.service.oauth.credential(account, 'smtp'), self.service.tls, message, recipients)
         def done(_):
             self.set_busy(False)
             self.reader.unsubscribe_banner.hide()

@@ -221,10 +221,10 @@ def test_main_window_junk_rule_and_unsubscribe(tmp_path, monkeypatch):
         def action(self, folder, uids, validity, action, target=''):
             calls.append((folder, uids, action, target))
     monkeypatch.setattr(MailService, 'client', lambda *args: Client())
-    monkeypatch.setattr(MailService, 'oauth', type('O', (), {'credential': lambda self, a: 'x'})(), raising=False)
+    monkeypatch.setattr(MailService, 'oauth', type('O', (), {'credential': lambda self, *args: 'x'})(), raising=False)
     monkeypatch.setattr(smtp, 'send_message', lambda account, password, tls, message, recipients: sent.append((message['To'], message['Subject'], recipients)))
     window = MainWindow(db, None, TLSPolicy(db), auto_load=False)
-    window.service.oauth = type('O', (), {'credential': lambda self, a: 'x'})()
+    window.service.oauth = type('O', (), {'credential': lambda self, *args: 'x'})()
     window.reload_accounts()
     assert process_until(lambda: not window.busy and window.table.count() == 1)
     window.table.setCurrentRow(0)

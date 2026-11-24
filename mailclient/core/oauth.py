@@ -112,8 +112,14 @@ class OAuth:
         with self.lock:
             self.vault.set(account.id + ':oauth', json.dumps(result))
 
-    def credential(self, account) -> str:
+    def credential(self, account, protocol='imap') -> str:
+        """Mot de passe ou jeton d’accès ; pour SMTP, le mot de passe SMTP distinct s’il a été défini."""
         if account.auth_method == 'password':
+            if protocol == 'smtp':
+                try:
+                    return self.vault.get(account.id + ':smtp')
+                except RuntimeError:
+                    pass  # Pas de mot de passe SMTP distinct : celui du compte.
             return self.vault.get(account.id)
         with self.lock:
             try:

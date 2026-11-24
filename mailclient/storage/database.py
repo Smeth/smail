@@ -4,7 +4,7 @@ import sqlite3
 import hashlib
 import threading
 from cryptography.fernet import Fernet
-from mailclient.core.accounts import Account
+from mailclient.core.accounts import Account, LOGIN_FIELDS
 
 SCHEMA_VERSION = 2
 
@@ -222,12 +222,26 @@ class Database:
 
     def accounts(self) -> list[Account]:
         with self.connect() as db:
-            return [Account.from_dict(json.loads(row[0])) for row in db.execute('SELECT config FROM accounts ORDER BY rowid')]
+            rows = list(db.execute('SELECT config FROM accounts ORDER BY rowid'))
+        result = []
+        for (config,) in rows:
+            data = json.loads(config)
+            data.update(self.setting(f'logins:{data["id"]}', {}) or {})
+            result.append(Account.from_dict(data))
+        return result
 
     def save(self, account: Account) -> None:
+        """Configuration publique du compte ; les identifiants de connexion à part, dans les réglages,
+        pour que la configuration reste lisible par Smail 1.0.0 (qui refuse les champs inconnus)."""
         account.validate()
-        with self.connect() as db:
-            db.execute('INSERT OR REPLACE INTO accounts VALUES (?,?)', (account.id, json.dumps(account.to_dict())))
+        config = account.to_dict()
+        logins = {name: config.pop(name) for name in LOGIN_FIELDS if name in config}
+        with self.lock, self.connect() as db:
+            db.execute('INSERT OR REPLACE INTO accounts VALUES (?,?)', (account.id, json.dumps(config)))
+            if any(logins.values()):
+                db.execute('INSERT OR REPLACE INTO settings VALUES (?,?)', (f'logins:{account.id}', json.dumps(logins)))
+            else:
+                db.execute('DELETE FROM settings WHERE key=?', (f'logins:{account.id}',))
 
     def pin(self, account: str, endpoint: str) -> str | None:
         with self.connect() as db:
@@ -255,6 +269,7 @@ class Database:
                 self._claim_orphans(db)  # Entrées écrites entre-temps par une ancienne version.
                 db.execute('DELETE FROM accounts WHERE id=?', (account_id,))
                 db.execute('DELETE FROM pins WHERE account=?', (account_id,))
+                db.execute('DELETE FROM settings WHERE key=?', (f'logins:{account_id}',))
                 db.execute('DELETE FROM cache WHERE EXISTS (SELECT 1 FROM cache_owner o WHERE o.kind=cache.kind AND o.key=cache.key AND o.account=?)', (account_id,))
                 db.execute('DELETE FROM cache_owner WHERE account=?', (account_id,))
                 if self._index_exists(db):

@@ -448,7 +448,7 @@ class MailService:
         self.pool.clear(account.id)
         self.tls.forget(account.id)
         failures = 0
-        for key in (account.id, account.id + ':oauth', account.id + ':oauth-client-secret'):
+        for key in (account.id, account.id + ':smtp', account.id + ':oauth', account.id + ':oauth-client-secret'):
             try:
                 self.vault.delete(key)
             except Exception:

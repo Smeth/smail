@@ -153,7 +153,7 @@ class IMAPClient:
         # La configuration et l’empreinte du secret : un changement de paramètres n’emprunte jamais une ancienne session.
         server = self.account.imap
         secret = hashlib.sha256((self.password or '').encode('utf-8')).hexdigest()
-        return (self.account.id, server.host, server.port, server.mode, self.account.email, self.account.auth_method, secret)
+        return (self.account.id, server.host, server.port, server.mode, self.account.email, self.account.imap_user, self.account.auth_method, secret)
 
     @contextmanager
     def session(self):
@@ -190,7 +190,7 @@ class IMAPClient:
             client = self.tls.connect(self.account.id, f'imap:{server.host}:{server.port}:{server.mode}', factory)
         try:
             if self.account.auth_method == 'password':
-                client.login(self.account.email, self.password)
+                client.login(self.account.imap_user, self.password)
             else:
                 client.authenticate('XOAUTH2', lambda challenge: xoauth2(self.account.email, self.password) if not challenge else b'')
             status, capabilities = client.capability()

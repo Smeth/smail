@@ -5,6 +5,7 @@ import re
 
 MODES = ('SSL/TLS', 'STARTTLS', 'Aucun')
 PORTS = {'imap': (993, 143, 143), 'smtp': (465, 587, 25)}
+LOGIN_FIELDS = ('imap_login', 'smtp_login')
 PRESETS = {
     'gmail.com': ('imap.gmail.com', 'smtp.gmail.com'),
     'outlook.com': ('outlook.office365.com', 'smtp.office365.com'),
@@ -34,6 +35,18 @@ class Account:
     oauth_client_id: str = ''
     signature: str = ''
     oauth_tenant: str = 'common'
+    # Identifiants de connexion, si différents de l’adresse (vides : l’adresse e-mail).
+    # Hors configuration du compte en base (voir Database.save) : Smail 1.0.0 refuse les champs inconnus.
+    imap_login: str = ''
+    smtp_login: str = ''
+
+    @property
+    def imap_user(self) -> str:
+        return self.imap_login or self.email
+
+    @property
+    def smtp_user(self) -> str:
+        return self.smtp_login or self.email
 
     def validate(self) -> None:
         if not self.name.strip() or len(self.name) > 200 or any(ord(c) < 32 or ord(c) == 127 for c in self.name + self.email):
@@ -42,6 +55,9 @@ class Account:
             raise ValueError('Adresse e-mail invalide.')
         self.imap.validate()
         self.smtp.validate()
+        for login in (self.imap_login, self.smtp_login):
+            if len(login) > 254 or login != login.strip() or any(ord(c) < 32 or ord(c) == 127 for c in login):
+                raise ValueError('Identifiant de connexion invalide.')
         if self.auth_method not in {'password', 'google', 'microsoft'}:
             raise ValueError('Méthode d’authentification inconnue.')
         if self.auth_method != 'password':

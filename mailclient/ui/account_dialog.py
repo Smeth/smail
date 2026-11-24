@@ -53,6 +53,7 @@ class AccountDialog(QDialog):
         oauth_form.addRow(self.authorize_button)
         layout.addWidget(self.oauth_group)
         self.servers = {}
+        self.logins = {}
         servers_row = QHBoxLayout()
         layout.addLayout(servers_row)
         for protocol in ('imap', 'smtp'):
@@ -70,6 +71,23 @@ class AccountDialog(QDialog):
             fields.addRow('Serveur', host)
             fields.addRow('Type de connexion chiffrée', mode)
             fields.addRow('Port', port)
+            login = QLineEdit()
+            login.setPlaceholderText('Vide : l’adresse e-mail')
+            login.setAccessibleName('Identifiant de connexion '+protocol.upper())
+            login.setToolTip('À renseigner seulement si votre hébergeur fournit un identifiant différent de l’adresse e-mail.')
+            fields.addRow('Identifiant', login)
+            self.logins[protocol] = login
+            if protocol == 'smtp':
+                self.same_smtp_password = QCheckBox('Mot de passe SMTP identique à celui du compte')
+                self.same_smtp_password.setChecked(True)
+                self.smtp_password = QLineEdit()
+                self.smtp_password.setEchoMode(QLineEdit.Password)
+                self.smtp_password.setAccessibleName('Mot de passe SMTP')
+                self.smtp_password.setPlaceholderText('Mot de passe du serveur d’envoi')
+                self.smtp_password.setEnabled(False)
+                self.same_smtp_password.toggled.connect(lambda same: self.smtp_password.setEnabled(not same and self.auth.currentIndex() == 0))
+                fields.addRow('', self.same_smtp_password)
+                fields.addRow('Mot de passe SMTP', self.smtp_password)
             self.servers[protocol] = (host, mode, port)
             mode.currentIndexChanged.connect(lambda index, p=protocol: self.mode_changed(p, index))
             servers_row.addWidget(group)
@@ -128,6 +146,13 @@ class AccountDialog(QDialog):
                 host.setText(config.host)
                 mode.setCurrentIndex(MODES.index(config.mode))
                 port.setValue(config.port)
+                self.logins[protocol].setText(getattr(account, protocol + '_login'))
+            try:
+                secrets.get(account.id + ':smtp')
+                self.same_smtp_password.setChecked(False)  # Un mot de passe SMTP distinct est enregistré.
+                self.smtp_password.setPlaceholderText('Enregistré — saisir pour le remplacer')
+            except Exception:
+                pass
         self.auth.currentIndexChanged.connect(self.auth_changed)
         self.auth_changed()
 
@@ -139,6 +164,9 @@ class AccountDialog(QDialog):
         self.client_secret.setEnabled(self.auth.currentIndex() == 1 and not self.busy)
         self.tenant.setEnabled(self.auth.currentIndex() == 2 and not self.busy)
         self.authorize_button.setEnabled(oauth and not self.busy)
+        for field in (*self.logins.values(), self.same_smtp_password):
+            field.setEnabled(not oauth and not self.busy)  # OAuth2 : l’identité est l’adresse e-mail.
+        self.smtp_password.setEnabled(not oauth and not self.busy and not self.same_smtp_password.isChecked())
 
     def mode_changed(self, protocol, index):
         self.servers[protocol][2].setValue(PORTS[protocol][index])
@@ -164,6 +192,11 @@ class AccountDialog(QDialog):
         account.oauth_client_id = self.client_id.text().strip()
         account.signature = self.signature.mail_parts()[1]  # Version texte : clients sans HTML et Smail 1.0.0.
         account.oauth_tenant = self.tenant.text().strip() or 'common'
+        if account.auth_method == 'password':
+            account.imap_login = self.logins['imap'].text().strip()
+            account.smtp_login = self.logins['smtp'].text().strip()
+            if '\x00' in self.smtp_password.text():
+                raise ValueError('Saisissez un mot de passe SMTP valide.')
         if self.account_id:
             account.id = self.account_id
         else:
@@ -208,11 +241,14 @@ class AccountDialog(QDialog):
             return
         self.set_busy(True)
         self.status.setText('Test des deux serveurs en cours…')
+        smtp_password = self.smtp_password.text() if not self.same_smtp_password.isChecked() else ''
         def operation():
             credential = password if account.auth_method == 'password' and password else self.oauth.credential(account)
             client = IMAPClient(account, credential, self.runner.tls).open()
             client.logout()
-            test_connection(account, credential, self.runner.tls)
+            smtp_credential = smtp_password or (credential if account.auth_method != 'password' or password or self.same_smtp_password.isChecked()
+                                                else self.oauth.credential(account, 'smtp'))
+            test_connection(account, smtp_credential, self.runner.tls)
         self.runner.run(operation, lambda _: self.finished_test('Connexions IMAP et SMTP réussies.'), self.finished_test)
 
     def finished_test(self, message):
@@ -231,6 +267,12 @@ class AccountDialog(QDialog):
             elif account.auth_method != 'password':
                 if not self.oauth.is_authorized(account):
                     raise RuntimeError('Autorisation OAuth2 nécessaire.')
+            if account.auth_method == 'password':
+                if self.same_smtp_password.isChecked():
+                    if hasattr(self.secrets, 'delete'):
+                        self.secrets.delete(account.id + ':smtp')
+                elif self.smtp_password.text():
+                    self.secrets.set(account.id + ':smtp', self.smtp_password.text())
             self.database.save(account)
             formatted = bool(self.signature.mail_parts()[0])
             save_signature(self.database, account.id, self.signature.toHtml() if formatted else '')

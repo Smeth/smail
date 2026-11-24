@@ -83,7 +83,7 @@ def test_service_delete_account_clears_vault_and_session_trust(tmp_path):
     alert = CertificateAlert(account.id, 'imap:h', 'f' * 64, 'issuer', 'dates', 'raison')
     tls.approve(alert, permanent=True)
     MailService(db, vault, tls).delete_account(account)
-    assert set(vault.deleted) == {account.id, account.id + ':oauth', account.id + ':oauth-client-secret'}
+    assert set(vault.deleted) == {account.id, account.id + ':smtp', account.id + ':oauth', account.id + ':oauth-client-secret'}
     assert vault.values == {'other': 'x'}
     assert tls.session == {} and db.pins() == []
     assert db.accounts() == []

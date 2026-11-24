@@ -82,7 +82,7 @@ def open_connection(account, password, tls):
     try:
         client.ehlo()
         if account.auth_method == 'password':
-            client.login(account.email, password)
+            client.login(account.smtp_user, password)
         else:
             payload = xoauth2(account.email, password).decode('utf-8')
             client.auth('XOAUTH2', lambda challenge=None: payload if challenge is None else '', initial_response_ok=True)
