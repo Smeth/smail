@@ -9,7 +9,8 @@ from mailclient.core.imap_client import IMAPClient, ConnectionPool
 from mailclient.core.oauth import OAuth
 from mailclient.core.parser import parse_message, snippet
 from mailclient.core.tls_policy import CertificateAlert
-from mailclient.core.threads import chronological, row_ids, thread_ids
+from mailclient.core.threads import chronological, row_ids, thread_ids, timestamp
+from mailclient.core.search_query import parse as parse_query, matches as query_matches
 from mailclient.core import filters
 import logging
 
@@ -289,32 +290,55 @@ class MailService:
         except Exception:
             pass  # L’index est une accélération : la recherche retombe sur le balayage du cache.
 
-    def _search(self, rows, query):
-        """Recherche hors ligne : index FTS5 si disponible, balayage du cache pour le reste."""
-        result = []
-        folded = query.casefold()
-        indexed = len(query) >= 3 and self.db.index_enabled()
-        hits = self.db.index_search(query) if indexed else set()
+    def _search(self, rows, text):
+        """Recherche avancée hors ligne (mêmes opérateurs qu’en ligne) sur les lignes en cache.
+
+        Mots du message : index FTS5 pour ceux de trois caractères ou plus, sinon décodage du contenu
+        en cache (qui complète l’index au passage). Sans contenu en cache, seuls les en-têtes comptent."""
+        query = parse_query(text)
+        indexed = self.db.index_enabled() and bool(query.words)
+        indexable = indexed and all(len(word) >= 3 for word in query.words)
         known = self.db.index_keys() if indexed else set()
-        for row in rows:
-            if folded in (row.get('sender', '') + ' ' + row.get('subject', '')).casefold():
-                result.append(row)
-                continue
+        hits = {word: self.db.index_search(word) for word in query.words} if indexable else {}
+        def content(row):
             hashed = self.db.hashed_key(self.body_key(row))
-            if hashed in known:
-                if hashed in hits:
-                    result.append(row)
-                continue
+            if indexable and hashed in known:
+                # Contenu reconstitué à partir de l’index : seuls les mots présents y figurent.
+                return ' '.join(word for word in query.words if hashed in hits[word])
             payload = self.db.cache_get('body', self.body_key(row))
             if not payload:
-                continue
-            raw = base64.b64decode(payload)
-            content = self.searchable_text(row, parse_message(raw))
-            if indexed:
-                self.db.index_put(self.body_key(row), row['account'], content)  # Index complété au fil des recherches.
-            if folded in content.casefold():
-                result.append(row)
-        return result
+                return None
+            full = self.searchable_text(row, parse_message(base64.b64decode(payload)))
+            if indexed and hashed not in known:
+                self.db.index_put(self.body_key(row), row['account'], full)  # Index complété au fil des recherches.
+            return full
+        return [row for row in rows if query_matches(query, row, lambda row=row: content(row))]
+
+    def search_all(self, account, text, cache_only=False, limit=100):
+        """Recherche dans tous les dossiers du compte : les plus récents d’abord, au plus « limit » résultats."""
+        folders = self.db.cache_get('folders', account.id, []) or []
+        rows, total, offline = [], 0, cache_only
+        if not cache_only:
+            try:
+                client = self.client(account)
+                folders = client.folders()
+                for folder, _ in folders:
+                    found, count = client.messages(folder, 0, text)
+                    found = self._enrich(found, account, folder)
+                    self._carry_previews(found, self.state(account, folder))
+                    rows += found
+                    total += count
+            except CertificateAlert:
+                raise
+            except Exception:
+                rows, total, offline = [], 0, True  # Serveur indisponible : recherche dans le cache.
+        if offline:
+            for folder, _ in folders:
+                found = self._search(self._known_rows(self.state(account, folder) or {}), text)
+                rows += found
+                total += len(found)
+        rows.sort(key=lambda row: timestamp(row), reverse=True)
+        return dict(rows=rows[:limit], total=min(total, limit), offline=offline, truncated=total > limit)
 
     @staticmethod
     def body_key(row):

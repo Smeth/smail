@@ -22,6 +22,7 @@
 - Confort de lecture : aperçu des pièces jointes (images, PDF, textes en source brute), message dans une fenêtre séparée, impression, glisser-déposer vers un dossier.
 - Réponses : les noms accentués s’affichent en clair dans les champs À/Cc (ils étaient affichés encodés, « =?utf-8?q?… »).
 - Invitations de calendrier : résumé en heure locale, réponse iTIP (accepter, provisoire, refuser), ajout au calendrier Windows ; dépendance `tzdata`.
+- Recherche avancée : opérateurs (de:, à:, objet:, a:pj, est:, après:, avant:, expressions), recherche dans tous les dossiers.
 - Désabonnement des listes de diffusion (un clic RFC 8058, e-mail ou page web), toujours après confirmation.
 - Vue par conversation : regroupement par références, lecture empilée (messages repliés avec extrait au-dessus et en dessous du message ouvert) incluant vos réponses envoyées, actions sur toute la conversation, navigation Alt+Bas / Alt+Haut.
 - Aperçus de la liste calculés à la synchronisation (sans citation ni signature) ; l’adresse du compte n’est plus affichée à la place d’un aperçu absent.

@@ -243,17 +243,44 @@ class IMAPClient:
                     result[folder] = values
         return result
 
+    def search_uids(self, client, query: str = '') -> list[str]:
+        """UID du dossier sélectionné correspondant à la recherche avancée, du plus récent au plus ancien.
+
+        Une commande SEARCH par texte non ASCII (un seul littéral par commande dans imaplib), résultats
+        croisés ; « a:pj » est vérifié sur BODYSTRUCTURE, que SEARCH ne sait pas interroger."""
+        from mailclient.core.search_query import imap_commands, parse
+        parsed = parse(query)
+        found = None
+        for args, literal in imap_commands(parsed):
+            if literal is not None:
+                client.literal = literal
+                status, data = client.uid('search', 'CHARSET', 'UTF-8', *args)
+            else:
+                status, data = client.uid('search', None, *args)
+            if status != 'OK':
+                raise RuntimeError('Le serveur a refusé cette recherche.')
+            uids = set(data[0].split()) if data and data[0] else set()
+            found = uids if found is None else found & uids
+            if not found:
+                return []
+        ordered = sorted(found, key=int, reverse=True)
+        if parsed.attachment:
+            kept = []
+            for start in range(0, min(len(ordered), 5000), 500):  # Au plus 5 000 messages examinés.
+                chunk = ordered[start:start + 500]
+                status, parts = client.uid('fetch', b','.join(chunk).decode(), '(UID BODYSTRUCTURE)')
+                if status != 'OK':
+                    raise RuntimeError('Le serveur a refusé cette recherche.')
+                items = fetch_items(parts)
+                kept += [uid for uid in chunk if uid.decode() in items and
+                         re.search(rb'"(?:ATTACHMENT|FILENAME|NAME)"', items[uid.decode()][0], re.I)]
+            ordered = kept
+        return [uid.decode() for uid in ordered]
+
     def messages(self, folder: str, page: int, query: str = ''):
         with self.session() as client:
             self.select(client, folder)
-            if query:
-                client.literal = query.encode('utf-8')
-                status, data = client.uid('search', 'CHARSET', 'UTF-8', 'TEXT')
-            else:
-                status, data = client.uid('search', None, 'UNDELETED')
-            if status != 'OK':
-                raise RuntimeError('Impossible de rechercher les messages.')
-            ids = list(reversed(data[0].split()))
+            ids = [uid.encode() for uid in self.search_uids(client, query)]
             wanted = [uid.decode() for uid in ids[page * 50:(page + 1) * 50]]
             if not wanted:
                 return [], len(ids)

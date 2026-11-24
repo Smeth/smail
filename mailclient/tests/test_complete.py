@@ -288,9 +288,16 @@ def test_search_is_utf8_literal_not_command_interpolation(account, monkeypatch):
     client.response.return_value = ('UIDVALIDITY', [b'7'])
     client.uid.return_value = ('OK', [b''])
     monkeypatch.setattr(IMAPClient, 'open', lambda self: client)
-    assert IMAPClient(account, '', None).messages('INBOX', 0, 'café "test"') == ([], 0)
-    client.uid.assert_called_once_with('search', 'CHARSET', 'UTF-8', 'TEXT')
-    assert client.literal == 'café "test"'.encode('utf-8')
+    # Texte ASCII : chaîne IMAP entre guillemets, échappée ; tentative d’injection neutralisée.
+    assert IMAPClient(account, '', None).messages('INBOX', 0, 'x" OR ALL "y') == ([], 0)
+    client.uid.assert_called_once_with('search', None, 'UNDELETED', 'TEXT', '"x\\""', 'TEXT', '"OR"', 'TEXT', '"ALL"', 'TEXT', '"\\"y"')
+    # Texte accentué : littéral UTF-8, jamais interpolé dans la commande ; résultats croisés.
+    client.uid.reset_mock()
+    client.uid.return_value = ('OK', [b'5'])
+    IMAPClient(account, '', None).messages('INBOX', 0, 'café test')
+    searches = [call.args for call in client.uid.call_args_list if call.args[0] == 'search']
+    assert searches == [('search', None, 'UNDELETED', 'TEXT', '"test"'), ('search', 'CHARSET', 'UTF-8', 'TEXT')]
+    assert client.literal == 'café'.encode('utf-8')
 
 def test_sync_only_notifies_new_uids_after_first_sync(account, tmp_path, monkeypatch):
     db = Database(tmp_path / 'settings.db')

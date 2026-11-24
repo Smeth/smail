@@ -72,7 +72,9 @@ class MainWindow(QMainWindow):
         self.refresh = Button('Actualiser',self.appearance,'refresh-cw')
         self.search = QLineEdit()
         self.search.setObjectName('Search')
-        self.search.setPlaceholderText('Rechercher dans le dossier : expéditeur, objet, contenu — Entrée')
+        self.search.setPlaceholderText('Rechercher — ex. de:léa objet:budget a:pj après:2026-11-01 — Entrée')
+        from mailclient.core.search_query import HELP as SEARCH_HELP
+        self.search.setToolTip(SEARCH_HELP)
         self.search.setAccessibleName('Rechercher dans le dossier, Entrée pour lancer')
         self.heading = label('Réception','Title')
         toolbar.addWidget(self.heading)
@@ -148,6 +150,12 @@ class MainWindow(QMainWindow):
         self.search_filters = QWidget()
         search_filters = QHBoxLayout(self.search_filters)
         search_filters.setContentsMargins(0,0,0,0)
+        self.result_scope = QComboBox()
+        self.result_scope.addItems(['Ce dossier','Tous les dossiers'])
+        self.result_scope.setAccessibleName('Portée de la recherche')
+        self.result_scope.setToolTip('« Tous les dossiers » : les 100 résultats les plus récents du compte.')
+        self.result_scope.currentIndexChanged.connect(lambda index:self.new_search() if self.search.text().strip() else None)
+        search_filters.addWidget(self.result_scope,1)
         self.result_account = QComboBox()
         self.result_account.addItem('Tous les comptes',None)
         self.result_account.setAccessibleName('Filtrer la page par compte')
@@ -870,8 +878,17 @@ class MainWindow(QMainWindow):
             self.render_rows()
             conversations = self.table.count()
             grouped = f' · {conversations} conversation(s) sur cette page' if conversations != len(self.rows) else ''
-            self.page_label.setText(f'Page {page+1} — {self.total} message(s), 50 par page{grouped}')
-            self.cache_status.setText('Cache local — recherche limitée aux messages synchronisés' if result['offline'] else 'Serveur — recherche dans tout le dossier')
+            if all_folders:
+                labels = dict(self.database.cache_get('folders', account.id, []) or [])
+                for row in self.rows:  # Dossier d’origine visible dans la liste.
+                    row['preview'] = f'[{labels.get(row["folder"], row["folder"])}] ' + (row.get('preview') or '')
+                self.render_rows()
+                self.page_label.setText(f'{len(self.rows)} résultat(s) dans tous les dossiers' +
+                                        (' — les 100 plus récents' if result.get('truncated') else ''))
+            else:
+                self.page_label.setText(f'Page {page+1} — {self.total} message(s), 50 par page{grouped}')
+            self.cache_status.setText('Cache local — recherche limitée aux messages synchronisés' if result['offline'] else
+                                      'Serveur — recherche dans tous les dossiers' if all_folders else 'Serveur — recherche dans tout le dossier')
             if not self.rows and result['offline'] and self.total:
                 self.cache_status.setText('Cette page n’est pas encore en cache. Reconnectez-vous ou augmentez la limite dans Préférences.')
             self.set_busy(False)
@@ -883,7 +900,10 @@ class MainWindow(QMainWindow):
                 self.empty_description.setText(self.cache_status.text())
         offline = self.offline.isChecked() or cache_only
         folder = self.folder_data[index][0]
-        if account:
+        all_folders = bool(query) and account is not None and self.result_scope.currentIndex() == 1
+        if all_folders:
+            operation = lambda: self.service.search_all(account, query, offline)
+        elif account:
             operation = lambda: self.service.messages(account, folder, page, query, offline)
         else:
             accounts = list(self.accounts)
