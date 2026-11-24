@@ -462,8 +462,9 @@ class ComposeWindow(QDialog):
         if size > SIZE_WARNING and QMessageBox.warning(
                 self, 'Message volumineux',
                 f'Ce message fait {size / 1_000_000:.1f} Mo une fois encodé'.replace('.', ',') + f' (les pièces jointes grossissent d’environ un tiers).\n\n'
-                'Gmail, Outlook et la plupart des messageries refusent les messages de plus de 25 Mo : il risque de ne jamais '
-                'arriver, et le refus n’apparaît que plus tard, par un message d’erreur dans votre boîte de réception.\n\n'
+                'Beaucoup de messageries (Outlook, Microsoft 365, messageries d’entreprise) refusent les messages de plus de '
+                '20 à 35 Mo ; Gmail accepte jusqu’à 50 Mo. Selon le destinataire, il risque de ne jamais arriver, et le refus '
+                'n’apparaît que plus tard, par un message d’erreur dans votre boîte de réception.\n\n'
                 'Conseil : retirez des pièces jointes ou partagez-les par un lien (OneDrive, Google Drive…).\n\n'
                 'Envoyer quand même ?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
             return
