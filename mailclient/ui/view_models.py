@@ -1,6 +1,7 @@
 """Adaptateurs de présentation ; aucun accès réseau ou au cache depuis le dessin."""
 from dataclasses import dataclass
 from email.utils import parseaddr, parsedate_to_datetime
+from PySide6.QtCore import QMimeData, Qt
 from PySide6.QtWidgets import QListWidget
 
 @dataclass(frozen=True)
@@ -56,8 +57,31 @@ class MessageRow:
                    bool(row.get('unread')), bool(row.get('starred')), bool(row.get('attachment')),
                    account.name if account else '')
 
+DRAG_MIME = 'application/x-smail-messages'
+
+
 class MessageList(QListWidget):
-    """Garde les points d'entrée de sélection utilisés par les handlers existants."""
+    """Garde les points d'entrée de sélection utilisés par les handlers existants.
+
+    Les messages sélectionnés se glissent sur un dossier ; le glisser ne transporte que leurs
+    identifiants (compte, dossier, UIDVALIDITY, UID), jamais leur contenu."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setDragEnabled(True)
+        self.setDragDropMode(QListWidget.DragOnly)
+        self.setDefaultDropAction(Qt.MoveAction)
+
+    def mimeTypes(self):
+        return [DRAG_MIME]
+
+    def mimeData(self, items):
+        import json
+        keys = [[row.get('account'), row.get('folder'), row.get('uidvalidity', ''), row.get('uid')]
+                for item in items if isinstance(item.data(Qt.UserRole), MessageRow) for row in item.data(Qt.UserRole).rows]
+        data = QMimeData()
+        data.setData(DRAG_MIME, json.dumps(keys).encode('utf-8'))
+        data.setText(f'{len(keys)} message(s)')
+        return data
     def selectRow(self, index):
         self.setCurrentRow(index)
 

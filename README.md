@@ -91,6 +91,10 @@ Le HTML est nettoyé sur liste blanche avec Bleach. Scripts, iframes, formulaire
 
 Les images distantes sont bloquées jusqu’au clic **Afficher les images**. Ce clic autorise les seules images HTTP/HTTPS du message courant ; il peut signaler votre lecture à l’expéditeur. Le message suivant rétablit le blocage. Les images intégrées PNG/JPEG/GIF/WebP via Content-ID ne nécessitent pas de réseau. Les liens sont inactifs et la mise en page peut être simplifiée par le nettoyage.
 
+**Aperçu** (bouton ou double-clic sur une pièce jointe) : images et PDF s’affichent dans Smail, sans programme externe ni fichier temporaire ; les fichiers texte (y compris HTML, XML, CSV, calendrier) sont montrés en source brute, jamais interprétés, dans la limite de 2 Mo. Les fichiers exécutables ou actifs ne sont jamais prévisualisés.
+
+**Ouvrir dans une fenêtre** (double-clic sur un message, ou Ctrl+O) affiche le message dans sa propre fenêtre, avec le même lecteur isolé ; Répondre, Répondre à tous et Transférer y restent disponibles, le rangement se fait depuis la liste. **Imprimer…** (Ctrl+P) imprime l’en-tête et le corps nettoyé, sans image distante ; choisissez l’imprimante « Microsoft Print to PDF » pour obtenir un PDF. Les messages sélectionnés peuvent être **glissés sur un dossier** de la barre latérale pour les y déplacer (pas dans la réception unifiée ni hors ligne).
+
 Les pièces jointes ne sont jamais ouvertes automatiquement. Sélectionnez-en une puis **Enregistrer la pièce jointe…**. Les noms sont assainis pour Windows ; les exécutables, scripts et certains formats actifs affichent un avertissement supplémentaire avec annulation par défaut. Les fichiers que vous enregistrez explicitement ne sont pas protégés par le chiffrement du cache.
 
 ## Rédiger et envoyer

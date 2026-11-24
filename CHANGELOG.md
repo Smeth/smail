@@ -19,6 +19,8 @@
 - Rédaction HTML : gras, italique, souligné, listes, liens ; HTML reconstruit et texte brut équivalent ; signature mise en forme par compte.
 - Règles de tri, expéditeurs bloqués et approuvés, spam signalé par le serveur, actions « Signaler comme spam » et « Ce n’est pas un spam ».
 - Annulation d’envoi (délai réglable), envoi programmé avec boîte d’envoi locale, report de messages (dossier « Reportés »).
+- Confort de lecture : aperçu des pièces jointes (images, PDF, textes en source brute), message dans une fenêtre séparée, impression, glisser-déposer vers un dossier.
+- Réponses : les noms accentués s’affichent en clair dans les champs À/Cc (ils étaient affichés encodés, « =?utf-8?q?… »).
 - Désabonnement des listes de diffusion (un clic RFC 8058, e-mail ou page web), toujours après confirmation.
 - Vue par conversation : regroupement par références, lecture empilée (messages repliés avec extrait au-dessus et en dessous du message ouvert) incluant vos réponses envoyées, actions sur toute la conversation, navigation Alt+Bas / Alt+Haut.
 - Aperçus de la liste calculés à la synchronisation (sans citation ni signature) ; l’adresse du compte n’est plus affichée à la place d’un aperçu absent.

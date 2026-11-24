@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, Q
     QLineEdit, QCheckBox, QToolBar, QInputDialog, QMessageBox, QSystemTrayIcon, QMenu,
     QStyle, QApplication, QFileDialog, QFrame, QScrollArea, QStackedWidget, QListWidgetItem, QButtonGroup,
     QAbstractItemView)
-from PySide6.QtCore import Qt, QTimer, QSaveFile, QIODevice
+from PySide6.QtCore import Qt, QTimer, QSaveFile, QIODevice, QEvent
 from PySide6.QtGui import QFont, QAction, QActionGroup, QShortcut, QKeySequence
 from mailclient.ui.account_dialog import AccountDialog
 from mailclient.ui.settings_dialog import SettingsDialog
@@ -17,7 +17,7 @@ from mailclient.ui.presentation import install_theme
 from mailclient.ui.components import Button, Card, label, MailDelegate, Skeleton, Banner, IconLabel, fade
 from mailclient.ui.icons import icon
 from mailclient.ui.theme import VARIANTS, ACCENTS
-from mailclient.ui.view_models import MessageRow, MessageList
+from mailclient.ui.view_models import MessageRow, MessageList, DRAG_MIME
 
 class MainWindow(QMainWindow):
     def __init__(self, database, secrets, tls, auto_load=True):
@@ -34,6 +34,7 @@ class MainWindow(QMainWindow):
         self.local_copy = None
         self.auto_load = auto_load
         self.thread_rows, self.thread_account, self.thread_index = [], None, -1
+        self.message_windows, self.pending_window = set(), False
         self.setWindowTitle('Smail — Client mail')
         self.resize(1440, 900)
         self.setMinimumSize(1080,720)
@@ -223,7 +224,9 @@ class MainWindow(QMainWindow):
         self.single_actions = [
             action('Répondre', lambda: self.compose('reply'), 'Ctrl+R', True, icon_name='reply'),
             action('Répondre à tous', lambda: self.compose('reply_all'), 'Ctrl+Shift+R', True, icon_name='reply-all'),
-            action('Transférer', lambda: self.compose('forward'), 'Ctrl+L', True, icon_name='forward')]
+            action('Transférer', lambda: self.compose('forward'), 'Ctrl+L', True, icon_name='forward'),
+            action('Ouvrir dans une fenêtre', self.open_in_window, 'Ctrl+O', True, icon_name='layout-panel-left'),
+            action('Imprimer…', self.reader.print_message, 'Ctrl+P', True, icon_name='file-text')]
         actions.addSeparator()
         action('Lu / non lu', self.toggle_read, needs_message=True, icon_name='mail')
         action('Étoiler', self.toggle_star, needs_message=True, icon_name='star')
@@ -294,6 +297,9 @@ class MainWindow(QMainWindow):
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.show_message_menu)
         self.folders.setContextMenuPolicy(Qt.CustomContextMenu)
+        # Les messages glissés depuis la liste se déposent sur un dossier.
+        self.folders.viewport().setAcceptDrops(True)
+        self.folders.viewport().installEventFilter(self)
         self.folders.customContextMenuRequested.connect(self.show_folder_menu)
         self.add.clicked.connect(self.add_account)
         self.refresh.clicked.connect(self.load_folders)
@@ -306,6 +312,7 @@ class MainWindow(QMainWindow):
         self.table.itemSelectionChanged.connect(self.read_selected)
         self.table.itemSelectionChanged.connect(self.update_actions)
         self.table.itemActivated.connect(lambda item:self.reader.tabs.setFocus())
+        self.table.itemDoubleClicked.connect(lambda item:self.open_in_window())
         QShortcut(QKeySequence('Ctrl+Shift+D'),self,activated=lambda:self.density_box.setCurrentIndex((self.density_box.currentIndex()+1)%3))
         self.quick_keys = []
         for key,callback in [('J',lambda:self.move_selection(1)),('K',lambda:self.move_selection(-1)),
@@ -376,7 +383,7 @@ class MainWindow(QMainWindow):
         self.update_actions()
         menu = QMenu(self.table)
         for index,action in enumerate(self.message_actions):
-            if index in (3,5,9,12):  # Réponse · états · rangement · indésirables · règles
+            if index in (3,5,7,11,14):  # Réponse · fenêtre et impression · états · rangement · indésirables · règles
                 menu.addSeparator()
             menu.addAction(action)
         menu.exec(self.table.viewport().mapToGlobal(position))
@@ -732,6 +739,7 @@ class MainWindow(QMainWindow):
                                                 (self.is_special(*current,'trash') or self.is_special(*current,'junk')))
 
     def failure(self, message):
+        self.pending_window = False
         self.set_busy(False)
         self.statusBar().showMessage(message)
         if not self.rows:
@@ -912,6 +920,8 @@ class MainWindow(QMainWindow):
             self.reader.display(mail, keep_thread=True)
             self.reader.set_thread([self.thread_entry(r, account) for r in self.thread_rows], index, self.thread_elsewhere())
             self.set_busy(False)
+            if self.pending_window:
+                QTimer.singleShot(0, self.open_in_window)
         def failed(message):
             self.reader.clear(message, keep_thread=True)
             self.failure(message)
@@ -955,6 +965,8 @@ class MainWindow(QMainWindow):
                 current.setText(f'{view.sender} · {view.subject} · {view.preview} · {view.time}')
             self.set_busy(False)
             fade(self.reader.headers,self.appearance)
+            if self.pending_window:
+                QTimer.singleShot(0, self.open_in_window)  # Double-clic pendant le chargement.
             self.statusBar().showMessage('Message chargé ; images distantes bloquées par défaut.')
         def failed(message):
             self.reader.clear(message)
@@ -1044,6 +1056,70 @@ class MainWindow(QMainWindow):
         elif kind == 'trash' and QMessageBox.question(self, 'Déplacer dans la corbeille', f'Déplacer {subject} dans la corbeille ?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
             return
         self.mutate(None, plan=plan)
+
+    def eventFilter(self, watched, event):
+        if watched is self.folders.viewport() and event.type() in (QEvent.DragEnter, QEvent.DragMove, QEvent.Drop):
+            target = self.drop_target(event)
+            if target is None:
+                event.ignore()
+                return True
+            event.acceptProposedAction()
+            if event.type() == QEvent.Drop:
+                import json
+                self.drop_messages(json.loads(bytes(event.mimeData().data(DRAG_MIME)).decode('utf-8')), target)
+            return True
+        return super().eventFilter(watched, event)
+
+    def drop_target(self, event):
+        """Dossier sous le pointeur, s’il peut recevoir les messages glissés."""
+        if self.busy or self.offline.isChecked() or self.account() is None or not event.mimeData().hasFormat(DRAG_MIME):
+            return None
+        item = self.folders.itemAt(event.position().toPoint())
+        index = self.folders.row(item) if item else -1
+        current = self.current_folder()
+        if not 0 <= index < len(self.folder_data) or (current and self.folder_data[index][0] == current[0]):
+            return None
+        return self.folder_data[index][0]
+
+    def drop_messages(self, keys, target):
+        wanted = {tuple(key) for key in keys}
+        rows = [row for row in self.rows if (row.get('account'), row.get('folder'), row.get('uidvalidity', ''), row.get('uid')) in wanted]
+        account = self.account()
+        if not rows or account is None:
+            return
+        label = next((label for name, label in self.folder_data if name == target), target)
+        self.mutate(None, plan=[(account, rows, 'move', target)])
+        self.statusBar().showMessage(f'{len(rows)} message(s) déplacé(s) vers « {label} ».')
+
+    def displayed_account(self):
+        if self.thread_rows and self.thread_account:
+            return self.thread_account
+        row = self.selected_row()
+        return self.row_account(row) if row else None
+
+    def open_in_window(self):
+        """Message affiché dans sa propre fenêtre ; pendant un chargement, ouverture dès la fin."""
+        if self.busy:
+            self.pending_window = True
+            return
+        self.pending_window = False
+        account = self.displayed_account()
+        if self.reader.mail is None or account is None:
+            return
+        from mailclient.ui.message_window import MessageWindow
+        window = MessageWindow(self.reader.mail, account, self.appearance.dark)
+        window.composeRequested.connect(self.compose_from)
+        window.closed.connect(self.message_windows.discard)
+        self.message_windows.add(window)
+        window.show()
+
+    def compose_from(self, mail, account, mode):
+        if account is None or not any(a.id == account.id for a in self.accounts):
+            self.statusBar().showMessage('Le compte de ce message n’existe plus.')
+            return
+        window = ComposeWindow(self.service, self.accounts, account, reply_fields(mail, account, mode), parent=self, offline=self.offline.isChecked)
+        self.composers.add(window)
+        window.show()
 
     def compose(self, mode=None):
         if not self.accounts:
@@ -1433,6 +1509,8 @@ class MainWindow(QMainWindow):
         for window in self.composers:
             if window.isVisible():
                 window.close()
+        for window in list(self.message_windows):
+            window.close()
         pending = self.busy or self.runner.tasks or any(thread.isRunning() for thread in self.idle_threads) or (self.sync_thread and self.sync_thread.isRunning()) or any(window.isVisible() for window in self.composers)
         if pending:
             self.statusBar().showMessage('Fermeture : attente des connexions et de l’enregistrement des brouillons…')

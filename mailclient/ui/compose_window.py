@@ -2,13 +2,13 @@
 import base64
 import re
 from uuid import uuid4
-from email.utils import getaddresses, formataddr
+from email.utils import getaddresses
 import bleach
 from PySide6.QtCore import QTimer, Qt, QSize
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
     QComboBox, QListWidgetItem, QFileDialog, QLabel, QMessageBox, QWidget, QMenu, QSizePolicy)
 from mailclient.core.parser import Attachment
-from mailclient.core.smtp_client import build_message, send_message, addresses
+from mailclient.core.smtp_client import build_message, send_message, addresses, display_address
 from mailclient.core.sync import Runner
 from mailclient.ui.dialog_shell import appearance
 from mailclient.ui.components import Button, Card, label
@@ -30,7 +30,7 @@ def reply_fields(mail, account, mode):
     to, cc = '', ''
     if mode != 'forward':
         pairs = getaddresses([mail.reply_to or mail.sender])
-        to = ', '.join(formataddr(pair) for pair in pairs if pair[1].casefold() != account.email.casefold())
+        to = ', '.join(display_address(pair) for pair in pairs if pair[1].casefold() != account.email.casefold())
         if not to:
             to = mail.reply_to or mail.sender
         if mode == 'reply_all':
@@ -39,7 +39,7 @@ def reply_fields(mail, account, mode):
             for pair in getaddresses([mail.recipients, mail.cc]):
                 if pair[1] and pair[1].casefold() not in seen:
                     seen.add(pair[1].casefold())
-                    extra.append(formataddr(pair))
+                    extra.append(display_address(pair))
             cc = ', '.join(extra)
     ids = re.findall(r'<[^<>\s]+>', mail.message_id)
     refs = re.findall(r'<[^<>\s]+>', mail.references)
@@ -541,7 +541,7 @@ class ComposeWindow(QDialog):
             if refused:
                 rejected = {value.casefold() for value in refused}
                 for widget in (self.to, self.cc, self.bcc):
-                    widget.setText(', '.join(formataddr(pair) for pair in addresses(widget.text()) if pair[1].casefold() in rejected))
+                    widget.setText(', '.join(display_address(pair) for pair in addresses(widget.text()) if pair[1].casefold() in rejected))
                 self.changed()
                 self.status.setText('Envoi partiel : seuls les destinataires refusés restent dans ce brouillon. Les autres ont reçu le message.')
             else:

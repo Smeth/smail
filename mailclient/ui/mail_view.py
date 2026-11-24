@@ -77,6 +77,22 @@ class MailPage(QWebEnginePage):
     def acceptNavigationRequest(self, url, navigation_type, is_main_frame):
         return is_main_frame and url.scheme() in {'data', 'about', 'smail'}
 
+def print_document(mail):
+    """Document imprimable : en-tête du message puis corps nettoyé (aucune image distante)."""
+    import html as html_module
+    from PySide6.QtGui import QTextDocument
+    safe = safe_document(mail, remote_images=False, dark=False)
+    body = safe.split('<body>', 1)[-1].rsplit('</body>', 1)[0]
+    rows = [('De', mail.sender), ('À', mail.recipients), ('Cc', mail.cc), ('Date', mail.date)]
+    header = ''.join(f'<tr><td style="color:#56657a;padding-right:12px">{name}</td><td>{html_module.escape(value)}</td></tr>'
+                     for name, value in rows if value)
+    document = QTextDocument()
+    document.setDefaultStyleSheet('body{font-family:"Segoe UI",Arial,sans-serif;font-size:11pt}')
+    document.setHtml(f'<h2>{html_module.escape(mail.subject or "(Sans objet)")}</h2><table>{header}</table><hr>{body}'
+                     + (f'<p style="color:#56657a">Pièces jointes : {html_module.escape(", ".join(a.name for a in mail.attachments))}</p>'
+                        if mail.attachments else ''))
+    return document
+
 class MailView(QWidget):
     replyRequested = Signal()
     replyAllRequested = Signal()
@@ -236,6 +252,7 @@ class MailView(QWidget):
             settings.setAttribute(option, False)
         self.tabs.addTab(self.web, 'HTML sécurisé')
         self.tabs.addTab(self.text, 'Texte brut')
+        self.print_action = self.more_menu.addAction('Imprimer…', self.print_message)
         self.plain_action = self.more_menu.addAction('Lire en texte brut')
         self.plain_action.setCheckable(True)
         self.plain_action.toggled.connect(lambda checked:self.tabs.setCurrentIndex(1 if checked else 0))
@@ -252,6 +269,9 @@ class MailView(QWidget):
         attachment_header.addStretch()
         self.save_button = Button('Enregistrer…',self.theme,'download','Secondary',tooltip='Enregistrer la pièce jointe sélectionnée')
         self.save_button.clicked.connect(self.save_attachment)
+        self.preview_button = Button('Aperçu',self.theme,'file-text','Secondary',tooltip='Aperçu de la pièce jointe sélectionnée (double-clic)')
+        self.preview_button.clicked.connect(self.preview_attachment)
+        attachment_header.addWidget(self.preview_button)
         attachment_header.addWidget(self.save_button)
         attachment_layout.addLayout(attachment_header)
         self.attachments = AttachmentGrid()
@@ -259,6 +279,8 @@ class MailView(QWidget):
         self.attachments.viewport().setAcceptDrops(False)
         self.attachment_title.toggled.connect(self.attachments.setVisible)
         self.attachments.currentRowChanged.connect(lambda row: self.save_button.setEnabled(row >= 0))
+        self.attachments.currentRowChanged.connect(self.update_preview_button)
+        self.attachments.itemDoubleClicked.connect(lambda item: self.preview_attachment())
         attachment_layout.addWidget(self.attachments)
         message_layout.addWidget(self.attachment_section)
         message_layout.addWidget(self.tabs,1)
@@ -366,6 +388,7 @@ class MailView(QWidget):
         self.attachment_section.hide()
         self.attachments.hide()
         self.save_button.hide()
+        self.preview_button.hide()
         self.text.clear()
         self.attachments.clear()
         self.images.setEnabled(False)
@@ -406,6 +429,8 @@ class MailView(QWidget):
         self.attachment_title.setVisible(bool(mail.attachments))
         self.attachments.hide()
         self.save_button.setVisible(bool(mail.attachments))
+        self.preview_button.setVisible(bool(mail.attachments))
+        self.update_preview_button(self.attachments.currentRow())
         self.attachment_section.setVisible(bool(mail.attachments))
         self.attachment_title.setText(f'Pièces jointes · {len(mail.attachments)}')
         self.attachment_title.setChecked(False)
@@ -466,6 +491,36 @@ class MailView(QWidget):
         self.layout().setContentsMargins(0,0,0,0)
         if self.mail is not None:
             self.render_html(self.interceptor.remote)
+
+    def update_preview_button(self, row):
+        from mailclient.ui.attachment_preview import preview_kind
+        attachments = self.mail.attachments if self.mail else []
+        possible = 0 <= row < len(attachments) and preview_kind(attachments[row]) is not None
+        self.preview_button.setEnabled(possible)
+        self.preview_button.setToolTip('Aperçu de la pièce jointe sélectionnée (double-clic)' if possible or row < 0 else
+                                       'Aperçu indisponible pour ce type de fichier : utilisez « Enregistrer… ».')
+
+    def preview_attachment(self):
+        from mailclient.ui.attachment_preview import AttachmentPreview, preview_kind
+        row = self.attachments.currentRow()
+        if self.mail is None or not 0 <= row < len(self.mail.attachments):
+            return
+        attachment = self.mail.attachments[row]
+        if preview_kind(attachment) is None:
+            return
+        self.preview_dialog = AttachmentPreview(attachment, self.save_attachment, self)
+        self.preview_dialog.open()
+
+    def print_message(self):
+        if self.mail is None:
+            return
+        from PySide6.QtPrintSupport import QPrintDialog, QPrinter
+        printer = QPrinter(QPrinter.HighResolution)
+        printer.setDocName(self.mail.subject or 'Message')
+        dialog = QPrintDialog(printer, self)
+        dialog.setWindowTitle('Imprimer le message')
+        if dialog.exec():
+            print_document(self.mail).print_(printer)
 
     def save_attachment(self):
         row = self.attachments.currentRow()

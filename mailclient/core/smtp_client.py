@@ -8,6 +8,16 @@ from email import policy
 from mailclient.core.tls_policy import require_starttls
 from mailclient.core.oauth import xoauth2
 
+def display_address(pair) -> str:
+    """Adresse lisible pour un champ À/Cc : contrairement à formataddr, le nom n’est jamais encodé
+    (« Léa <lea@x.fr> », pas « =?utf-8?q?L=C3=A9a?= »). L’encodage RFC 2047 a lieu à l’envoi."""
+    name, address = ' '.join(pair[0].split()), pair[1]
+    if not name:
+        return address
+    if any(c in name for c in ',;"<>@()[]:\\'):
+        name = '"' + name.replace('\\', '\\\\').replace('"', '\\"') + '"'
+    return f'{name} <{address}>'
+
 def addresses(value: str) -> list[tuple[str, str]]:
     if any(ord(c) < 32 or ord(c) == 127 for c in value):
         raise ValueError('Les en-têtes ne doivent pas contenir de caractères de contrôle.')
