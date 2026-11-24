@@ -2,6 +2,10 @@
 
 ## Non publié
 
+- Ajout de compte : réglages des serveurs détectés à partir de l’adresse (fichier publié par l’hébergeur, base publique de Thunderbird, noms habituels ; seul le domaine est transmis) ; champ « Votre nom (vu par vos destinataires) ».
+- Notifications flottantes en bas de la fenêtre, avec « Annuler » après un déplacement (corbeille, archives, dossier) : les messages reviennent à leur place.
+- Dossiers : icônes, dossiers système en tête et nombre de non-lus. Liste des messages groupée par date (« Aujourd’hui », « Hier »…) avec actions au survol (archiver, supprimer, lu/non lu).
+- En-tête simplifié : recherche avec formulaire « Filtres », bouton « Commandes », indicateur de connexion ; « Hors ligne » dans le menu Comptes.
 - Paquet MSIX pour le Microsoft Store (`tools/build_msix.py`, construit par la CI) ; la version Store laisse ses mises à jour au Store. Politique de confidentialité (`PRIVACY.md`).
 
 ## 1.1.1 — 2026-11-24

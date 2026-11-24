@@ -382,6 +382,33 @@ class MailService:
                 for row in group:
                     self.db.cache_delete('body', self.body_key(row))
 
+    def unread(self, account) -> dict:
+        """Non-lus par dossier, relevés à la dernière synchronisation."""
+        return self.db.cache_get('unread', account.id) or {}
+
+    def restore(self, account, rows, moved_to) -> int:
+        """Annule un déplacement : remet ces messages de `moved_to` dans leur dossier d’origine.
+
+        Un message déplacé reçoit un nouvel UID dans sa destination : il y est retrouvé par son Message-ID.
+        Renvoie le nombre de messages remis (ceux sans Message-ID ne peuvent pas l’être)."""
+        rows = [rows] if isinstance(rows, dict) else list(rows)
+        client = self.client(account)
+        by_source = {}
+        for row in rows:
+            if not row.get('message_id'):
+                continue
+            uids, validity = client.find_by_message_id(moved_to, row['message_id'])
+            if uids:
+                by_source.setdefault(row['folder'], ([], validity))[0].append(uids)
+        restored = 0
+        for source, (found, validity) in by_source.items():
+            client.action(moved_to, ','.join(found), validity, 'move', source)
+            restored += len(found)
+        state = self.state(account, moved_to)
+        if state and restored:
+            self.db.cache_delete('mailbox', cache_key(account.id, moved_to))  # Liste à relire au prochain affichage.
+        return restored
+
     def _apply_cached(self, account, folder, uids, action):
         state = self.state(account, folder)
         if not state:
@@ -465,6 +492,8 @@ class MailService:
             raise
         except Exception:
             statuses = {}  # Synchronisation complète de chaque dossier.
+        if statuses:
+            self.db.cache_put('unread', account.id, {folder: status.get('UNSEEN', 0) for folder, status in statuses.items()}, account.id)
         new_count = 0
         senders = []
         for folder, label in folders:

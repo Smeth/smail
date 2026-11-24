@@ -17,7 +17,10 @@ from mailclient.ui.presentation import install_theme
 from mailclient.ui.components import Button, Card, label, MailDelegate, Skeleton, Banner, IconLabel, fade
 from mailclient.ui.icons import icon
 from mailclient.ui.theme import VARIANTS, ACCENTS
-from mailclient.ui.view_models import MessageRow, MessageList, DRAG_MIME
+from mailclient.ui.view_models import MessageRow, MessageList, DRAG_MIME, date_group
+from mailclient.core.threads import timestamp
+
+GROUP_ROLE = Qt.UserRole + 3  # Groupe de dates de la ligne (« Hier »…).
 
 class MainWindow(QMainWindow):
     def __init__(self, database, secrets, tls, auto_load=True):
@@ -75,14 +78,18 @@ class MainWindow(QMainWindow):
         self.refresh = Button('Actualiser',self.appearance,'refresh-cw')
         self.search = QLineEdit()
         self.search.setObjectName('Search')
-        self.search.setPlaceholderText('Rechercher — ex. de:léa objet:budget a:pj après:2026-11-01 — Entrée')
+        self.search.setPlaceholderText('Rechercher')
         from mailclient.core.search_query import HELP as SEARCH_HELP
         self.search.setToolTip(SEARCH_HELP)
         self.search.setAccessibleName('Rechercher dans le dossier, Entrée pour lancer')
         self.heading = label('Réception','Title')
         toolbar.addWidget(self.heading)
         toolbar.addWidget(self.search,1)
-        self.command_button = Button('Ctrl+K',self.appearance,'command',tooltip='Palette de commandes · Ctrl+K')
+        # Filtres : un formulaire écrit les opérateurs (de:, objet:, a:pj…) à la place de l’utilisateur.
+        self.filters_button = Button('Filtres',self.appearance,'filter',tooltip='Filtres de recherche : expéditeur, objet, pièce jointe, dates…')
+        self.filters_button.clicked.connect(self.open_search_filters)
+        toolbar.addWidget(self.filters_button)
+        self.command_button = Button('',self.appearance,'command',tooltip='Commandes (Ctrl+K)')
         self.command_button.clicked.connect(self.open_palette)
         toolbar.addWidget(self.command_button)
         toolbar.addWidget(self.refresh)
@@ -92,7 +99,11 @@ class MainWindow(QMainWindow):
         self.offline = QCheckBox('Hors ligne')
         self.offline.setFocusPolicy(Qt.TabFocus)
         self.offline.setToolTip('Travailler sur le cache local, sans aucune connexion au serveur')
-        toolbar.addWidget(self.offline)
+        self.offline.hide()  # Réglage rare : menu Comptes › Hors ligne ; l’état reste affiché par l’indicateur.
+        self.connection = label('', 'Small')
+        self.connection.setAccessibleName('État de la connexion')
+        self.last_sync = None
+        toolbar.addWidget(self.connection)
         header.box.addLayout(toolbar)
         layout.addWidget(header)
         self.security, self.cache_status = QLabel(), QLabel()
@@ -137,6 +148,9 @@ class MainWindow(QMainWindow):
         self.sidebar.box.addWidget(label('DOSSIERS','Eyebrow'))
         self.folders = QListWidget()
         self.folders.setObjectName('SettingsNav')
+        from mailclient.ui.folder_list import FolderDelegate
+        self.folder_delegate = FolderDelegate(self.appearance, self.folders)
+        self.folders.setItemDelegate(self.folder_delegate)
         self.folders.setAccessibleName('Dossiers du compte')
         self.sidebar.box.addWidget(self.folders,1)
         self.shortcut_hint = label('J / K  parcourir\nE  archiver   S  étoiler','Small')
@@ -183,6 +197,7 @@ class MainWindow(QMainWindow):
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.table.setMouseTracking(True)
         self.table.setItemDelegate(MailDelegate(self.appearance,self.table))
+        self.table.itemDelegate().on_action = self.row_action  # Archiver / supprimer / lu au survol d’une ligne.
         self.list_stack = QStackedWidget()
         self.list_stack.addWidget(self.table)
         self.list_stack.addWidget(Skeleton(self.appearance))
@@ -205,6 +220,8 @@ class MainWindow(QMainWindow):
         split.setSizes([230,430,740])
         layout.addWidget(split, 1)
         self.setCentralWidget(root)
+        from mailclient.ui.toast import Toast
+        self.toast = Toast(root, lambda: self.appearance.colors)
         self.menuBar().setNativeMenuBar(False)
         file_menu = self.menuBar().addMenu('Fichier')
         actions = self.menuBar().addMenu('Message')
@@ -378,6 +395,7 @@ class MainWindow(QMainWindow):
         from pathlib import Path
         from mailclient.ui.updates import UpdateManager
         self.updates = UpdateManager(self, database, self.runner, Path(database.path).parent)
+        self.update_connection()
         from mailclient.ui.send_queue import SendQueue
         self.send_queue = SendQueue(self, self.service, database)
         if auto_load:
@@ -448,7 +466,7 @@ class MainWindow(QMainWindow):
         self.set_busy(True)
         def done(result):
             self.set_busy(False)
-            self.statusBar().showMessage(message(result) if callable(message) else message)
+            self.notify(message(result) if callable(message) else message)
             self.load_folders() if reload_folders else self.load_messages()
         self.runner.run(operation, done, self.failure)
 
@@ -774,7 +792,10 @@ class MainWindow(QMainWindow):
 
     def set_busy(self, busy):
         self.busy = busy
-        for widget in (self.account_box, self.add, self.refresh, self.folders, self.table, self.search, self.offline):
+        focused = QApplication.focusWidget()
+        if busy and focused in (self.search, self.table, self.folders):
+            self.focus_before = focused  # Le champ désactivé perd le focus : il le retrouvera ensuite.
+        for widget in (self.account_box, self.add, self.refresh, self.folders, self.table, self.search, self.offline, self.filters_button):
             widget.setEnabled(not busy)
         for widget in (self.account_cards,self.account_chips,self.unified_button):
             widget.setEnabled(not busy)
@@ -785,6 +806,12 @@ class MainWindow(QMainWindow):
             self.list_stack.setCurrentIndex(1)
         elif not busy:
             self.list_stack.setCurrentIndex(0 if self.table.count() else 2)
+            # Pendant le chargement, Qt a donné le focus au bouton suivant de l’en-tête (cadre bleu sans raison) :
+            # il revient au champ qui l’avait, ou à la liste des messages.
+            focused = QApplication.focusWidget()
+            if isinstance(focused, Button) and focused.window() is self:
+                target = getattr(self, 'focus_before', None) or self.table
+                (target if target.isEnabled() else self.table).setFocus(Qt.OtherFocusReason)
         self.update_actions()
 
     def update_actions(self):
@@ -804,10 +831,32 @@ class MainWindow(QMainWindow):
         self.folder_actions['empty'].setEnabled(online and current is not None and
                                                 (self.is_special(*current,'trash') or self.is_special(*current,'junk')))
 
+    def open_search_filters(self):
+        from mailclient.ui.search_dialog import SearchDialog
+        dialog = SearchDialog(self.search.text(), self)
+        if dialog.exec():
+            self.search.setText(dialog.query())
+            self.new_search()
+
+    def update_connection(self):
+        """Indicateur discret de l’en-tête : en ligne (dernière synchronisation) ou hors ligne."""
+        if self.offline.isChecked():
+            self.connection.setText('○ Hors ligne · cache local')
+            self.connection.setToolTip('Aucune connexion aux serveurs. Pour vous reconnecter : Comptes › Hors ligne.')
+        else:
+            when = f' · synchronisé à {self.last_sync:%H:%M}' if self.last_sync else ''
+            self.connection.setText('● En ligne' + when)
+            self.connection.setToolTip('Smail se connecte à vos serveurs. Pour travailler sans connexion : Comptes › Hors ligne.')
+
+    def notify(self, text, action=None, callback=None, kind='info'):
+        """Message important : notification flottante (avec action éventuelle) et barre d’état."""
+        self.statusBar().showMessage(text, 15_000)
+        self.toast.show_message(text, action, callback, kind)
+
     def failure(self, message):
         self.pending_window = False
         self.set_busy(False)
-        self.statusBar().showMessage(message)
+        self.notify(message, kind='error')
         if not self.rows:
             self.empty_title.setText('Connexion ou opération indisponible')
             self.empty_description.setText(message)
@@ -841,18 +890,19 @@ class MainWindow(QMainWindow):
             return
         if account is None:
             self.folder_data = [('INBOX', 'Réception unifiée')]
-            self.folders.addItem('Réception unifiée')
+            self.fill_folders(self.folder_data)
             self.folders.setCurrentRow(0)
             return
         self.set_busy(True)
         def done(result):
             folders, offline = result
-            self.folder_data = folders
+            from mailclient.ui.folder_list import ordered
+            self.folder_data = folders = ordered(folders)
             self.folders.blockSignals(True)
-            self.folders.addItems([label for _, label in folders])
+            self.fill_folders(folders)
             self.folders.blockSignals(False)
             self.set_busy(False)
-            self.cache_status.setText('Dossiers du cache hors ligne' if offline else 'Connecté au serveur')
+            self.cache_status.setText('Dossiers enregistrés sur ce PC (hors ligne)' if offline else '')
             if folders:
                 index = next((i for i,(name,_) in enumerate(folders) if name.upper() == 'INBOX'), 0)
                 self.folders.setCurrentRow(index)
@@ -861,6 +911,29 @@ class MainWindow(QMainWindow):
                 self.empty_description.setText('Reconnectez-vous puis actualisez pour charger les dossiers.' if offline else 'Le serveur ne propose aucun dossier sélectionnable.')
         offline = self.offline.isChecked()
         self.runner.run(lambda: self.service.folders(account, offline), done, self.failure)
+
+    def fill_folders(self, folders):
+        """Un élément par dossier : icône du dossier spécial et nombre de non-lus (dernière synchronisation)."""
+        from mailclient.ui.folder_list import kind
+        for name, label in folders:
+            item = QListWidgetItem(icon(kind(name, label)[1], self.appearance.colors['muted']), label)
+            item.setToolTip(label if label == name else f'{label} ({name})')
+            self.folders.addItem(item)
+        self.update_folder_counts()
+
+    def update_folder_counts(self):
+        from mailclient.ui.folder_list import COUNT_ROLE
+        account = self.account()
+        if account is None:  # Réception unifiée : non-lus des réceptions de tous les comptes.
+            counts = {'INBOX': sum(next((n for f, n in self.service.unread(a).items() if f.upper() == 'INBOX'), 0)
+                                   for a in self.accounts)}
+        else:
+            counts = self.service.unread(account)
+        for index, (name, label) in enumerate(self.folder_data[:self.folders.count()]):
+            count = counts.get(name, 0)
+            item = self.folders.item(index)
+            item.setData(COUNT_ROLE, count)
+            item.setData(Qt.AccessibleTextRole, f'{label}, {count} non lu{"s" if count > 1 else ""}' if count else label)
 
     def folder_changed(self, index):
         if index >= 0 and not self.busy:
@@ -994,8 +1067,12 @@ class MainWindow(QMainWindow):
                 self.render_rows()
                 self.page_label.setText(f'{len(self.rows)} résultat(s) dans tous les dossiers' +
                                         (' — les 100 plus récents' if result.get('truncated') else ''))
-            self.cache_status.setText('Cache local — recherche limitée aux messages synchronisés' if result['offline'] else
-                                      'Serveur — recherche dans tous les dossiers' if all_folders else 'Serveur — recherche dans tout le dossier')
+            # Ligne d’information affichée seulement quand elle apprend quelque chose : recherche ou copie locale.
+            if query:
+                self.cache_status.setText('Recherche dans les messages déjà téléchargés (hors ligne)' if result['offline'] else
+                                          'Recherche dans tous les dossiers du compte' if all_folders else 'Recherche dans tout le dossier')
+            else:
+                self.cache_status.setText('Messages enregistrés sur ce PC (hors ligne)' if result['offline'] else '')
             if not self.rows and result['offline'] and self.total:
                 self.cache_status.setText('Cette page n’est pas encore en cache. Reconnectez-vous ou augmentez la limite dans Préférences.')
             self.list_exhausted = not self.rows
@@ -1054,6 +1131,7 @@ class MainWindow(QMainWindow):
         try:
             self.table.clear()
             self.populate_rows(group_threads(self.rows) if self.conversations_enabled() else [[row] for row in self.rows])
+            self.refresh_headers()
             if keep_view:
                 for index in range(self.table.count()):
                     item = self.table.item(index)
@@ -1077,9 +1155,37 @@ class MainWindow(QMainWindow):
             item = QListWidgetItem(f'{view.sender} · {view.subject} · {view.preview} · {view.time}'
                                    + (f' · {view.count} messages' if view.count > 1 else ''))
             item.setData(Qt.UserRole,view)
+            item.setData(GROUP_ROLE, date_group(max(timestamp(message) for message in group)))
             item.setToolTip(f'{row["sender"]}\n{view.subject}\n{view.account_name}\n{row["date"]}'
                             + (f'\nConversation de {view.count} messages chargés' if view.count > 1 else ''))
             self.table.addItem(item)
+
+    def refresh_headers(self):
+        """Titre de date au-dessus du premier message visible de chaque groupe (filtres compris)."""
+        from mailclient.ui.components import HEADER_ROLE
+        previous = None
+        for index in range(self.table.count()):
+            item = self.table.item(index)
+            if item.isHidden():
+                continue
+            group = item.data(GROUP_ROLE)
+            header = group if group != previous else None
+            if item.data(HEADER_ROLE) != header:
+                item.setData(HEADER_ROLE, header)
+            previous = group
+        self.table.doItemsLayout()
+
+    def row_action(self, index, name):
+        """Bouton d’une ligne au survol : l’action porte sur cette ligne (conversation entière)."""
+        item = self.table.item(index.row())
+        if item is None or self.busy:
+            return
+        if not item.isSelected() or len(self.table.selectedItems()) > 1:
+            self.table.setCurrentItem(item)  # Sélectionne seulement cette ligne.
+        if name == 'read':
+            self.toggle_read()
+        else:
+            self.move(name)
 
     def selected_view(self):
         item = self.table.currentItem()
@@ -1205,8 +1311,45 @@ class MainWindow(QMainWindow):
         def done(_):
             self.set_busy(False)
             self.load_messages()
+            moves = [(account, group, destination) for account, group, step, destination in plan if step == 'move']
+            if moves:
+                count = sum(len(group) for _, group, _ in moves)
+                label = self.folder_label(moves[0][0], moves[0][2])
+                where = f'dans « {label} »' if len({destination for *_, destination in moves}) == 1 else 'dans leurs dossiers'
+                self.notify(f'{count} message{"s" if count > 1 else ""} déplacé{"s" if count > 1 else ""} {where}.',
+                            'Annuler', lambda: self.undo_move(moves))
+            elif any(step == 'delete' for _, _, step, _ in plan):
+                count = sum(len(group) for _, group, _, _ in plan)
+                self.notify(f'{count} message{"s" if count > 1 else ""} supprimé{"s" if count > 1 else ""} définitivement.')
         def failed(message):
             self.failure(message + ' Actualisez les dossiers source et destination avant de réessayer : l’action peut avoir été acceptée avant une coupure.')
+        self.runner.run(operation, done, failed)
+
+    def folder_label(self, account, name):
+        return dict(self.database.cache_get('folders', account.id, []) or []).get(name, name)
+
+    def undo_move(self, moves):
+        """« Annuler » d’un déplacement : les messages reviennent dans leur dossier d’origine."""
+        if self.busy:
+            QTimer.singleShot(300, lambda: self.undo_move(moves))
+            return
+        if self.offline.isChecked():
+            self.notify('Reconnectez-vous pour annuler le déplacement.', kind='error')
+            return
+        expected = sum(len(group) for _, group, _ in moves)
+        self.set_busy(True)
+        def operation():
+            return sum(self.service.restore(account, group, destination) for account, group, destination in moves)
+        def done(restored):
+            self.set_busy(False)
+            self.load_messages()
+            if restored == expected:
+                self.notify('Déplacement annulé : messages remis à leur place.')
+            else:
+                self.notify(f'Déplacement annulé pour {restored} message(s) sur {expected} ; les autres sont restés '
+                            'dans le dossier de destination.', kind='error')
+        def failed(message):
+            self.failure('Annulation impossible : ' + message)
         self.runner.run(operation, done, failed)
 
     def toggle_read(self):
@@ -1441,6 +1584,10 @@ class MainWindow(QMainWindow):
         if count and self.tray and self.database.setting('notifications', True):
             self.tray.showMessage('Smail', f'{count} nouveau(x) message(s)', QSystemTrayIcon.Information, 6000)
         self.statusBar().showMessage('Synchronisation terminée. Les derniers messages sont disponibles hors ligne.')
+        from datetime import datetime
+        self.last_sync = datetime.now()
+        self.update_connection()
+        self.update_folder_counts()
         if self.account() is None and not self.busy:
             self.load_messages(cache_only=True)
 
@@ -1543,6 +1690,7 @@ class MainWindow(QMainWindow):
             self.start_background()
             self.sync_now()
         self.send_queue.tick()  # Hors ligne : les envois attendent ; reconnexion : ils partent.
+        self.update_connection()
         self.load_folders()
 
     def preferences(self):
@@ -1576,6 +1724,8 @@ class MainWindow(QMainWindow):
     def apply_theme(self):
         self.appearance = install_theme(self.database)
         self.reader.set_dark(self.appearance.dark)
+        self.folder_delegate.theme = self.appearance
+        self.folders.viewport().update()
 
     def change_style(self, index):
         self.database.set_setting('ui_style',index+1)
@@ -1700,6 +1850,7 @@ class MainWindow(QMainWindow):
             self.list_stack.setCurrentIndex(0 if visible else 2)
         if value != 'Tous':
             self.statusBar().showMessage(f'{visible} message(s) visible(s) — filtre limité aux messages chargés.')
+        self.refresh_headers()
         self.update_actions()
 
     def trigger_command(self, title):

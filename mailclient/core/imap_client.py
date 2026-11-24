@@ -306,7 +306,8 @@ class IMAPClient:
         result = {}
         with self.open() as client:
             condstore = b'CONDSTORE' in client.capabilities
-            items = '(MESSAGES UIDNEXT UIDVALIDITY HIGHESTMODSEQ)' if condstore else '(MESSAGES UIDNEXT UIDVALIDITY)'
+            # UNSEEN : nombre de non-lus affiché dans la colonne des dossiers, sans requête supplémentaire.
+            items = '(MESSAGES UIDNEXT UIDVALIDITY UNSEEN HIGHESTMODSEQ)' if condstore else '(MESSAGES UIDNEXT UIDVALIDITY UNSEEN)'
             for folder in folders:
                 try:
                     status, data = client.status(quote_folder(folder), items)
@@ -314,7 +315,7 @@ class IMAPClient:
                     continue
                 if status != 'OK' or not data or not isinstance(data[-1], bytes):
                     continue
-                values = {key.decode(): int(value) for key, value in re.findall(rb'(MESSAGES|UIDNEXT|UIDVALIDITY|HIGHESTMODSEQ) (\d+)', data[-1])}
+                values = {key.decode(): int(value) for key, value in re.findall(rb'(MESSAGES|UIDNEXT|UIDVALIDITY|UNSEEN|HIGHESTMODSEQ) (\d+)', data[-1])}
                 if {'MESSAGES', 'UIDNEXT', 'UIDVALIDITY'} <= set(values):
                     result[folder] = values
         return result

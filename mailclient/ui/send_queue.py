@@ -129,12 +129,13 @@ class SendQueue(QObject):
         kind, subject, detail = event
         self.task = self.stage = None
         if kind == 'sent':
-            self.window.statusBar().showMessage(f'Message « {subject} » envoyé.' + (f' {detail}' if detail else ''), 10_000)
+            self.window.notify(f'Message « {subject} » envoyé.' + (f' {detail}' if detail else ''))
             if not self.window.isActiveWindow():
                 self.notify(f'Message « {subject} » envoyé.')
         else:
             texts = {'failed': 'Échec de l’envoi', 'uncertain': 'Envoi incertain', 'partial': 'Envoi partiel'}
             self.alert = (f'{texts.get(kind, "Envoi")} de « {subject} »', detail)
+            self.window.notify(f'{texts.get(kind, "Envoi")} de « {subject} ». {detail}', 'Voir', self.show_outbox, 'error')
             self.notify(f'{texts.get(kind, "Envoi")} de « {subject} » : voir Fichier › Envois programmés.')
         self.tick()
 
@@ -203,7 +204,7 @@ class SendQueue(QObject):
             draft = dict(item['state'], id=item['id'], account=item['account'], attachments=item['files'])
             self.database.cache_put('draft', item['id'], draft, item['account'])
             self.window.reopen_draft(draft)
-            self.window.statusBar().showMessage('Envoi annulé : le message est rouvert en brouillon.', 8000)
+            self.window.notify('Envoi annulé : le message est rouvert en brouillon.')
         self.tick()
 
     def show_outbox(self):

@@ -150,7 +150,8 @@ def drop_event(window, row, keys):
 def test_drop_messages_on_folder_moves_them(window):
     window.table.selectAll()
     keys = json.loads(bytes(window.table.mimeData(window.table.selectedItems()).data('application/x-smail-messages')))
-    event, _ = drop_event(window, 1, keys)
+    projets = next(index for index, (name, _) in enumerate(window.folder_data) if name == 'Projets')
+    event, _ = drop_event(window, projets, keys)
     assert window.eventFilter(window.folders.viewport(), event) and event.isAccepted()
     assert process_until(lambda: not window.busy and window.client.calls)
     assert window.client.calls[-1] == ('INBOX', '5,4', 'move', 'Projets')

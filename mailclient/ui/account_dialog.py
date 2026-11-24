@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit, QCo
 from PySide6.QtCore import Qt
 from mailclient.ui.rich_text import RichTextEdit, FormatBar
 from mailclient.core.service import save_signature
-from mailclient.core.accounts import Account, Server, MODES, PORTS, PRESETS
+from mailclient.core.accounts import Account, Server, MODES, PORTS
 from mailclient.core.imap_client import IMAPClient
 from mailclient.core.smtp_client import test_connection
 from mailclient.core.sync import Runner
@@ -32,9 +32,16 @@ class AccountDialog(QDialog):
         form.setSpacing(10)
         self.name, self.address, self.password = QLineEdit(), QLineEdit(), QLineEdit()
         self.password.setEchoMode(QLineEdit.Password)
-        form.addRow('Nom du compte', self.name)
-        form.addRow('Adresse e-mail / identifiant', self.address)
-        form.addRow('Mot de passe d’application', self.password)
+        self.name.setPlaceholderText('ex. Marie Dupont ou Livrango')
+        self.name.setToolTip('Nom affiché à vos destinataires à côté de votre adresse, et dans Smail pour ce compte.')
+        self.address.setPlaceholderText('vous@exemple.fr')
+        self.password.setToolTip('Gmail, Yahoo et iCloud exigent un « mot de passe d’application » créé dans les réglages '
+                                 'de sécurité du compte, ou la connexion OAuth2.')
+        form.addRow('Votre nom (vu par vos destinataires)', self.name)
+        form.addRow('Adresse e-mail', self.address)
+        form.addRow('Mot de passe', self.password)
+        self.detect_status = label('', 'Small', True)
+        form.addRow('', self.detect_status)
         self.auth = QComboBox()
         self.auth.addItems(['Mot de passe', 'OAuth2 Google', 'OAuth2 Microsoft'])
         self.client_id = QLineEdit()
@@ -54,13 +61,23 @@ class AccountDialog(QDialog):
         layout.addWidget(self.oauth_group)
         self.servers = {}
         self.logins = {}
-        servers_row = QHBoxLayout()
-        layout.addLayout(servers_row)
+        # Réglages des serveurs : remplis par la détection, repliés tant qu’ils ne demandent rien.
+        self.server_toggle = Button('Réglages des serveurs', self.appearance, 'settings-2', 'Secondary',
+                                    'Afficher ou masquer les serveurs IMAP et SMTP')
+        self.server_toggle.clicked.connect(lambda: self.show_servers(not self.server_panel.isVisible()))
+        layout.addWidget(self.server_toggle, 0, Qt.AlignLeft)
+        self.server_panel = QWidget()
+        servers_row = QHBoxLayout(self.server_panel)
+        servers_row.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.server_panel)
+        self.manual_servers = False
+        self.detection = 0
         for protocol in ('imap', 'smtp'):
             group = QGroupBox(protocol.upper())
             fields = QFormLayout(group)
             host = QLineEdit()
             host.setAccessibleName('Serveur '+protocol.upper())
+            host.textEdited.connect(self.servers_edited)
             mode = QComboBox()
             mode.setAccessibleName('Chiffrement '+protocol.upper())
             mode.addItems(MODES)
@@ -112,7 +129,7 @@ class AccountDialog(QDialog):
         self.signature_bar = FormatBar(self.signature, self.appearance)
         layout.addWidget(self.signature_bar)
         layout.addWidget(self.signature)
-        self.status = QLabel('OAuth2 : renseignez votre identifiant d’application Google/Microsoft, puis connectez-vous dans le navigateur.')
+        self.status = QLabel('')
         self.status.setWordWrap(True)
         self.status.setTextFormat(Qt.PlainText)
         layout.addWidget(self.status)
@@ -127,7 +144,7 @@ class AccountDialog(QDialog):
         buttons.accepted.connect(self.save)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
-        self.address.editingFinished.connect(self.preset)
+        self.address.editingFinished.connect(self.detect)
         if account:
             self.setWindowTitle('Paramètres du compte')
             self.name.setText(account.name)
@@ -155,6 +172,7 @@ class AccountDialog(QDialog):
                 pass
         self.auth.currentIndexChanged.connect(self.auth_changed)
         self.auth_changed()
+        self.show_servers(account is not None)  # Nouveau compte : la détection les remplit d’abord.
 
     def auth_changed(self, *_):
         oauth = self.auth.currentIndex() != 0
@@ -176,14 +194,58 @@ class AccountDialog(QDialog):
         self.confirm.setVisible(insecure)
         self.confirm.setChecked(False)
 
+    def show_servers(self, visible):
+        self.server_panel.setVisible(visible)
+        self.server_toggle.setText('Masquer les réglages des serveurs' if visible else 'Réglages des serveurs')
+
+    def servers_edited(self, *_):
+        self.manual_servers = True  # Saisie manuelle : la détection ne l’écrase plus.
+
+    def apply_detected(self, found):
+        for protocol in ('imap', 'smtp'):
+            server = getattr(found, protocol)
+            host, mode, port = self.servers[protocol]
+            host.setText(server.host)
+            mode.setCurrentIndex(MODES.index(server.mode))  # Remet le port par défaut du mode…
+            port.setValue(server.port)                     # … puis le port annoncé.
+            self.logins[protocol].setText(getattr(found, protocol + '_login'))
+        self.detect_status.setText(f'Réglages trouvés ({found.source}) : réception {found.imap.host}:{found.imap.port}, '
+                                   f'envoi {found.smtp.host}:{found.smtp.port}. Utilisez « Tester la connexion » pour vérifier.')
+
     def preset(self):
-        domain = self.address.text().strip().lower().split('@')[-1]
-        if domain in PRESETS:
-            for protocol, host in zip(('imap', 'smtp'), PRESETS[domain]):
-                fields = self.servers[protocol]
-                if not fields[0].text():
-                    fields[0].setText(host)
-                    fields[1].setCurrentIndex(1 if protocol == 'smtp' else 0)
+        """Fournisseurs connus : réglages immédiats, sans réseau."""
+        from mailclient.core import autoconfig
+        found = autoconfig.known(self.address.text())
+        if found and not self.manual_servers:
+            self.apply_detected(found)
+        return found
+
+    def detect(self):
+        """Détection des serveurs à partir de l’adresse (nouveau compte, serveurs non saisis à la main)."""
+        from mailclient.core import autoconfig
+        address = self.address.text().strip()
+        if self.original is not None or self.manual_servers or self.busy or not autoconfig.domain_of(address):
+            return
+        if self.preset():
+            return
+        self.detection += 1
+        ticket = self.detection
+        self.detect_status.setText('Recherche des réglages de votre messagerie…')
+        def done(found):
+            if ticket != self.detection or self.manual_servers or self.address.text().strip() != address:
+                return  # Adresse modifiée ou saisie manuelle entre-temps.
+            if found:
+                self.apply_detected(found)
+                if 'habituels' in found.source:
+                    self.show_servers(True)
+            else:
+                self.detect_status.setText('Réglages introuvables automatiquement : renseignez les serveurs fournis par votre '
+                                           'hébergeur ci-dessous.')
+                self.show_servers(True)
+        def failed(message):
+            if ticket == self.detection:
+                done(None)
+        self.runner.run(lambda: autoconfig.detect(address), done, failed)
 
     def values(self):
         servers = {p: Server(h.text().strip(), port.value(), m.currentText()) for p, (h,m,port) in self.servers.items()}

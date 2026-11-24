@@ -110,13 +110,54 @@ class LocalTextBrowser(QTextBrowser):
     def loadResource(self, resource_type, name):
         return None
 
+HEADER_ROLE = Qt.UserRole + 2   # Titre de groupe de dates (« Aujourd’hui »…) dessiné au-dessus de la ligne.
+HEADER_HEIGHT = 28
+# Actions au survol : (nom, icône, infobulle) ; l’icône de lecture dépend de l’état du message.
+ROW_ACTIONS = (('archive', 'archive', 'Archiver'), ('trash', 'trash-2', 'Supprimer'), ('read', None, None))
+
+
 class MailDelegate(QStyledItemDelegate):
     def __init__(self, theme, parent=None):
         super().__init__(parent)
         self.theme = theme
+        self.on_action = None  # Rappel (index, nom de l’action) pour les boutons affichés au survol.
 
     def sizeHint(self, option, index):
-        return QSize(300, self.theme.row_height)
+        return QSize(300, self.theme.row_height + (HEADER_HEIGHT if index.data(HEADER_ROLE) else 0))
+
+    @staticmethod
+    def message_rect(option, index):
+        top = HEADER_HEIGHT if index.data(HEADER_ROLE) else 0
+        return option.rect.adjusted(5, 2 + top, -5, -2)
+
+    @staticmethod
+    def action_rects(rect):
+        """Zones des boutons d’action, alignées à droite sur la ligne de l’expéditeur."""
+        size, gap = 24, 4
+        right, top = rect.right() - 10, rect.top() + 6
+        return [(name, QRectF(right - (len(ROW_ACTIONS) - i) * (size + gap) + gap, top, size, size))
+                for i, (name, *_rest) in enumerate(ROW_ACTIONS)]
+
+    def editorEvent(self, event, model, option, index):
+        from PySide6.QtCore import QEvent
+        if event.type() == QEvent.MouseButtonRelease and self.on_action and index.data(Qt.UserRole) is not None:
+            for name, area in self.action_rects(self.message_rect(option, index)):
+                if area.contains(event.position()):
+                    self.on_action(index, name)
+                    return True
+        return super().editorEvent(event, model, option, index)
+
+    def helpEvent(self, event, view, option, index):
+        mail = index.data(Qt.UserRole)
+        if mail is not None and self.on_action:
+            from PySide6.QtWidgets import QToolTip
+            texts = {'archive': 'Archiver', 'trash': 'Supprimer',
+                     'read': 'Marquer comme lu' if mail.unread else 'Marquer comme non lu'}
+            for name, area in self.action_rects(self.message_rect(option, index)):
+                if area.contains(event.pos()):
+                    QToolTip.showText(event.globalPos(), texts[name], view)
+                    return True
+        return super().helpEvent(event, view, option, index)
 
     def paint(self, painter, option, index):
         from PySide6.QtWidgets import QStyle
@@ -126,8 +167,15 @@ class MailDelegate(QStyledItemDelegate):
         t = self.theme.colors
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
-        rect = option.rect.adjusted(5,2,-5,-2)
+        header = index.data(HEADER_ROLE)
+        if header:
+            painter.setFont(QFont('Segoe UI', 8, QFont.Bold))
+            painter.setPen(QColor(t['muted']))
+            painter.drawText(QRectF(option.rect.left()+16, option.rect.top()+6, option.rect.width()-32, HEADER_HEIGHT-8),
+                             Qt.AlignLeft|Qt.AlignBottom, header.upper())
+        rect = self.message_rect(option, index)
         selected = bool(option.state & QStyle.State_Selected)
+        hovered = bool(option.state & QStyle.State_MouseOver) and self.on_action is not None
         if selected or option.state & QStyle.State_MouseOver:
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor(t['soft'] if selected else t['panel']))
@@ -166,9 +214,18 @@ class MailDelegate(QStyledItemDelegate):
             painter.setPen(QColor(t['accent'] if mail.unread else t['muted']))
             painter.drawText(QRectF(x, top+3, badge, 15), Qt.AlignCenter, str(count))
             painter.setFont(QFont('Segoe UI', 10, QFont.DemiBold))
-        painter.setFont(QFont('Segoe UI', 8))
-        painter.setPen(QColor(t['accent'] if mail.unread else t['muted']))
-        painter.drawText(QRectF(rect.right()-71,top,57,20), Qt.AlignRight|Qt.AlignVCenter, mail.time)
+        if hovered:
+            # Au survol, l’heure laisse la place aux actions rapides.
+            for name, area in self.action_rects(rect):
+                icon_name = {'archive': 'archive', 'trash': 'trash-2'}.get(name) or ('mail-minus' if mail.unread else 'mail')
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QColor(t['surface']))
+                painter.drawRoundedRect(area, 6, 6)
+                icon(icon_name, t['text'], 16).paint(painter, int(area.left()+4), int(area.top()+4), 16, 16)
+        else:
+            painter.setFont(QFont('Segoe UI', 8))
+            painter.setPen(QColor(t['accent'] if mail.unread else t['muted']))
+            painter.drawText(QRectF(rect.right()-71,top,57,20), Qt.AlignRight|Qt.AlignVCenter, mail.time)
         painter.setFont(QFont('Segoe UI', 9, QFont.DemiBold if mail.unread else QFont.Normal))
         painter.setPen(QColor(t['text']))
         subject = painter.fontMetrics().elidedText(mail.subject, Qt.ElideRight, max(40,width-19))

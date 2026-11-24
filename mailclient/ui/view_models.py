@@ -88,3 +88,25 @@ class MessageList(QListWidget):
     def setRowCount(self, count):
         if count == 0:
             self.clear()
+
+
+MONTHS = ('Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre',
+          'Novembre', 'Décembre')
+
+
+def date_group(stamp: float, now=None) -> str:
+    """Groupe de dates d’un message pour la liste : « Aujourd’hui », « Hier », « Cette semaine »…"""
+    from datetime import datetime, timedelta
+    if not stamp:
+        return 'Date inconnue'
+    now = now or datetime.now()
+    day, today = datetime.fromtimestamp(stamp).date(), now.date()
+    if day >= today:
+        return 'Aujourd’hui'
+    if day == today - timedelta(days=1):
+        return 'Hier'
+    if day > today - timedelta(days=7):
+        return 'Cette semaine'
+    if (day.year, day.month) == (today.year, today.month):
+        return 'Plus tôt ce mois-ci'
+    return f'{MONTHS[day.month - 1]} {day.year}'

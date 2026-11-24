@@ -70,6 +70,12 @@ QFrame#Warning QLabel { color: $warning; }
 QFrame#Danger { background: $danger_bg; border: 1px solid $danger; border-radius: 8px; }
 QFrame#Danger QLabel { color: $danger; }
 QFrame#Info { background: $soft; border: 1px solid $border; border-radius: 8px; }
+QFrame#Toast { background: $text; border-radius: 10px; }
+QFrame#Toast QLabel { color: $bg; font-weight: 600; }
+QFrame#Toast QPushButton { background: transparent; color: $accent; border: none; font-weight: 700; padding: 4px 10px; }
+QFrame#Toast QPushButton:hover { background: $hover; color: $text; border-radius: 6px; }
+QFrame#Toast[kind="error"] { background: $danger; }
+QFrame#Toast[kind="error"] QLabel, QFrame#Toast[kind="error"] QPushButton { color: #FFFFFF; }
 QFrame#Attachment { background: $panel; border: 1px solid $border; border-radius: 8px; }
 QFrame#Separator { background: $border; max-height: 1px; min-height: 1px; }
 QScrollArea { background: transparent; border: none; }
