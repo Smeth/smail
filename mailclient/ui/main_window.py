@@ -90,6 +90,8 @@ class MainWindow(QMainWindow):
         self.settings_button.clicked.connect(self.preferences)
         toolbar.addWidget(self.settings_button)
         self.offline = QCheckBox('Hors ligne')
+        self.offline.setFocusPolicy(Qt.TabFocus)
+        self.offline.setToolTip('Travailler sur le cache local, sans aucune connexion au serveur')
         toolbar.addWidget(self.offline)
         header.box.addLayout(toolbar)
         layout.addWidget(header)

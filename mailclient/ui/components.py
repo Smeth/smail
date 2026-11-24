@@ -18,7 +18,9 @@ class Button(QPushButton):
         self.theme, self.icon_name, self.role = theme, icon_name, role
         self.setObjectName(role)
         self.setCursor(Qt.PointingHandCursor)
-        self.setFocusPolicy(Qt.StrongFocus)
+        # Focus au clavier (Tab) seulement : un clic ne laisse pas de cadre de focus sur le bouton
+        # (le cadre restait affiché au retour d’une boîte de dialogue) et ne retire pas le focus à la liste.
+        self.setFocusPolicy(Qt.TabFocus)
         self.setAccessibleName(tooltip or text)
         self.setToolTip(tooltip or text)
         self.setIconSize(QSize(18,18))
