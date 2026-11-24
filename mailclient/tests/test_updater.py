@@ -172,10 +172,13 @@ def test_manager_downloads_installs_on_exit_and_forgets_after_update(tmp_path, m
     db = Database(tmp_path / 'settings.db')
     window = Window()
     manager = UpdateManager(window, db, Runner(window, None), tmp_path, current='1.1.0')
+    informed = []
+    manager.inform = lambda title, text: informed.append(title)
     manager.check(manual=True)
     assert process_until(lambda: window.banners)
     title, action, callback = window.banners[-1]
     assert title == 'Smail 1.2.0 est prêt' and action == 'Redémarrer maintenant'
+    assert informed == ['Mise à jour prête']  # Vérification demandée : réponse visible.
     assert (tmp_path / 'updates' / NAME).read_bytes() == INSTALLER
     callback()  # « Redémarrer maintenant » : fermeture demandée, relance après installation.
     assert window.quits == 1 and manager.relaunch
@@ -211,13 +214,22 @@ def test_up_to_date_and_unreachable(tmp_path, monkeypatch):
             return self.bar
     window = Window()
     manager = UpdateManager(window, Database(tmp_path / 'settings.db'), Runner(window, None), tmp_path, current='1.2.0')
+    informed = []
+    manager.inform = lambda title, text: informed.append((title, text))
     monkeypatch.setattr(updater, 'check', lambda current: None)
     manager.check(manual=True)
     assert process_until(lambda: not manager.checking)
     assert window.bar.currentMessage() == 'Smail 1.2.0 est à jour.'
+    assert informed == [('Smail est à jour', 'Vous utilisez la dernière version publiée de Smail (1.2.0).')]
     def offline(current):
         raise OSError('réseau indisponible')
     monkeypatch.setattr(updater, 'check', offline)
     manager.check()  # Vérification automatique : silencieuse.
     assert process_until(lambda: not manager.checking)
-    assert window.bar.currentMessage() == 'Smail 1.2.0 est à jour.'
+    assert window.bar.currentMessage() == 'Smail 1.2.0 est à jour.' and len(informed) == 1
+    manager.check(manual=True)  # Demandée : l’échec est expliqué.
+    assert process_until(lambda: not manager.checking)
+    assert informed[-1][0] == 'Vérification impossible' and 'injoignable' in informed[-1][1]
+    manager.checking = True
+    manager.check(manual=True)  # Double clic pendant une recherche.
+    assert informed[-1][0] == 'Mises à jour'

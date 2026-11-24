@@ -59,7 +59,11 @@ class UpdateManager(QObject):
         return pending.get('attempts', 0) if pending.get('version') == version else 0
 
     def check(self, manual=False):
-        if self.checking or self.window.quitting:
+        if self.window.quitting:
+            return
+        if self.checking:
+            if manual:
+                self.inform('Mises à jour', 'Une recherche de mise à jour est déjà en cours. Réessayez dans un instant.')
             return
         self.checking = True
         installable = updater.installed_copy()
@@ -75,8 +79,14 @@ class UpdateManager(QObject):
             if update is None:
                 if manual:
                     self.window.statusBar().showMessage(f'Smail {self.current} est à jour.')
+                    self.inform('Smail est à jour', f'Vous utilisez la dernière version publiée de Smail ({self.current}).')
                 return
             if path is None:
+                if manual:
+                    self.inform('Nouvelle version disponible',
+                                f'Smail {update.version} est disponible (vous avez la version {self.current}).\n\n'
+                                'Cette copie (lancée depuis les sources ou un dossier copié) ne se met pas à jour seule : '
+                                'utilisez le bouton « Télécharger » du bandeau.')
                 self.window.show_update_banner(f'Smail {update.version} est disponible',
                                                'Cette copie de Smail ne se met pas à jour seule (lancée depuis les sources ou un dossier copié).',
                                                'Télécharger', lambda: QDesktopServices.openUrl(QUrl(RELEASES_PAGE)))
@@ -88,6 +98,9 @@ class UpdateManager(QObject):
                 self.window.show_update_banner(f'La mise à jour vers Smail {update.version} n’a pas pu s’installer',
                                                'Installez-la manuellement depuis la page des versions.',
                                                'Ouvrir la page', lambda: QDesktopServices.openUrl(QUrl(RELEASES_PAGE)))
+                if manual:
+                    self.inform('Mise à jour impossible', f'Smail {update.version} n’a pas pu s’installer automatiquement. '
+                                'Installez-la depuis la page des versions (bouton du bandeau).')
                 return
             self.ready = (update.version, path)
             self.log.info('Mise à jour %s téléchargée et vérifiée', update.version)
@@ -98,13 +111,22 @@ class UpdateManager(QObject):
                 from PySide6.QtWidgets import QSystemTrayIcon
                 self.window.tray.showMessage('Smail', f'Mise à jour {update.version} prête : elle s’installera à la fermeture.',
                                              QSystemTrayIcon.Information, 6000)
+            if manual:
+                self.inform('Mise à jour prête', f'Smail {update.version} est téléchargé et vérifié.\n\n'
+                            'Il s’installera à la fermeture de Smail, ou tout de suite avec « Redémarrer maintenant ».')
         def failed(message):
             self.checking = False
             self.log.warning('Vérification des mises à jour impossible : %s', message)
             if manual:
                 self.window.statusBar().showMessage('Vérification des mises à jour impossible : ' + message)
+                self.inform('Vérification impossible', 'Smail n’a pas pu vérifier les mises à jour.\n\n' + message)
         self.window.statusBar().showMessage('Recherche de mises à jour…') if manual else None
         self.runner.run(operation, done, failed)
+
+    def inform(self, title, text):
+        """Réponse visible à une vérification demandée par l’utilisateur (la barre d’état passe inaperçue)."""
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.information(self.window, title, text)
 
     def restart_now(self):
         self.relaunch = True
