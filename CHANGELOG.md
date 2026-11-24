@@ -2,6 +2,9 @@
 
 ## Non publié
 
+## 1.1.0 — 2026-11-24
+
+
 Smail 1.1.0 est une mise à jour majeure. **Depuis la 1.0.0, installez-la une fois manuellement** (l’installateur conserve vos comptes, votre cache et vos réglages) : les versions suivantes s’installeront ensuite toutes seules.
 
 ### Rédaction et envoi
