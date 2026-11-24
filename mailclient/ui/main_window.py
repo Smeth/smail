@@ -633,7 +633,7 @@ class MainWindow(QMainWindow):
             return
         current = self.current_folder()
         if operation == 'create':
-            name, ok = QInputDialog.getText(self, 'Nouveau dossier', 'Nom du dossier (utilisez le séparateur du serveur, souvent / ou ., pour un sous-dossier)')
+            name, ok = QInputDialog.getText(self, 'Nouveau dossier', 'Nom du dossier')
             if not ok or not name.strip():
                 return
             self.run_and_reload(lambda: self.service.manage_folder(account, 'create', name), f'Dossier « {name.strip()} » créé.', True)
@@ -645,9 +645,10 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage('Les dossiers système (réception, envoyés, brouillons, corbeille, spam) ne peuvent pas être modifiés.')
             return
         if operation == 'rename':
-            from mailclient.core.parser import decode_folder
-            new_name, ok = QInputDialog.getText(self, 'Renommer le dossier', 'Nouveau nom', text=decode_folder(name))
-            if not ok or not new_name.strip() or new_name.strip() == decode_folder(name):
+            # Le dossier garde son emplacement : seul son propre nom change (« Parent › Enfant » -> Enfant).
+            leaf = label.split(' › ')[-1]
+            new_name, ok = QInputDialog.getText(self, 'Renommer le dossier', 'Nouveau nom', text=leaf)
+            if not ok or not new_name.strip() or new_name.strip() == leaf:
                 return
             self.run_and_reload(lambda: self.service.manage_folder(account, 'rename', name, new_name), 'Dossier renommé.', True)
         elif operation == 'delete':

@@ -41,6 +41,48 @@ def valid_folder_name(name: str) -> str:
         raise ValueError('Nom de dossier invalide : évitez les caractères * et %.')
     return name
 
+# Dossiers usuels sans attribut SPECIAL-USE (Courier, cPanel, anciens Dovecot) : libellé français.
+COMMON_LABELS = {'sent': 'Envoyés', 'sent items': 'Envoyés', 'sent messages': 'Envoyés', 'drafts': 'Brouillons',
+                 'trash': 'Corbeille', 'deleted items': 'Corbeille', 'deleted messages': 'Corbeille',
+                 'junk': 'Spam', 'spam': 'Spam', 'junk e-mail': 'Spam', 'archive': 'Archives', 'archives': 'Archives'}
+QUOTED = rb'"((?:[^"\\]|\\.)*)"'
+
+def unquote(value: bytes) -> str:
+    return re.sub(r'\\(.)', r'\1', value.decode('ascii', 'replace'))
+
+def personal_namespace(client):
+    """(préfixe, séparateur) de l’espace personnel (RFC 2342), ex. ('INBOX.', '.') ; ('', None) si inconnu."""
+    if b'NAMESPACE' not in getattr(client, 'capabilities', ()):
+        return '', None
+    try:
+        status, data = client.namespace()
+    except (imaplib.IMAP4.error, AttributeError):
+        return '', None
+    line = data[0] if status == 'OK' and data and isinstance(data[0], bytes) else b''
+    match = re.match(rb'\(\(' + QUOTED + rb' (?:' + QUOTED + rb'|NIL)', line)
+    if not match:
+        return '', None
+    return unquote(match[1]), unquote(match[2]) if match[2] is not None else None
+
+def folder_prefix(names, delimiter, namespace=''):
+    """Préfixe commun imposé par le serveur (« INBOX. ») : annoncé par NAMESPACE ou déduit de la liste."""
+    if namespace:
+        return namespace
+    if not delimiter:
+        return ''
+    prefix = 'INBOX' + delimiter
+    others = [name for name in names if name.upper() != 'INBOX']
+    return prefix if others and all(name.upper().startswith(prefix.upper()) for name in others) else ''
+
+def folder_label(name, delimiter, prefix=''):
+    """Libellé lisible : préfixe serveur retiré, hiérarchie en « Parent › Enfant », noms usuels traduits."""
+    if prefix and name.upper().startswith(prefix.upper()) and len(name) > len(prefix):
+        name = name[len(prefix):]
+    parts = [decode_folder(part) for part in (name.split(delimiter) if delimiter else [name]) if part]
+    if len(parts) == 1:
+        return COMMON_LABELS.get(parts[0].casefold(), parts[0])
+    return ' › '.join(parts) or decode_folder(name)
+
 FETCH_START = re.compile(rb'\d+ \(')
 
 def fetch_items(parts) -> dict:
@@ -206,20 +248,46 @@ class IMAPClient:
             status, data = client.list()
             if status != 'OK':
                 raise RuntimeError('Impossible de lister les dossiers.')
-            folders = []
+            entries, delimiter = [], None
             for line in data:
                 if not isinstance(line, bytes):
                     continue
-                match = re.match(rb'\((.*?)\) (?:"(?:[^"\\]|\\.)*"|NIL) (.*)', line)
+                match = re.match(rb'\((.*?)\) (?:' + QUOTED + rb'|NIL) (.*)', line)
                 if not match or b'\\noselect' in match[1].lower():
                     continue
-                name = match[2].decode('ascii', 'replace')
+                name = match[3].decode('ascii', 'replace')
                 if name.startswith('"') and name.endswith('"'):
                     name = re.sub(r'\\(.)', r'\1', name[1:-1])
-                labels = {b'\\Sent': 'Envoyés', b'\\Drafts': 'Brouillons', b'\\Trash': 'Corbeille', b'\\Junk': 'Spam'}
-                label = 'Boîte de réception' if name.upper() == 'INBOX' else next((v for k,v in labels.items() if k.lower() in match[1].lower()), decode_folder(name))
+                if match[2] is not None:
+                    delimiter = delimiter or unquote(match[2])
+                entries.append((name, match[1].lower()))
+            namespace, separator = personal_namespace(client)
+            delimiter = delimiter or separator
+            prefix = folder_prefix([name for name, _ in entries], delimiter, namespace)
+            labels = {b'\\sent': 'Envoyés', b'\\drafts': 'Brouillons', b'\\trash': 'Corbeille', b'\\junk': 'Spam', b'\\archive': 'Archives'}
+            folders = []
+            for name, flags in entries:
+                label = 'Boîte de réception' if name.upper() == 'INBOX' else \
+                        next((v for k, v in labels.items() if k in flags), None) or folder_label(name, delimiter, prefix)
                 folders.append((name, label))
             return folders
+
+    def hierarchy(self, client):
+        """(préfixe imposé, séparateur) pour créer et renommer les dossiers au bon endroit."""
+        namespace, delimiter = personal_namespace(client)
+        names = []
+        try:
+            status, data = client.list()
+        except (imaplib.IMAP4.error, AttributeError):
+            status, data = 'NO', []
+        for line in (data or []) if status == 'OK' else []:
+            match = re.match(rb'\((.*?)\) (?:' + QUOTED + rb'|NIL) (.*)', line) if isinstance(line, bytes) else None
+            if match:
+                if match[2] is not None and not delimiter:
+                    delimiter = unquote(match[2])
+                name = match[3].decode('ascii', 'replace')
+                names.append(re.sub(r'\\(.)', r'\1', name[1:-1]) if name.startswith('"') and name.endswith('"') else name)
+        return folder_prefix(names, delimiter, namespace), delimiter
 
     def folder_status(self, folders) -> dict:
         """STATUS de chaque dossier : {dossier: {MESSAGES, UIDNEXT, UIDVALIDITY[, HIGHESTMODSEQ]}}.
@@ -371,12 +439,21 @@ class IMAPClient:
             return len(uids)
 
     def manage_folder(self, operation: str, name: str, new_name: str = ''):
-        """create / rename / delete ; les noms affichés sont encodés en UTF-7 modifié."""
+        """create / rename / delete ; les noms affichés sont encodés en UTF-7 modifié.
+
+        Sur un serveur qui impose un préfixe (« INBOX. »), un nouveau dossier est créé sous ce préfixe ;
+        un dossier renommé garde son parent (new_name est le nouveau nom, pas un chemin complet)."""
         with self.session() as client:
+            if operation in {'create', 'rename'}:
+                prefix, delimiter = self.hierarchy(client)
             if operation == 'create':
-                status, _ = client.create(quote_folder(encode_folder(valid_folder_name(name))))
+                target = encode_folder(valid_folder_name(name))
+                if prefix and not target.upper().startswith(prefix.upper()):
+                    target = prefix + target
+                status, _ = client.create(quote_folder(target))
             elif operation == 'rename':
-                status, _ = client.rename(quote_folder(name), quote_folder(encode_folder(valid_folder_name(new_name))))
+                parent = name[:name.rfind(delimiter) + len(delimiter)] if delimiter and delimiter in name else prefix
+                status, _ = client.rename(quote_folder(name), quote_folder(parent + encode_folder(valid_folder_name(new_name))))
             elif operation == 'delete':
                 status, _ = client.delete(quote_folder(name))
             else:

@@ -207,3 +207,42 @@ def test_main_window_multi_selection(tmp_path, monkeypatch):
     window.close()
     from shiboken6 import delete
     delete(window)
+
+
+class PrefixedIMAP(FakeIMAP):
+    """Serveur Courier/cPanel : tous les dossiers sous « INBOX. »."""
+    def __init__(self, namespace=True):
+        super().__init__(capabilities=(b'IMAP4REV1', b'NAMESPACE') if namespace else (b'IMAP4REV1',))
+
+    def list(self, *args):
+        return 'OK', [rb'(\HasChildren) "." INBOX', rb'(\HasNoChildren) "." INBOX.Archive',
+                      rb'(\HasNoChildren) "." INBOX.Sent', rb'(\HasNoChildren) "." "INBOX.Clients.&AMk-t&AOk-"',
+                      rb'(\Noselect \HasChildren) "." INBOX.Clients', rb'(\HasNoChildren \Trash) "." INBOX.Trash']
+
+    def namespace(self):
+        return 'OK', [b'(("INBOX." ".")) NIL NIL']
+
+
+@pytest.mark.parametrize('namespace', [True, False])  # Préfixe annoncé (RFC 2342) ou déduit de la liste.
+def test_server_prefix_hidden_from_folder_names(namespace):
+    folders = client_with(PrefixedIMAP(namespace)).folders()
+    assert folders == [('INBOX', 'Boîte de réception'), ('INBOX.Archive', 'Archives'), ('INBOX.Sent', 'Envoyés'),
+                       ('INBOX.Clients.&AMk-t&AOk-', 'Clients › Été'), ('INBOX.Trash', 'Corbeille')]
+
+
+def test_folders_created_and_renamed_under_the_server_prefix():
+    fake = PrefixedIMAP()
+    client = client_with(fake)
+    client.manage_folder('create', 'Été')
+    client.manage_folder('rename', 'INBOX.Clients.&AMk-t&AOk-', 'Hiver')  # Reste dans « Clients ».
+    client.manage_folder('rename', 'INBOX.Archive', 'Vieux')
+    assert fake.commands == [('create', '"INBOX.&AMk-t&AOk-"'), ('rename', '"INBOX.Clients.&AMk-t&AOk-"', '"INBOX.Clients.Hiver"'),
+                             ('rename', '"INBOX.Archive"', '"INBOX.Vieux"')]
+
+
+def test_folder_label_without_prefix():
+    from mailclient.core.imap_client import folder_label, folder_prefix
+    assert folder_prefix(['INBOX', 'Archive', 'INBOX.Sous'], '.') == ''  # Pas de préfixe imposé.
+    assert folder_label('Projets/2026', '/') == 'Projets › 2026'
+    assert folder_label('[Gmail]/Tous les messages', '/') == '[Gmail] › Tous les messages'
+    assert folder_label('Sent Messages', '/') == 'Envoyés'
