@@ -2,6 +2,9 @@
 
 ## Non publié
 
+## 1.1.1 — 2026-11-24
+
+
 Première mise à jour installée automatiquement depuis la 1.1.0.
 
 - Nouveau : Outils › À propos de Smail affiche la version, le mode de mise à jour de cette copie et le dossier des données locales.
