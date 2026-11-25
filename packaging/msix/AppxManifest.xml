@@ -5,7 +5,8 @@
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap rescap">
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  IgnorableNamespaces="uap rescap desktop">
 
   <Identity Name="{name}" Publisher="{publisher}" Version="{version}" ProcessorArchitecture="x64" />
 
@@ -41,6 +42,10 @@
             <uap:DisplayName>Smail</uap:DisplayName>
           </uap:Protocol>
         </uap:Extension>
+        <!-- Lancement au démarrage : désactivé par défaut, activable dans Paramètres › Applications › Démarrage. -->
+        <desktop:Extension Category="windows.startupTask" Executable="Smail.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="SmailStartup" Enabled="false" DisplayName="Smail" />
+        </desktop:Extension>
       </Extensions>
     </Application>
   </Applications>

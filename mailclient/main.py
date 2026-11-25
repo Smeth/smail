@@ -53,7 +53,18 @@ def main():
         QMessageBox.critical(None, 'Démarrage impossible', 'Impossible de charger la configuration locale. Vérifiez les droits d’accès au dossier Smail dans AppData.')
         return 1
     logger.info('Démarrage de l’application %s', __version__)
-    window.show()
+    if '--minimized' in arguments and not mailto:
+        # Lancement à l’ouverture de session : Smail démarre discrètement (zone de notification si possible).
+        if window.tray is None:
+            window.showMinimized()
+    else:
+        window.show()
+    try:
+        from mailclient.core import autostart
+        if autostart.supported():
+            autostart.refresh()  # Après une mise à jour ou un déplacement : chemin de Smail à jour.
+    except OSError:
+        pass
     if instance is not None:
         instance.received.connect(window.external_request)
     if mailto:

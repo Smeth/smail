@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Lancement de Smail à l’ouverture de session Windows, réduit dans la zone de notification (Préférences › Général) ; retiré à la désinstallation. Version Store : tâche de démarrage gérée dans les paramètres de Windows.
+
 ## 1.3.1 — 2026-11-25
 
 

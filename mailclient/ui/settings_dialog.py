@@ -62,6 +62,22 @@ class SettingsDialog(QDialog):
         self.tray.setChecked(self.database.setting('close_to_tray',True))
         for control in (self.notifications, self.tray):
             box.addWidget(control)
+        from mailclient.core import autostart
+        from mailclient.core.updater import packaged as store_copy
+        self.autostart = QCheckBox('Lancer Smail à l’ouverture de session Windows (réduit dans la zone de notification)')
+        self.autostart.setEnabled(autostart.supported())
+        try:
+            self.autostart.setChecked(autostart.supported() and autostart.enabled())
+        except OSError:
+            self.autostart.setEnabled(False)
+        box.addWidget(self.autostart)
+        if store_copy():
+            startup = Button('Gérer le démarrage dans les paramètres de Windows…',self.appearance_theme,'settings-2','Secondary')
+            startup.clicked.connect(lambda: __import__('PySide6.QtGui', fromlist=['QDesktopServices']).QDesktopServices.openUrl(
+                __import__('PySide6.QtCore', fromlist=['QUrl']).QUrl('ms-settings:startupapps')))
+            box.addWidget(startup, 0, Qt.AlignLeft)
+        elif not autostart.supported():
+            box.addWidget(label('Lancement au démarrage : disponible pour Smail installé.','Small',True))
         # Liens « mailto: » : Windows exige que l’utilisateur choisisse lui-même l’application par défaut.
         from mailclient.core.updater import installed_copy, packaged
         self.default_app = Button('Définir Smail comme messagerie par défaut…',self.appearance_theme,'mail','Secondary',

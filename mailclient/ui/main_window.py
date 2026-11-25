@@ -1855,6 +1855,13 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self.database, self, page)
         if not dialog.exec():
             return
+        if dialog.autostart.isEnabled():
+            from mailclient.core import autostart
+            try:
+                if dialog.autostart.isChecked() != autostart.enabled():
+                    autostart.set_enabled(dialog.autostart.isChecked())
+            except OSError:
+                self.notify('Le lancement au démarrage n’a pas pu être modifié.', kind='error')
         if dialog.conversations.isChecked() != self.conversations_enabled():
             self.conversation_action.setChecked(dialog.conversations.isChecked())  # Enregistre et réaffiche la liste.
         values = dict(sync_minutes=dialog.minutes.value(), cache_limit=dialog.limit.value(), theme=dialog.theme.currentIndex(),

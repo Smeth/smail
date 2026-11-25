@@ -67,6 +67,13 @@ Filename: "{app}\Smail.exe"; Flags: nowait; Check: RelaunchRequested
 ; Smail pour tout effacer.
 
 [Code]
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  // Désinstallation : Smail ne doit plus être lancé à l’ouverture de session.
+  if CurUninstallStep = usPostUninstall then
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Run', 'Smail');
+end;
+
 function RelaunchRequested: Boolean;
 begin
   Result := WizardSilent and (ExpandConstant('{param:RELAUNCH|0}') = '1');
