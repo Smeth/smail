@@ -1,10 +1,14 @@
 # Smail — V1
 
-**Version 1.0.0 — première version publique.** Client mail de bureau pour Windows, en français, développé en Python avec PySide6.
+[English version](README.en.md)
+
+**Version 1.0.0 — première version publique.** Client mail de bureau pour Windows, en français et en anglais, développé en Python avec PySide6.
 
 La V1 propose trois styles d’interface, les thèmes clair et sombre, une boîte de réception unifiée, une rédaction avec miniatures des pièces jointes et un volet de lecture organisé en cartes. Les réglages d’apparence sont accessibles dans le menu **Affichage**. Les détails de cette version figurent dans [CHANGELOG.md](CHANGELOG.md).
 
-Client de bureau en français, Python 3.11+ et PySide6, avec les quatre phases du cahier des charges implémentées. IMAP gère la réception et les actions ; SMTP gère l’envoi. Aucun identifiant de compte ni identifiant d’application OAuth n’est livré avec le projet.
+Client de bureau en français et en anglais, Python 3.11+ et PySide6, avec les quatre phases du cahier des charges implémentées. IMAP gère la réception et les actions ; SMTP gère l’envoi. Aucun identifiant de compte ni identifiant d’application OAuth n’est livré avec le projet.
+
+La langue de l’interface se choisit dans **Préférences › Général** (Automatique — suit Windows / Français / English) et s’applique au redémarrage.
 
 ## Installer et lancer
 

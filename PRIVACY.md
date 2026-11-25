@@ -1,6 +1,6 @@
 # Politique de confidentialité de Smail
 
-Dernière mise à jour : 24 novembre 2026.
+Dernière mise à jour : 25 novembre 2026. — *English version: [below](#english).*
 
 Smail est un client mail de bureau pour Windows. **Il ne collecte aucune donnée sur vous** : pas de compte Smail, pas de serveur Smail, pas de statistiques d’utilisation, pas de publicité, aucune revente ni aucun partage de données. Vos messages et vos réglages restent sur votre ordinateur.
 
@@ -22,7 +22,7 @@ Smail se connecte uniquement aux services nécessaires à ce que vous lui demand
 - **Vos serveurs de messagerie** (IMAP pour recevoir, SMTP pour envoyer), ceux que vous avez configurés, avec un chiffrement TLS vérifié.
 - **Détection des réglages**, à l’ajout d’un compte : pour trouver vos serveurs, Smail consulte le fichier de réglages publié par le domaine de votre adresse (par exemple `autoconfig.votredomaine.fr`), puis la base publique de réglages de Thunderbird (`autoconfig.thunderbird.net`). **Seul le nom de domaine est transmis**, jamais votre adresse complète ni votre mot de passe. Rien n’est consulté pour les grands fournisseurs déjà connus de Smail (Gmail, Outlook, Yahoo, iCloud).
 - **Google ou Microsoft**, seulement si vous choisissez de vous connecter à un compte Gmail ou Outlook par leur page d’autorisation (OAuth2). Smail n’a alors jamais accès à votre mot de passe.
-- **GitHub** (version téléchargée depuis le site de Smail uniquement) : une requête anonyme toutes les 6 heures pour savoir si une nouvelle version existe, puis le téléchargement de la mise à jour. Aucune information personnelle n’est transmise. La version du Microsoft Store ne fait pas cette requête : le Store gère ses mises à jour.
+- **GitHub** (version téléchargée depuis le site de Smail uniquement) : une requête anonyme toutes les 6 heures pour savoir si une nouvelle version existe, puis le téléchargement de la mise à jour si vous l’acceptez. Aucune information personnelle n’est transmise. La version du Microsoft Store ne fait pas cette requête : le Store gère ses mises à jour.
 - **Les sites des expéditeurs**, uniquement après votre action :
   - les **images distantes** d’un message sont bloquées par défaut ; si vous choisissez de les afficher, l’expéditeur peut savoir que vous avez ouvert son message ;
   - le **désabonnement** d’une liste de diffusion envoie, après votre confirmation, la demande prévue par l’expéditeur (adresse web ou e-mail) ;
@@ -47,10 +47,51 @@ Toute modification de cette politique sera publiée sur cette page, avec sa date
 
 ---
 
-## Privacy policy (summary in English)
+<a id="english"></a>
 
-Smail is a Windows desktop email client. **It collects no data about you**: no Smail account, no Smail server, no analytics, no advertising, no data sale or sharing. Account settings, a local copy of your messages, drafts and contacts are stored only on your computer (optionally encrypted); passwords and tokens are stored in Windows Credential Manager; the local log never contains message content.
+# Smail privacy policy
 
-Smail only connects to: your own mail servers (IMAP/SMTP over verified TLS); when adding an account, the settings file published by your email domain and Thunderbird's public settings database (only the domain name is sent); Google or Microsoft sign-in pages, only if you choose OAuth2; GitHub, anonymously, to check for updates (not in the Microsoft Store version); and, only after your action, remote images (blocked by default), mailing-list unsubscribe requests (after confirmation) and links you open.
+Last updated: November 25, 2026.
 
-Deleting an account in Smail removes all its local data and stored credentials from your PC. Questions: <https://github.com/Smeth/smail/issues>
+Smail is a desktop email client for Windows. **It collects no data about you**: no Smail account, no Smail server, no usage statistics, no advertising, and no data is sold or shared. Your messages and settings stay on your computer.
+
+## The data Smail handles, and where it stays
+
+| Data | Where it is stored |
+| --- | --- |
+| Your account settings (address, servers, sign-in details) | On your PC, in Smail’s folder (`%LOCALAPPDATA%\SmailDesktop\Smail`) |
+| Passwords and sign-in tokens | In Windows Credential Manager, on your PC |
+| Local copy of your messages, attachments, drafts and contacts (for offline mode and search) | On your PC, in the same folder. You can encrypt it: Settings › Security |
+| Technical log (`smail.log`) | On your PC. It contains dates and error types, **never the content of your messages** |
+
+None of this is sent to Smail’s developer or to any third party.
+
+## Smail’s network connections
+
+Smail only connects to the services needed for what you ask it to do:
+
+- **Your mail servers** (IMAP to receive, SMTP to send), the ones you configured, over verified TLS encryption.
+- **Settings detection**, when you add an account: to find your servers, Smail looks up the settings file published by your email domain (for example `autoconfig.yourdomain.com`), then Thunderbird’s public settings database (`autoconfig.thunderbird.net`). **Only the domain name is sent**, never your full address or your password. Nothing is looked up for the major providers Smail already knows (Gmail, Outlook, Yahoo, iCloud).
+- **Google or Microsoft**, only if you choose to sign in to a Gmail or Outlook account through their authorization page (OAuth2). Smail never has access to your password.
+- **GitHub** (version downloaded from Smail’s website only): an anonymous request every 6 hours to check whether a new version exists, then the download of the update if you accept it. No personal information is sent. The Microsoft Store version does not make this request: the Store handles its updates.
+- **Senders’ websites**, only after you act:
+  - **remote images** in a message are blocked by default; if you choose to show them, the sender may learn that you opened the message;
+  - **unsubscribing** from a mailing list sends, after your confirmation, the request provided by the sender (web address or email);
+  - a **link** you open is shown in your web browser.
+
+## Your rights and deleting your data
+
+All your data is on your computer: you keep full control of it.
+
+- **Removing an account** (Accounts › Delete account) deletes from this PC its configuration, its local copy of messages, its drafts, its trusted certificates and its passwords in Credential Manager. Your messages remain on your email provider’s server.
+- **Uninstalling Smail** removes the program. To erase everything, remove your accounts in Smail first, or delete the `%LOCALAPPDATA%\SmailDesktop\Smail` folder afterwards.
+
+Data held by your email provider (Gmail, Outlook, your hosting provider…) is covered by that provider’s own privacy policy.
+
+## Children
+
+Smail collects no data, including about children.
+
+## Changes and contact
+
+Any change to this policy will be published on this page, with its date. For any question: <https://github.com/Smeth/smail/issues>

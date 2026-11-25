@@ -1,6 +1,6 @@
 # Fiche Microsoft Store de Smail (produit 9NZG6PT58G5J)
 
-Textes à copier dans l’Espace partenaires › smail › Soumission. Langue de la fiche : français (France).
+Textes à copier dans l’Espace partenaires › smail › Soumission. Deux fiches : **français (France)** ci-dessous et **anglais (États-Unis)** plus bas — dans la soumission, « Ajouter/supprimer des langues » › ajouter *English (United States)*, puis remplir chaque fiche.
 
 ## Paquet
 
@@ -41,13 +41,16 @@ Vos messages et vos réglages restent sur votre ordinateur : pas de compte Smail
 
 ### Nouveautés de cette version
 
-Reprendre la section de la version dans CHANGELOG.md (par exemple « 1.3.0 »), première phrase et principales lignes.
+Reprendre la section de la version dans CHANGELOG.md (par exemple « 1.4.0 »), première phrase et principales lignes.
+
+Pour la 1.4.0 : « Smail parle maintenant anglais : la langue suit celle de Windows, ou se choisit dans Préférences › Général. Lancement possible à l’ouverture de session Windows, et un message transféré est désormais recopié tel quel. »
 
 ### Fonctionnalités du produit (une par ligne, 20 au maximum)
 
 - Toutes les messageries IMAP/SMTP, réglages détectés automatiquement à partir de l’adresse
 - Vos mails restent sur votre PC ; aucune collecte de données
-- Correcteur d’orthographe en français
+- Interface en français ou en anglais, selon Windows
+- Correcteur d’orthographe en français et en anglais
 - Mise en forme, signature par compte et pièces jointes par glisser-déposer
 - Envoi en arrière-plan avec annulation et envoi programmé
 - Vue par conversation et liste groupée par date
@@ -65,6 +68,52 @@ Reprendre la section de la version dans CHANGELOG.md (par exemple « 1.3.0 »), 
 ### Mention de copyright
 
 © 2026 Smeth-Dev — Licence MIT
+
+## Fiche en anglais (English (United States))
+
+Mêmes propriétés, prix et classification que ci-dessus ; seuls les textes changent. Captures : celles de l’interface en anglais (`python tools/store_screenshots.py --lang en`, ou les mêmes que la fiche française).
+
+### Description
+
+Smail is a desktop email client for Windows: simple, fast and respectful of your privacy. It works with any IMAP/SMTP email service: your hosting provider, Gmail, Outlook.com, Yahoo, iCloud…
+
+Your messages and settings stay on your computer: no Smail account, no intermediate server, no ads, no data collection. Passwords are kept in Windows Credential Manager, and the local copy of your mail can be encrypted.
+
+Write with a spell checker, simple formatting and your signature. Messages are sent in the background with clear progress, an undo delay and scheduled sending. Read your mail by conversation, find it with advanced search and sort it with automatic rules. Smail is available in English and French, following your Windows language.
+
+### What’s new in this version
+
+Smail now speaks English: the language follows Windows, or can be chosen in Settings › General. Smail can start when you sign in to Windows, and forwarded messages are now copied as they are.
+
+### Product features (one per line, 20 max)
+
+- Works with any IMAP/SMTP email service, settings detected from your address
+- Your mail stays on your PC; no data collection
+- English or French interface, following Windows
+- Spell checker in English and French
+- Formatting, per-account signature and drag-and-drop attachments
+- Background sending with undo and scheduled send
+- Conversation view and a message list grouped by date
+- Advanced search: sender, subject, attachments, dates
+- Sorting rules, junk filter and one-click unsubscribe
+- Offline mode and instant delivery of new mail
+- Light or dark theme, three styles and three densities
+- Remote images blocked by default, verified certificates
+- “mailto:” links: Smail can be your default email app
+
+### Search keywords (7 max)
+
+`mail`, `email`, `email client`, `IMAP`, `inbox`, `Gmail`, `Outlook`
+
+### Copyright
+
+© 2026 Smeth-Dev — MIT License
+
+### Notes for certification (in English, for the reviewers)
+
+> Smail is a desktop application (Python / PySide6, Qt WebEngine) packaged as MSIX; the restricted capability **runFullTrust** is required by any packaged Win32 application. The app has no account of its own: to test it, add any IMAP/SMTP email account (for example an Outlook.com account, or Gmail with an app password) via “Add account”. No data is sent to the developer. Source code: https://github.com/Smeth/smail
+
+runFullTrust justification (if asked): “Classic Win32 desktop application (Qt interface, Qt WebEngine message renderer, access to Windows Credential Manager) packaged as MSIX for the Store.”
 
 ## Options de soumission › Notes pour la certification
 

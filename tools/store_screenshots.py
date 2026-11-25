@@ -1,6 +1,7 @@
 """Captures d’écran pour la fiche du Microsoft Store (1920 × 1080), avec des données d’exemple uniquement.
 
-  python tools/store_screenshots.py            -> dist/store/*.png
+  python tools/store_screenshots.py            -> dist/store/*.png     (fiche française)
+  python tools/store_screenshots.py --lang en  -> dist/store/en/*.png  (fiche anglaise)
 
 Aucun compte réel, aucun réseau : serveur simulé, adresses fictives (example.com)."""
 import os
@@ -13,6 +14,9 @@ from pathlib import Path
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+ENGLISH = '--lang' in sys.argv and sys.argv[sys.argv.index('--lang') + 1:][:1] == ['en']
+from mailclient import i18n  # noqa: E402
+i18n.set_language('en' if ENGLISH else 'fr')  # Avant l’interface, comme au lancement de Smail.
 
 from mailclient.tests.test_ui import APP, process_until  # noqa: E402
 from mailclient.core.accounts import Account, Server  # noqa: E402
@@ -22,7 +26,7 @@ from mailclient.core.tls_policy import TLSPolicy  # noqa: E402
 from mailclient.storage.database import Database  # noqa: E402
 
 NOW = datetime.now().astimezone()
-ME = Account('Camille Martin', 'camille@example.com', Server('mail.example.com', 993), Server('mail.example.com', 465))
+ME = Account('Camille Martin' if not ENGLISH else 'Camille Miller', 'camille@example.com', Server('mail.example.com', 993), Server('mail.example.com', 465))
 MESSAGES = [
     ('9', 0, 'Léa Bernard <lea@example.com>', 'Réunion de lancement jeudi', 'Bonjour Camille, je te propose jeudi 10 h pour le lancement…', True, True),
     ('8', 0, 'Équipe Projet <projet@example.com>', 'Compte rendu du comité', 'Voici le compte rendu et les prochaines étapes.', True, False),
@@ -32,14 +36,25 @@ MESSAGES = [
     ('4', 12, 'Association Les Amis <contact@example.com>', 'Lettre d’information', 'Le programme des sorties de décembre.', False, False),
     ('3', 35, 'Marc Dubois <marc@example.com>', 'Facture octobre', 'Veuillez trouver la facture ci-jointe.', False, True),
 ]
+if ENGLISH:
+    MESSAGES = [
+        ('9', 0, 'Leah Bennett <lea@example.com>', 'Kickoff meeting on Thursday', 'Hi Camille, how about Thursday at 10 for the kickoff…', True, True),
+        ('8', 0, 'Project Team <projet@example.com>', 'Steering committee notes', 'Here are the notes and the next steps.', True, False),
+        ('7', 1, 'Thomas Parker <thomas@example.com>', 'Re: Kitchen quote', 'Thanks for the quote, it’s approved on our side.', False, True),
+        ('6', 2, 'Example Bank <info@example.com>', 'Your November statement', 'Your monthly statement is available.', False, False),
+        ('5', 4, 'Sophie Lane <sophie@example.com>', 'Weekend photos', 'The photos are attached!', False, True),
+        ('4', 12, 'Friends Club <contact@example.com>', 'Newsletter', 'The December outings program.', False, False),
+        ('3', 35, 'Mark Douglas <marc@example.com>', 'October invoice', 'Please find the invoice attached.', False, True),
+    ]
 
 
 class Client:
     uidvalidity = '7'
 
     def folders(self):
+        mine = [('Projects', 'Projects'), ('Family', 'Family')] if ENGLISH else [('Projets', 'Projets'), ('Famille', 'Famille')]
         return [('INBOX', 'Boîte de réception'), ('Drafts', 'Brouillons'), ('Sent', 'Envoyés'), ('Archive', 'Archives'),
-                ('Junk', 'Spam'), ('Trash', 'Corbeille'), ('Projets', 'Projets'), ('Famille', 'Famille')]
+                ('Junk', 'Spam'), ('Trash', 'Corbeille')] + mine  # Libellés internes : affichés traduits.
 
     def messages(self, folder, page, query=''):
         rows = [dict(uid=uid, subject=subject, sender=sender, folder='INBOX', uidvalidity='7',
@@ -48,19 +63,26 @@ class Client:
                 for uid, days, sender, subject, preview, unread, attachment in MESSAGES]
         return rows, len(rows)
 
+    def action(self, *args):
+        pass  # Marquer comme lu à l’ouverture : accepté par le serveur simulé.
+
     def message_raw(self, folder, uid):
+        if ENGLISH:
+            return ('From: Leah Bennett <lea@example.com>\r\nTo: camille@example.com\r\nSubject: Kickoff meeting on Thursday\r\n'
+                    'Content-Type: text/plain; charset=utf-8\r\n\r\nHi Camille,\r\n\r\nHow about Thursday at 10 a.m. for '
+                    'the project kickoff meeting?\r\nThe agenda is attached.\r\n\r\nHave a nice day,\r\nLeah\r\n').encode()
         return ('From: Léa Bernard <lea@example.com>\r\nTo: camille@example.com\r\nSubject: Réunion de lancement jeudi\r\n'
                 'Content-Type: text/plain; charset=utf-8\r\n\r\nBonjour Camille,\r\n\r\nJe te propose jeudi à 10 h pour '
                 'la réunion de lancement du projet.\r\nL’ordre du jour est en pièce jointe.\r\n\r\nBonne journée,\r\nLéa\r\n').encode()
 
 
 def main():
-    out = ROOT / 'dist' / 'store'
+    out = ROOT / 'dist' / 'store' / ('en' if ENGLISH else '')
     out.mkdir(parents=True, exist_ok=True)
     MailService.client = lambda *args: Client()
     db = Database(Path(tempfile.mkdtemp()) / 'settings.db')
     db.save(ME)
-    db.cache_put('unread', ME.id, {'INBOX': 2, 'Projets': 1}, ME.id)
+    db.cache_put('unread', ME.id, {'INBOX': 2, 'Projects' if ENGLISH else 'Projets': 1}, ME.id)
     from mailclient.ui.main_window import MainWindow
     from mailclient.ui.compose_window import ComposeWindow
     from mailclient.ui.settings_dialog import SettingsDialog
@@ -80,8 +102,12 @@ def main():
     process_until(lambda: False, 1.5)
     window.grab().save(str(out / '2-theme-sombre.png'))
     window.toggle_theme()
-    composer = ComposeWindow(window.service, [ME], ME, dict(to='Léa Bernard <lea@example.com>', subject='Re: Réunion de lancement jeudi',
-                             body='Bonjour Léa,\n\nJeudi 10 h me convient parfaitement. Je préparre la présentation.\n\nÀ jeudi,\nCamille'),
+    reply = (dict(to='Leah Bennett <lea@example.com>', subject='Re: Kickoff meeting on Thursday',
+                  body='Hi Leah,\n\nThursday at 10 works perfectly for me. I’ll prepare the presentaton.\n\nSee you Thursday,\nCamille')
+             if ENGLISH else
+             dict(to='Léa Bernard <lea@example.com>', subject='Re: Réunion de lancement jeudi',
+                  body='Bonjour Léa,\n\nJeudi 10 h me convient parfaitement. Je préparre la présentation.\n\nÀ jeudi,\nCamille'))
+    composer = ComposeWindow(window.service, [ME], ME, reply,
                              parent=window)
     composer.resize(1366, 900)
     composer.show()
