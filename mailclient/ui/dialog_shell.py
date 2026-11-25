@@ -20,7 +20,9 @@ def dialog_layout(dialog: QDialog, title: str, subtitle: str, size=(900,760)):
     """Structure visuelle du Dialog de mockups/dialogs.py, sans données fictives."""
     theme = appearance()
     dialog.setMinimumSize(620,480)
-    screen = (dialog.parentWidget() or dialog).screen() or QApplication.primaryScreen()
+    parent = dialog.parentWidget()
+    # Jamais dialog.screen() avant l’affichage : la fenêtre native serait créée trop tôt (plantage de Qt).
+    screen = parent.screen() if parent is not None and parent.isVisible() else QApplication.primaryScreen()
     if screen is not None:  # Jamais plus grand que l’écran (portables 1366 × 768 notamment).
         area = screen.availableGeometry()
         size = (min(size[0], int(area.width() * .9)), min(size[1], int(area.height() * .85)))
