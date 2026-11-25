@@ -95,9 +95,9 @@ def test_short_list_fills_itself_without_scrolling(tmp_path, monkeypatch):
     try:
         window.resize(1200, 700)
         window.show()
-        window.page_filter = 'Non lus'  # Aucun message non lu : la liste visible reste vide.
         window.reload_accounts()
         assert process_until(lambda: not window.busy and requested)
+        window.user_filter('Non lus')  # Aucun message non lu : la liste visible reste vide.
         process_until(lambda: False, 1)
         assert requested == [0, 1, 2, 3, 4]  # Quatre pages automatiques au plus, puis on attend l’utilisateur.
     finally:

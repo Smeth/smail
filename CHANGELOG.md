@@ -2,6 +2,12 @@
 
 ## Non publié
 
+- Filtres de la liste : retour à « Tous » à chaque changement de dossier (un filtre conservé faisait paraître le dossier vide) ; « Non lus » masqué dans Envoyés et Brouillons.
+- Liste des messages : un message non lu se distingue d’un coup d’œil (expéditeur et objet en gras, point bleu plus grand) ; les messages lus sont estompés.
+- En-tête : bouton thème clair / sombre après les paramètres ; bouton « Commandes » retiré (Ctrl+K ou menu Affichage) ; plus d’espace vide sous l’en-tête. Menu Affichage : « Passer au thème clair / sombre » selon le thème actuel.
+- Mises à jour : nouveau mode « Me demander » (par défaut) : la nouvelle version est signalée et rien n’est téléchargé sans votre accord ; modes « Automatiques » et « Désactivées » dans Préférences › Général.
+- Correction : le bouton « Filtres » de la recherche plantait quand le champ de recherche était vide (1.2.0).
+- Rédaction allégée : pièces jointes en étiquettes compactes (chacune avec son ×, sur plusieurs lignes), total en Mo en tête, en orange au-delà de 25 Mo une fois encodé ; boutons « Joindre », « Image », « Enregistrer » ; titre de la fenêtre égal à l’objet du message.
 - Préférences rangées par thème : Général, Comptes, Apparence, Réception, Rédaction, Sécurité, Règles et indésirables, Raccourcis. Page Comptes détaillée (méthode de connexion, serveurs) avec « Ajouter un compte » ; menu Comptes › Gérer les comptes….
 - Connexion Gmail et Outlook en un clic (« Se connecter avec Google / Microsoft ») avec l’application OAuth2 de Smail, une fois ses identifiants renseignés (`docs/OAUTH.md`) ; identifiants techniques réservés au mode avancé.
 

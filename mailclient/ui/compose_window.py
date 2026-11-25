@@ -15,7 +15,7 @@ from mailclient.ui.components import Button, Card, label
 from PySide6.QtGui import QShortcut, QKeySequence, QIcon, QPixmap
 from mailclient.ui.icons import icon
 from mailclient.ui.attachment_widgets import (AttachmentGrid, ComposeEditor, IMAGE_FILTER,
-    read_attachments, thumbnail, clipboard_attachment, local_paths, clipboard_image)
+    read_attachments, thumbnail, clipboard_attachment, local_paths, clipboard_image, CHIP)
 from mailclient.core.html_security import dangerous_filename
 from mailclient.ui.address_completer import AddressCompleter
 from mailclient.ui.rich_text import FormatBar
@@ -133,10 +133,10 @@ class ComposeWindow(QDialog):
         self.attachment_label = label('Pièces jointes','Small')
         attachment_header.addWidget(self.attachment_label)
         attachment_header.addStretch()
+        # Chaque étiquette a son propre × : ce bouton global ne sert plus qu’au clavier et reste masqué.
         self.remove_file = Button('',self.appearance,'x',tooltip='Retirer la pièce jointe sélectionnée')
         self.remove_file.setFixedSize(30,30)
-        self.remove_file.setMinimumHeight(30)
-        attachment_header.addWidget(self.remove_file)
+        self.remove_file.hide()
         attachment_layout.addLayout(attachment_header)
         self.attachments = AttachmentGrid()
         attachment_layout.addWidget(self.attachments)
@@ -144,8 +144,8 @@ class ComposeWindow(QDialog):
         self.attachment_hint = label('Glissez des fichiers ici ou collez une image dans le message.','Small',True)
         layout.addWidget(self.attachment_hint)
         buttons = QHBoxLayout()
-        self.add_file = Button('Joindre…',self.appearance,'paperclip','Secondary')
-        self.add_image = Button('Images…',self.appearance,'plus','Secondary')
+        self.add_file = Button('Joindre',self.appearance,'paperclip','Secondary','Joindre des fichiers (ou glissez-les dans la fenêtre)')
+        self.add_image = Button('Image',self.appearance,'plus','Secondary','Joindre des images (ou collez-les dans le message)')
         self.send_button = Button('Envoyer',self.appearance,'send','Primary')
         self.server_button = Button('Copier aux brouillons du serveur',self.appearance,'file-pen-line','Secondary')
         self.discard_button = Button('Supprimer le brouillon',self.appearance,'trash-2','QuietDanger')
@@ -155,10 +155,12 @@ class ComposeWindow(QDialog):
         self.server_button.hide()
         self.discard_button.hide()
         self.draft_menu = QMenu(self)
-        self.server_action = self.draft_menu.addAction('Copier aux brouillons du serveur',self.server_button.click)
+        self.server_action = self.draft_menu.addAction('Enregistrer aussi dans les Brouillons du serveur',self.server_button.click)
         self.draft_menu.addSeparator()
-        self.discard_action = self.draft_menu.addAction('Supprimer le brouillon',self.discard_button.click)
-        self.more_button = Button('Brouillon',self.appearance,'file-pen-line')
+        self.discard_action = self.draft_menu.addAction('Supprimer ce brouillon',self.discard_button.click)
+        # Le brouillon est enregistré sur ce PC automatiquement ; ce menu propose le reste.
+        self.more_button = Button('Enregistrer',self.appearance,'file-pen-line',
+                                  tooltip='Le brouillon est enregistré automatiquement sur ce PC. Menu : copie sur le serveur, suppression.')
         self.more_button.setMenu(self.draft_menu)
         self.draft_menu.aboutToShow.connect(self.update_draft_menu)
         for button in (self.add_file,self.add_image,self.more_button):
@@ -211,6 +213,9 @@ class ComposeWindow(QDialog):
         self.attachments.imageAdded.connect(self.add_clipboard_image)
         self.body.imageAdded.connect(self.add_clipboard_image)
         self.remove_file.clicked.connect(self.remove_attachment)
+        self.attachments.removeRequested.connect(self.remove_at)
+        self.subject.textChanged.connect(self.update_title)
+        self.update_title()
         self.send_button.clicked.connect(self.send)
         self.server_button.clicked.connect(self.save_server_draft)
         QShortcut(QKeySequence('Ctrl+Return'),self,activated=lambda:None if self.countdown else self.send())
@@ -302,6 +307,31 @@ class ComposeWindow(QDialog):
             self.status.setText('Brouillon non enregistré : ' + message)
         self.runner.run(operation, done, failed)
 
+    @staticmethod
+    def size_text(size):
+        text = f'{size/1_000_000:.1f} Mo' if size >= 1_000_000 else f'{max(1, round(size/1000))} Ko'
+        return text.replace('.', ',')
+
+    def update_title(self, *_):
+        """Titre de la fenêtre : l’objet du message, pour distinguer plusieurs rédactions ouvertes."""
+        self.setWindowTitle((self.subject.text().strip() or 'Nouveau message') + ' — Smail')
+
+    def update_attachment_total(self):
+        """« Pièces jointes · 4 · 7,4 Mo », en orange quand le message dépassera 25 Mo une fois encodé."""
+        total = sum(len(attachment.data) for attachment in self.files)
+        encoded = total * 4 // 3  # Les pièces jointes grossissent d’environ un tiers à l’envoi.
+        text = f'Pièces jointes · {len(self.files)} · {self.size_text(total)}'
+        if encoded > SIZE_WARNING:
+            text += f' — environ {self.size_text(encoded)} à l’envoi : risque de refus chez le destinataire'
+        self.attachment_label.setText(text)
+        self.attachment_label.setStyleSheet(f'color: {self.appearance.colors["warning"]};' if encoded > SIZE_WARNING else '')
+
+    def remove_at(self, row):
+        if 0 <= row < len(self.files) and not self.busy and not self.delivered:
+            self.files.pop(row)
+            self.show_files()
+            self.changed()
+
     def show_files(self):
         selected = self.attachments.currentRow()
         self._preview_generation += 1
@@ -309,14 +339,14 @@ class ComposeWindow(QDialog):
         self.attachments.clear()
         self.attachment_panel.setVisible(bool(self.files))
         self.attachment_hint.setVisible(not self.files)
-        self.attachment_label.setText(f'Pièces jointes · {len(self.files)}')
+        self.update_attachment_total()
         pending = []
         keep = {id(attachment) for attachment in self.files}
         self._preview_cache = {key:value for key,value in self._preview_cache.items() if key in keep}
         for index,attachment in enumerate(self.files):
             size = f'{len(attachment.data)/1048576:.1f} Mo' if len(attachment.data) >= 1048576 else f'{len(attachment.data)/1024:.1f} Ko'
             item = QListWidgetItem(f'{attachment.name}\n{size.replace(".",",")}')
-            item.setSizeHint(QSize(264,76))
+            item.setSizeHint(CHIP)
             item.setToolTip(f'{attachment.name}\n{len(attachment.data):,} octets')
             item.setIcon(icon('shield-alert' if dangerous_filename(attachment.name) else 'file-text',self.appearance.colors['muted'],48))
             item.setData(Qt.UserRole,False)
@@ -328,6 +358,7 @@ class ComposeWindow(QDialog):
                 pending.append((index,attachment))
         if self.files:
             self.attachments.setCurrentRow(max(0,min(selected,len(self.files)-1)))
+            self.attachments.fit()
         if hasattr(self,'remove_file'):
             self.remove_file.setEnabled(bool(self.files) and not self.busy and not self.delivered)
         if not pending:
@@ -461,7 +492,7 @@ class ComposeWindow(QDialog):
         size = len(message.as_bytes())
         if size > SIZE_WARNING and QMessageBox.warning(
                 self, 'Message volumineux',
-                f'Ce message fait {size / 1_000_000:.1f} Mo une fois encodé'.replace('.', ',') + f' (les pièces jointes grossissent d’environ un tiers).\n\n'
+                f'Ce message fait {size / 1_000_000:.1f} Mo une fois encodé'.replace('.', ',') + ' (les pièces jointes grossissent d’environ un tiers).\n\n'
                 'Beaucoup de messageries (Outlook, Microsoft 365, messageries d’entreprise) refusent les messages de plus de '
                 '20 à 35 Mo ; Gmail accepte jusqu’à 50 Mo. Selon le destinataire, il risque de ne jamais arriver, et le refus '
                 'n’apparaît que plus tard, par un message d’erreur dans votre boîte de réception.\n\n'

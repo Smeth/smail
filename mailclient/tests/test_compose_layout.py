@@ -77,7 +77,48 @@ def test_reader_has_one_empty_prompt_and_menus_are_connected(tmp_path):
     window.style_actions[3].trigger()
     assert window.appearance.variant == 3
     window.toggle_theme()
-    assert window.dark_action.isChecked() == window.appearance.dark
+    # Le menu annonce l’action (vers l’autre thème), comme le bouton de l’en-tête.
+    expected = 'Passer au thème clair' if window.appearance.dark else 'Passer au thème sombre'
+    assert window.dark_action.text() == expected and window.theme_button.toolTip().startswith(expected)
     window.density_actions['Compacte'].trigger()
     assert window.density_box.currentText() == 'Compacte'
     window.close()
+
+
+def test_compact_attachments_with_total_and_remove_buttons(tmp_path):
+    from PySide6.QtCore import QPoint, QPointF, QEvent
+    from PySide6.QtGui import QMouseEvent
+    from mailclient.core.parser import Attachment
+    from mailclient.ui.attachment_widgets import remove_area
+    db = Database(tmp_path/'compact.db')
+    service = MailService(db,Vault(),TLSPolicy(db))
+    account = Account('a@example.com','a@example.com',Server('imap.example.com',993),Server('smtp.example.com',465))
+    composer = ComposeWindow(service,[account],fields=dict(subject='Rapport annuel'))
+    composer.debounce.stop()
+    composer.periodic.stop()
+    composer.resize(760, 700)
+    composer.show()
+    assert composer.windowTitle() == 'Rapport annuel — Smail'
+    composer.subject.setText('')
+    assert composer.windowTitle() == 'Nouveau message — Smail'
+    composer.files = [Attachment('a.pdf','application/pdf',b'x'*2_400_000), Attachment('b.txt','text/plain',b'y'*3000)]
+    composer.show_files()
+    assert composer.attachment_label.text() == 'Pièces jointes · 2 · 2,4 Mo' and composer.attachment_label.styleSheet() == ''
+    assert composer.remove_file.isHidden()
+    rect = composer.attachments.visualItemRect(composer.attachments.item(0))
+    point = QPointF(remove_area(rect).center())
+    release = QMouseEvent(QEvent.MouseButtonRelease, point, composer.attachments.viewport().mapToGlobal(point.toPoint()),
+                          Qt.LeftButton, Qt.NoButton, Qt.NoModifier)
+    composer.attachments.mouseReleaseEvent(release)  # Clic sur le × de la première étiquette.
+    assert [a.name for a in composer.files] == ['b.txt']
+    composer.files.append(Attachment('video.mp4','video/mp4',b'z'*20_000_000))
+    composer.show_files()
+    assert 'risque de refus' in composer.attachment_label.text() and 'color' in composer.attachment_label.styleSheet()
+    composer.attachments.setCurrentRow(1)
+    composer.attachments.setFocus()
+    from PySide6.QtTest import QTest
+    QTest.keyClick(composer.attachments, Qt.Key_Delete)
+    assert [a.name for a in composer.files] == ['b.txt']
+    assert composer.more_button.text() == 'Enregistrer' and composer.add_file.text() == 'Joindre'
+    composer.saved_revision = composer.revision
+    composer.close()

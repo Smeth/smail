@@ -69,3 +69,37 @@ def test_headers_follow_filters_and_hover_actions_act_on_the_row(tmp_path, monke
         window.close()
         from shiboken6 import delete
         delete(window)
+
+
+def test_changing_folder_resets_filter_and_hides_unread_in_sent(tmp_path, monkeypatch):
+    from mailclient.tests.test_ui import APP, process_until  # noqa: F401
+    from mailclient.core.service import MailService
+    from mailclient.core.tls_policy import TLSPolicy
+    from mailclient.storage.database import Database
+    from mailclient.tests.test_scheduler import ME, Client
+    from mailclient.ui.main_window import MainWindow
+    db = Database(tmp_path / 'settings.db')
+    db.save(ME)
+    client = Client()  # Dossiers : Boîte de réception et Envoyés.
+    client.uidvalidity = '7'
+    client.messages = lambda folder, page, query='': ([], 0)
+    monkeypatch.setattr(MailService, 'client', lambda *args: client)
+    window = MainWindow(db, None, TLSPolicy(db), auto_load=False)
+    try:
+        window.reload_accounts()
+        window.select_account(ME.id)
+        assert process_until(lambda: not window.busy and window.folders.count() == 2)
+        window.filter_buttons['Non lus'].click()
+        assert window.page_filter == 'Non lus'
+        window.folders.setCurrentRow(1)  # Envoyés.
+        assert process_until(lambda: not window.busy)
+        assert window.page_filter == 'Tous' and window.filter_buttons['Tous'].isChecked()
+        assert window.filter_buttons['Non lus'].isHidden() and not window.filter_buttons['Pièces jointes'].isHidden()
+        window.folders.setCurrentRow(0)  # Retour à la réception : « Non lus » revient.
+        assert process_until(lambda: not window.busy)
+        assert not window.filter_buttons['Non lus'].isHidden()
+    finally:
+        window.reader.shutdown()
+        window.close()
+        from shiboken6 import delete
+        delete(window)

@@ -60,17 +60,23 @@ class SettingsDialog(QDialog):
         self.notifications.setChecked(self.database.setting('notifications',True))
         self.tray = QCheckBox('Réduire dans la zone de notification à la fermeture (Smail continue de recevoir vos messages)')
         self.tray.setChecked(self.database.setting('close_to_tray',True))
-        from mailclient import __version__
-        self.auto_update = QCheckBox(f'Installer automatiquement les mises à jour (version actuelle : {__version__})')
-        self.auto_update.setToolTip('Vérifiées toutes les 6 heures sur GitHub ; installées à la fermeture de Smail, '
-                                    'uniquement si leur signature est valide.')
-        self.auto_update.setChecked(self.database.setting('auto_update',True))
-        from mailclient.core.updater import packaged
-        if packaged():
-            self.auto_update.setText(f'Mises à jour installées par le Microsoft Store (version actuelle : {__version__})')
-            self.auto_update.setEnabled(False)
-        for control in (self.notifications, self.tray, self.auto_update):
+        for control in (self.notifications, self.tray):
             box.addWidget(control)
+        from mailclient import __version__
+        from mailclient.core.updater import packaged
+        from mailclient.ui.updates import MODE_LABELS, update_mode
+        self.update_mode = QComboBox()
+        for key, text in MODE_LABELS.items():
+            self.update_mode.addItem(text, key)
+        self.update_mode.setCurrentIndex(self.update_mode.findData(update_mode(self.database)))
+        self.update_mode.setToolTip('Vérifiées toutes les 6 heures sur GitHub ; une mise à jour n’est installée que si sa '
+                                    'signature est valide.')
+        form = QFormLayout()
+        form.addRow(f'Mises à jour (version actuelle : {__version__})', self.update_mode)
+        box.addLayout(form)
+        if packaged():
+            self.update_mode.setEnabled(False)
+            box.addWidget(label('Cette copie vient du Microsoft Store : ses mises à jour sont installées par le Store.','Small',True))
         box.addStretch()
         return widget
 

@@ -46,7 +46,7 @@ class SearchDialog(QDialog):
         self.attachment = QCheckBox('Avec pièce jointe')
         self.unread = QCheckBox('Non lus seulement')
         self.starred = QCheckBox('Suivis (étoilés) seulement')
-        self.attachment.setChecked(query.attachment)
+        self.attachment.setChecked(bool(query.attachment))  # None (aucun filtre) refusé par Qt : plantage de la 1.2.0.
         self.unread.setChecked(query.unread is True)
         self.starred.setChecked(bool(query.starred))
         self.since_on, self.since = QCheckBox('Après le'), QDateEdit()

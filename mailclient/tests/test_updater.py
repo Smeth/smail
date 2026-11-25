@@ -170,6 +170,7 @@ def test_manager_downloads_installs_on_exit_and_forgets_after_update(tmp_path, m
     installs = []
     monkeypatch.setattr(updater, 'install', lambda path, relaunch: installs.append((path.name, relaunch)))
     db = Database(tmp_path / 'settings.db')
+    db.set_setting('update_mode', 'auto')  # Mode automatique : téléchargement sans demander.
     window = Window()
     manager = UpdateManager(window, db, Runner(window, None), tmp_path, current='1.1.0')
     informed = []
@@ -247,10 +248,58 @@ def test_about_shows_version_and_update_mode(tmp_path, monkeypatch):
         text = window.about_text()
         assert text.startswith(f'Smail {__version__}\n') and 'depuis les sources' in text and str(tmp_path) in text
         monkeypatch.setattr(updater, 'installed_copy', lambda: True)
-        assert 'mises à jour automatiques activées' in window.about_text()
+        assert 'mises à jour : proposées, installées après votre accord' in window.about_text()
         assert any(action.text() == 'À propos de Smail' for action in window.command_actions)
     finally:
         window.reader.shutdown()
         window.close()
         from shiboken6 import delete
         delete(window)
+
+
+def test_ask_mode_downloads_nothing_before_consent(tmp_path, monkeypatch):
+    from mailclient.tests.test_ui import process_until
+    from PySide6.QtWidgets import QWidget, QStatusBar
+    from mailclient.core.sync import Runner
+    from mailclient.storage.database import Database
+    from mailclient.ui.updates import UpdateManager, update_mode
+
+    class Window(QWidget):
+        quitting, tray = False, None
+        def __init__(self):
+            super().__init__()
+            self.bar, self.banners = QStatusBar(), []
+        def statusBar(self):
+            return self.bar
+        def show_update_banner(self, title, description, action, callback):
+            self.banners.append((title, action, callback))
+
+    real_check, real_download = updater.check, updater.download
+    downloads = []
+    monkeypatch.setattr(updater, 'check', lambda current: real_check(current, server(release()), PUBLIC))
+    monkeypatch.setattr(updater, 'download', lambda update, directory, cancelled: (
+        downloads.append(update.version), real_download(update, directory, server(release())))[1])
+    monkeypatch.setattr(updater, 'installed_copy', lambda: True)
+    db = Database(tmp_path / 'settings.db')
+    assert update_mode(db) == 'ask'  # Réglage par défaut.
+    db.set_setting('auto_update', False)
+    assert update_mode(db) == 'off'  # Ancien réglage « désactivé » respecté.
+    db.set_setting('update_mode', 'ask')
+    window = Window()
+    manager = UpdateManager(window, db, Runner(window, None), tmp_path, current='1.1.0')
+    manager.check()  # Vérification automatique : seulement prévenir.
+    assert process_until(lambda: window.banners and not manager.checking)
+    title, action, accept = window.banners[-1]
+    assert (title, action) == ('Smail 1.2.0 est disponible', 'Télécharger et installer')
+    assert downloads == [] and manager.ready is None and not (tmp_path / 'updates').exists()
+    asked = []
+    manager.ask = lambda title, text: (asked.append(text), False)[1]  # Vérification manuelle : refus.
+    manager.check(manual=True)
+    assert process_until(lambda: asked and not manager.checking)
+    assert 'Nouveautés' in asked[0] and 'Télécharger maintenant (0 Mo)' in asked[0] and downloads == []
+    accept()  # « Télécharger et installer ».
+    assert window.banners[-1][0] == 'Téléchargement de Smail 1.2.0…'
+    assert process_until(lambda: manager.ready is not None)
+    assert downloads == ['1.2.0'] and window.banners[-1][:2] == ('Smail 1.2.0 est prêt', 'Redémarrer maintenant')
+    db.set_setting('update_mode', 'off')
+    assert not manager.enabled()

@@ -19,7 +19,8 @@ def test_pages_by_theme_and_direct_opening(tmp_path):
     assert [dialog.nav.item(i).text() for i in range(dialog.nav.count())] == list(SettingsDialog.PAGES)
     assert dialog.pages.currentIndex() == SettingsDialog.PAGES.index('Comptes')
     general, reception, security = (dialog.pages.widget(SettingsDialog.PAGES.index(name)) for name in ('Général', 'Réception', 'Sécurité'))
-    assert dialog.notifications.parent() is general and dialog.auto_update.parent() is general
+    assert dialog.notifications.parent() is general and dialog.update_mode.parent() is general
+    assert dialog.update_mode.currentData() == 'ask'  # Par défaut : rien n’est téléchargé sans accord.
     assert dialog.minutes.parent() is reception and dialog.conversations.parent() is reception
     assert dialog.encrypt.parent() is security
     assert 'Aucun compte configuré : cliquez sur « Ajouter un compte ».' in labels_in(dialog)

@@ -91,11 +91,14 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.filters_button)
         self.command_button = Button('',self.appearance,'command',tooltip='Commandes (Ctrl+K)')
         self.command_button.clicked.connect(self.open_palette)
-        toolbar.addWidget(self.command_button)
+        self.command_button.hide()  # Palette toujours accessible : Ctrl+K ou menu Affichage.
         toolbar.addWidget(self.refresh)
         self.settings_button = Button('',self.appearance,'settings-2',tooltip='Paramètres')
         self.settings_button.clicked.connect(lambda: self.preferences())
         toolbar.addWidget(self.settings_button)
+        self.theme_button = Button('',self.appearance,'moon',tooltip='Passer au thème sombre (Ctrl+Maj+L)')
+        self.theme_button.clicked.connect(lambda: self.toggle_theme())
+        toolbar.addWidget(self.theme_button)
         self.offline = QCheckBox('Hors ligne')
         self.offline.setFocusPolicy(Qt.TabFocus)
         self.offline.setToolTip('Travailler sur le cache local, sans aucune connexion au serveur')
@@ -107,6 +110,7 @@ class MainWindow(QMainWindow):
         header.box.addLayout(toolbar)
         layout.addWidget(header)
         self.security, self.cache_status = QLabel(), QLabel()
+        self.cache_status.hide()  # Affichée seulement quand elle a quelque chose à dire.
         self.security.setWordWrap(True)
         self.security.setObjectName('SecurityStatus')
         self.cache_status.setObjectName('Small')
@@ -162,6 +166,7 @@ class MainWindow(QMainWindow):
         self.filter_group.setExclusive(True)
         self.page_filter = 'Tous'
         filter_row = QHBoxLayout()
+        self.filter_buttons = {}
         for title in ('Tous','Non lus','Pièces jointes'):
             button = Button(title,self.appearance,role='Nav')
             button.setCheckable(True)
@@ -169,6 +174,7 @@ class MainWindow(QMainWindow):
             button.clicked.connect(lambda checked=False,value=title:self.user_filter(value))
             self.filter_group.addButton(button)
             filter_row.addWidget(button)
+            self.filter_buttons[title] = button
         self.list_panel.box.addLayout(filter_row)
         self.search_filters = QWidget()
         search_filters = QHBoxLayout(self.search_filters)
@@ -306,8 +312,7 @@ class MainWindow(QMainWindow):
         self.conversation_action.toggled.connect(self.toggle_conversations)
         view_menu.addAction(self.conversation_action)
         self.command_actions.append(self.conversation_action)
-        self.dark_action = action('Thème sombre', self.toggle_theme, 'Ctrl+Shift+L', menu=view_menu, icon_name='moon')
-        self.dark_action.setCheckable(True)
+        self.dark_action = action('Passer au thème sombre', self.toggle_theme, 'Ctrl+Shift+L', menu=view_menu, icon_name='moon')
         self.style_actions = {}
         style_menu = view_menu.addMenu('Style de l’interface')
         style_group = QActionGroup(self)
@@ -369,6 +374,7 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence('Alt+Down'),self,activated=lambda:self.step_thread(1))
         QShortcut(QKeySequence('Alt+Up'),self,activated=lambda:self.step_thread(-1))
         self.appearance.changed.connect(self.refresh_appearance)
+        self.refresh_appearance()  # Libellé « Passer au thème clair / sombre » juste dès l’ouverture.
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.sync_now)
         # Échéances locales : envois programmés et retours de messages reportés (Smail ouvert).
@@ -839,6 +845,11 @@ class MainWindow(QMainWindow):
             self.search.setText(dialog.query())
             self.new_search()
 
+    def set_cache_status(self, text):
+        """Ligne d’information sous l’en-tête : masquée quand elle est vide (sinon un grand espace vide)."""
+        self.cache_status.setText(text)
+        self.cache_status.setVisible(bool(text))
+
     def update_connection(self):
         """Indicateur discret de l’en-tête : en ligne (dernière synchronisation) ou hors ligne."""
         if self.offline.isChecked():
@@ -903,7 +914,7 @@ class MainWindow(QMainWindow):
             self.fill_folders(folders)
             self.folders.blockSignals(False)
             self.set_busy(False)
-            self.cache_status.setText('Dossiers enregistrés sur ce PC (hors ligne)' if offline else '')
+            self.set_cache_status('Dossiers enregistrés sur ce PC (hors ligne)' if offline else '')
             if folders:
                 index = next((i for i,(name,_) in enumerate(folders) if name.upper() == 'INBOX'), 0)
                 self.folders.setCurrentRow(index)
@@ -940,8 +951,19 @@ class MainWindow(QMainWindow):
         if index >= 0 and not self.busy:
             if index < len(self.folder_data):
                 self.heading.setText(self.folder_data[index][1])
+            self.reset_filter()
             self.page = 0
             self.load_messages()
+
+    def reset_filter(self):
+        """Nouveau dossier : retour à « Tous » (un filtre conservé faisait croire à un dossier vide).
+        « Non lus » est masqué dans Envoyés et Brouillons, où tous les messages sont les vôtres, donc lus."""
+        from mailclient.ui.folder_list import kind
+        current = self.current_folder()
+        own = current is not None and kind(*current)[1] in ('send', 'file-pen-line')
+        self.filter_buttons['Non lus'].setVisible(not own)
+        self.page_filter = 'Tous'
+        self.filter_buttons['Tous'].setChecked(True)
 
     def new_search(self):
         self.page = 0
@@ -1000,9 +1022,9 @@ class MainWindow(QMainWindow):
         short = bar.maximum() == 0 or self.list_stack.currentIndex() != 0  # Rien à faire défiler (ou filtre vide).
         if not short and bar.maximum() - bar.value() > max(bar.pageStep() // 3, 40):
             return
-        if not auto:
-            self.auto_loads = 0
-        elif short:
+        if not auto and not short:
+            self.auto_loads = 0  # Vrai défilement jusqu’en bas : l’utilisateur demande la suite.
+        else:
             # Liste trop courte (filtre « Non lus »…) : quelques pages au plus sans geste de l’utilisateur.
             if self.auto_loads >= 4:
                 return
@@ -1070,12 +1092,12 @@ class MainWindow(QMainWindow):
                                         (' — les 100 plus récents' if result.get('truncated') else ''))
             # Ligne d’information affichée seulement quand elle apprend quelque chose : recherche ou copie locale.
             if query:
-                self.cache_status.setText('Recherche dans les messages déjà téléchargés (hors ligne)' if result['offline'] else
+                self.set_cache_status('Recherche dans les messages déjà téléchargés (hors ligne)' if result['offline'] else
                                           'Recherche dans tous les dossiers du compte' if all_folders else 'Recherche dans tout le dossier')
             else:
-                self.cache_status.setText('Messages enregistrés sur ce PC (hors ligne)' if result['offline'] else '')
+                self.set_cache_status('Messages enregistrés sur ce PC (hors ligne)' if result['offline'] else '')
             if not self.rows and result['offline'] and self.total:
-                self.cache_status.setText('Cette page n’est pas encore en cache. Reconnectez-vous ou augmentez la limite dans Préférences.')
+                self.set_cache_status('Cette page n’est pas encore en cache. Reconnectez-vous ou augmentez la limite dans Préférences.')
             self.list_exhausted = not self.rows
             self.set_busy(False)
             self.filter_page(self.page_filter)
@@ -1539,7 +1561,7 @@ class MainWindow(QMainWindow):
             self.table.setRowCount(0)
             self.reader.display(mail)
             self.update_actions()
-            self.cache_status.setText('Copie locale d’un message déjà envoyé — utilisez Exporter .eml pour la sauvegarder.')
+            self.set_cache_status('Copie locale d’un message déjà envoyé — utilisez Exporter .eml pour la sauvegarder.')
         self.runner.run(operation, done, self.failure)
 
     def export_sent_copy(self):
@@ -1707,7 +1729,7 @@ class MainWindow(QMainWindow):
                       ui_style=dialog.style_combo.currentData(),ui_density=dialog.density.currentText(),
                       ui_accent=dialog.accent.currentText(),ui_custom_accent=dialog.custom_accent,
                       ui_reduced_motion=dialog.motion.isChecked(),undo_send_seconds=dialog.undo_send.value(),
-                      auto_update=dialog.auto_update.isChecked())
+                      update_mode=dialog.update_mode.currentData(), auto_update=dialog.update_mode.currentData() != 'off')
         encrypt = dialog.encrypt.isChecked()
         self.set_busy(True)
         def operation():
@@ -1752,7 +1774,13 @@ class MainWindow(QMainWindow):
         self.density_box.blockSignals(True)
         self.density_box.setCurrentText(self.appearance.density)
         self.density_box.blockSignals(False)
-        self.dark_action.setChecked(self.appearance.dark)
+        # Libellé et icône indiquent l’action (vers l’autre thème), pas l’état actuel.
+        target, icon_name = ('clair', 'sun') if self.appearance.dark else ('sombre', 'moon')
+        self.dark_action.setText(f'Passer au thème {target}')
+        self.dark_action.setIcon(icon(icon_name, self.appearance.colors['text']))
+        self.theme_button.setIcon(icon(icon_name, self.appearance.colors['text']))
+        self.theme_button.setToolTip(f'Passer au thème {target} (Ctrl+Maj+L)')
+        self.theme_button.setAccessibleName(f'Passer au thème {target}')
         for number,action in self.style_actions.items():
             action.setChecked(number == self.appearance.variant)
         for name,action in self.density_actions.items():
@@ -1820,8 +1848,8 @@ class MainWindow(QMainWindow):
 
     def user_filter(self, value):
         """Filtre choisi par l’utilisateur : la liste filtrée se complète si elle est trop courte."""
+        self.auto_loads = 0  # Avant le filtrage : masquer des lignes peut déjà déclencher un chargement.
         self.filter_page(value)
-        self.auto_loads = 0
         QTimer.singleShot(0, lambda: self.maybe_load_more(auto=True))
 
     def filter_page(self, value):
@@ -1875,7 +1903,9 @@ class MainWindow(QMainWindow):
         if updater.packaged():
             mode = 'Microsoft Store — mises à jour installées par le Store'
         elif updater.installed_copy():
-            mode = 'installé — mises à jour automatiques ' + ('activées' if self.database.setting('auto_update', True) else 'désactivées')
+            from mailclient.ui.updates import update_mode
+            mode = 'installé — mises à jour : ' + {'ask': 'proposées, installées après votre accord', 'auto': 'automatiques',
+                                                     'off': 'désactivées'}[update_mode(self.database)]
         else:
             mode = 'lancé depuis les sources ou un dossier copié — pas de mise à jour automatique'
         return (f'Smail {__version__}\n\nClient mail de bureau Windows (IMAP/SMTP).\n\n'
@@ -1889,7 +1919,8 @@ class MainWindow(QMainWindow):
         if self.update_banner is not None:
             self.update_banner.deleteLater()
         self.update_banner = Banner(title, description, self.appearance, icon_name='download', action=action_text)
-        self.update_banner.action.clicked.connect(callback)
+        if self.update_banner.action is not None and callback:
+            self.update_banner.action.clicked.connect(callback)
         self.update_slot.addWidget(self.update_banner)
 
     def request_quit(self):

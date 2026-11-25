@@ -25,6 +25,8 @@ def test_dialog_round_trip_and_clear():
     assert dialog.query() == 'de:léa objet:"point projet" a:pj est:étoilé après:2026-11-01'
     dialog.clear()
     assert dialog.query() == ''
+    for text in ('', 'budget', 'est:nonlu', 'de:léa'):  # Recherche vide ou sans « a:pj » : plantait en 1.2.0.
+        assert SearchDialog(text).query() == text
 
 
 def test_connection_indicator(tmp_path):

@@ -63,23 +63,32 @@ def clipboard_image(mime):
         return value.toImage()
     return QImage(value) if isinstance(value,QImage) else QImage()
 
+CHIP = QSize(236, 46)  # Étiquette de pièce jointe : miniature, nom, taille et bouton ×.
+
+
+def remove_area(rect):
+    """Zone du bouton × d’une étiquette (coordonnées de la vue)."""
+    return QRect(rect.right() - 30, rect.center().y() - 11, 22, 22)
+
+
 class AttachmentDelegate(QStyledItemDelegate):
-    """Cartes horizontales : aperçu centré, deux lignes toujours alignées."""
+    """Étiquettes compactes : miniature, nom, taille et × pour retirer la pièce jointe."""
     def paint(self, painter, option, index):
         from mailclient.ui.dialog_shell import appearance
+        from mailclient.ui.icons import icon
         colors = appearance().colors
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
-        rect = option.rect.adjusted(3, 3, -3, -3)
+        rect = option.rect.adjusted(2, 2, -2, -2)
         selected = bool(option.state & QStyle.State_Selected)
         painter.setPen(QPen(QColor(colors['accent' if selected else 'border']), 1))
         painter.setBrush(QColor(colors['soft' if selected else 'panel']))
         painter.drawRoundedRect(rect, 8, 8)
-        preview = QRect(rect.left()+10, rect.top()+10, 48, 48)
+        preview = QRect(rect.left()+7, rect.center().y()-15, 30, 30)
         decoration = index.data(Qt.DecorationRole)
         if decoration:
             decoration.paint(painter, preview, Qt.AlignCenter)
-        text_rect = QRect(preview.right()+12, rect.top()+13, rect.width()-84, 22)
+        text_rect = QRect(preview.right()+9, rect.top()+4, rect.width()-82, 19)
         parts = (index.data(Qt.DisplayRole) or '').split('\n', 1)
         painter.setPen(QColor(colors['text']))
         font = option.font
@@ -90,7 +99,9 @@ class AttachmentDelegate(QStyledItemDelegate):
         font.setBold(False)
         painter.setFont(font)
         painter.setPen(QColor(colors['muted']))
-        painter.drawText(text_rect.translated(0, 23), Qt.AlignLeft | Qt.AlignVCenter, parts[1] if len(parts)>1 else '')
+        painter.drawText(text_rect.translated(0, 18), Qt.AlignLeft | Qt.AlignVCenter, parts[1] if len(parts)>1 else '')
+        close = remove_area(option.rect)
+        icon('x', colors['muted'], 14).paint(painter, close.adjusted(4, 4, -4, -4), Qt.AlignCenter)
         if option.state & QStyle.State_HasFocus:
             painter.setPen(QPen(QColor(colors['accent']), 2, Qt.DotLine))
             painter.setBrush(Qt.NoBrush)
@@ -98,12 +109,13 @@ class AttachmentDelegate(QStyledItemDelegate):
         painter.restore()
 
     def sizeHint(self, option, index):
-        return QSize(264, 76)
+        return CHIP
 
 
 class AttachmentGrid(QListWidget):
     pathsAdded = Signal(list)
     imageAdded = Signal(QImage)
+    removeRequested = Signal(int)  # × d’une étiquette, ou touche Suppr.
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -111,19 +123,38 @@ class AttachmentGrid(QListWidget):
         self.setMovement(QListView.Static)
         self.setResizeMode(QListView.Adjust)
         self.setFlow(QListView.LeftToRight)
-        self.setWrapping(False)
+        self.setWrapping(True)  # Les étiquettes passent à la ligne : tout est visible sans défilement latéral.
         self.setItemDelegate(AttachmentDelegate(self))
-        self.setGridSize(QSize(264,76))
-        self.setIconSize(QSize(48,48))
+        self.setGridSize(QSize(CHIP.width()+4, CHIP.height()+4))
+        self.setIconSize(QSize(30,30))
         self.setWordWrap(False)
         self.setTextElideMode(Qt.ElideMiddle)
         self.setSpacing(0)
-        self.setFixedHeight(96)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setHorizontalScrollMode(QListView.ScrollPerPixel)
+        self.setMaximumHeight(2 * (CHIP.height()+4) + 6)  # Deux rangées visibles, puis défilement vertical.
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollMode(QListView.ScrollPerPixel)
         self.setAcceptDrops(True)
         self.setDragEnabled(False)
-        self.setAccessibleName('Pièces jointes avec miniatures ; glissez des fichiers ou collez une image')
+        self.setMouseTracking(True)
+        self.setAccessibleName('Pièces jointes : × ou Suppr pour retirer ; glissez des fichiers ou collez une image')
+
+    def fit(self):
+        """Hauteur ajustée au nombre de rangées (au plus deux)."""
+        per_row = max(1, self.viewport().width() // self.gridSize().width())
+        rows = min(2, max(1, -(-self.count() // per_row)))
+        self.setFixedHeight(rows * self.gridSize().height() + 6)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.fit()
+
+    def mouseReleaseEvent(self, event):
+        index = self.indexAt(event.position().toPoint())
+        if index.isValid() and remove_area(self.visualRect(index)).contains(event.position().toPoint()):
+            self.removeRequested.emit(index.row())
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
     def dragEnterEvent(self, event):
         if local_paths(event.mimeData()) or event.mimeData().hasImage():
@@ -156,6 +187,9 @@ class AttachmentGrid(QListWidget):
                 image = clipboard_image(mime)
                 if not image.isNull():
                     self.imageAdded.emit(image)
+            event.accept()
+        elif event.key() in (Qt.Key_Delete, Qt.Key_Backspace) and self.currentRow() >= 0:
+            self.removeRequested.emit(self.currentRow())
             event.accept()
         else:
             super().keyPressEvent(event)

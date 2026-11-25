@@ -195,8 +195,10 @@ class MailDelegate(QStyledItemDelegate):
             painter.drawText(QRectF(left,top+4,34,34), Qt.AlignCenter, initials)
             left += 45
         width = rect.right()-left-16
-        painter.setFont(QFont('Segoe UI', 10, QFont.DemiBold))
-        painter.setPen(QColor(t['text']))
+        # Non lu : expéditeur en gras ; lu : expéditeur normal et estompé. La différence se voit d’un coup d’œil.
+        sender_font = QFont('Segoe UI', 10, QFont.Bold if mail.unread else QFont.Normal)
+        painter.setFont(sender_font)
+        painter.setPen(QColor(t['text'] if mail.unread or selected else t['muted']))
         count = getattr(mail, 'count', 1)
         badge = 0
         if count > 1:
@@ -213,7 +215,7 @@ class MailDelegate(QStyledItemDelegate):
             painter.setFont(badge_font)
             painter.setPen(QColor(t['accent'] if mail.unread else t['muted']))
             painter.drawText(QRectF(x, top+3, badge, 15), Qt.AlignCenter, str(count))
-            painter.setFont(QFont('Segoe UI', 10, QFont.DemiBold))
+            painter.setFont(sender_font)
         if hovered:
             # Au survol, l’heure laisse la place aux actions rapides.
             for name, area in self.action_rects(rect):
@@ -227,7 +229,7 @@ class MailDelegate(QStyledItemDelegate):
             painter.setPen(QColor(t['accent'] if mail.unread else t['muted']))
             painter.drawText(QRectF(rect.right()-71,top,57,20), Qt.AlignRight|Qt.AlignVCenter, mail.time)
         painter.setFont(QFont('Segoe UI', 9, QFont.DemiBold if mail.unread else QFont.Normal))
-        painter.setPen(QColor(t['text']))
+        painter.setPen(QColor(t['text'] if mail.unread or selected else t['muted']))
         subject = painter.fontMetrics().elidedText(mail.subject, Qt.ElideRight, max(40,width-19))
         painter.drawText(QRectF(left,top+22,width-15,19), Qt.AlignLeft|Qt.AlignVCenter, subject)
         if rect.height() >= 61:
@@ -241,7 +243,7 @@ class MailDelegate(QStyledItemDelegate):
         if mail.unread:
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor(t['accent']))
-            painter.drawEllipse(QRectF(rect.left()+6, top+8, 5,5))
+            painter.drawEllipse(QRectF(rect.left()+5, top+6, 8, 8))  # Point « non lu » bien visible.
         marker_y = rect.bottom()-22
         if mail.attachments:
             icon('paperclip', t['muted'], 14).paint(painter, rect.right()-23, marker_y,14,14)
