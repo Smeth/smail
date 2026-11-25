@@ -2,6 +2,9 @@
 
 ## Non publié
 
+## 1.3.0 — 2026-11-25
+
+
 Correcteur d’orthographe, Smail comme messagerie par défaut, menus réorganisés et nombreuses retouches d’interface. Les mises à jour vous sont désormais proposées : rien n’est téléchargé sans votre accord (réglable dans Préférences › Général).
 
 - Correcteur d’orthographe en français dans la rédaction : fautes soulignées, suggestions et « Ajouter au dictionnaire » au clic droit (dictionnaire local, aucune connexion).
