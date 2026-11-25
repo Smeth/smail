@@ -158,3 +158,67 @@ def test_opening_marks_as_read_in_smail_and_on_the_server(tmp_path, monkeypatch)
         window.close()
         from shiboken6 import delete
         delete(window)
+
+
+def test_colored_initials_are_stable_and_private():
+    from mailclient.ui.components import AVATAR_COLORS, avatar
+    assert avatar('Léa Bernard <lea@example.com>')[0] == 'LB'
+    assert avatar('"test@livrango.com" <test@livrango.com>')[0] == 'TE'  # « Nom » qui est une adresse.
+    assert avatar('jean.pierre@x.fr')[0] == 'JP' and avatar('')[0] == '?'
+    same = {avatar(f'{name} <lea@example.com>')[1] for name in ('Léa', 'Léa Bernard', 'L. B.')}
+    assert len(same) == 1 and same <= set(AVATAR_COLORS)  # Couleur liée à l’adresse, pas au nom affiché.
+
+
+def test_date_groups_collapse_and_remember(tmp_path, monkeypatch):
+    from mailclient.tests.test_ui import APP, process_until  # noqa: F401
+    from PySide6.QtCore import QEvent, QPointF
+    from PySide6.QtGui import QMouseEvent
+    from mailclient.core.service import MailService
+    from mailclient.core.tls_policy import TLSPolicy
+    from mailclient.storage.database import Database
+    from mailclient.tests.test_scheduler import ME, Client
+    from mailclient.ui.components import COLLAPSED_ROLE, GROUP_COUNT_ROLE, HEADER_ROLE
+    from mailclient.ui.main_window import MainWindow
+    now = datetime.now().astimezone()
+    def row(uid, days):
+        return dict(uid=uid, subject=f'Sujet {uid}', sender='Alice <alice@example.com>', folder='INBOX', uidvalidity='7',
+                    date=format_datetime(now - timedelta(days=days)), unread=False, starred=False, attachment=False,
+                    message_id=f'<{uid}@x>', references='', in_reply_to='')
+    listing = [row('9', 0), row('8', 1), row('7', 1), row('6', 40)]
+    db = Database(tmp_path / 'settings.db')
+    db.save(ME)
+    db.set_setting('conversation_view', False)
+    client = Client()
+    client.uidvalidity = '7'
+    client.messages = lambda folder, page, query='': ([dict(r) for r in listing], len(listing))
+    monkeypatch.setattr(MailService, 'client', lambda *args: client)
+    window = MainWindow(db, None, TLSPolicy(db), auto_load=False)
+    try:
+        window.resize(1200, 800)
+        window.show()
+        window.reload_accounts()
+        window.select_account(ME.id)
+        assert process_until(lambda: not window.busy and window.table.count() == 4)
+        table = window.table
+        def click_title(row_index):
+            rect = table.visualItemRect(table.item(row_index))
+            point = QPointF(rect.left() + 40, rect.top() + 10)
+            table.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, point, table.viewport().mapToGlobal(point.toPoint()),
+                                              Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+        click_title(1)  # « HIER » : replié, une seule ligne « HIER (2) ».
+        assert table.item(1).data(COLLAPSED_ROLE) and table.item(1).data(GROUP_COUNT_ROLE) == 2 and table.item(2).isHidden()
+        assert db.setting('collapsed_groups') == ['Hier'] and not table.selectedItems()  # Le clic ne sélectionne rien.
+        click_title(0)  # « AUJOURD’HUI » : jamais replié.
+        assert not table.item(0).data(COLLAPSED_ROLE) and not table.item(0).isHidden()
+        window.load_messages()  # Le repli est mémorisé.
+        assert process_until(lambda: not window.busy and table.count() == 4)
+        assert table.item(1).data(COLLAPSED_ROLE) and table.item(1).data(HEADER_ROLE) == 'Hier'
+        table.setCurrentRow(1)  # Au clavier : arriver sur un groupe replié le déplie.
+        assert process_until(lambda: not table.item(1).data(COLLAPSED_ROLE))
+        assert not table.item(2).isHidden() and db.setting('collapsed_groups') == []
+        table.grab()
+    finally:
+        window.reader.shutdown()
+        window.close()
+        from shiboken6 import delete
+        delete(window)

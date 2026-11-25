@@ -1,9 +1,31 @@
 """Composants visuels réutilisables, découplés de tout service métier."""
+import re
 from PySide6.QtCore import Qt, QSize, QRectF, QPropertyAnimation, QEasingCurve, QTimer
 from PySide6.QtGui import QColor, QPainter, QFont, QPen, QFontMetrics
 from PySide6.QtWidgets import (QLabel, QPushButton, QFrame, QHBoxLayout, QVBoxLayout,
     QWidget, QStyledItemDelegate, QGraphicsOpacityEffect, QTextBrowser)
 from .icons import icon
+
+# Couleurs des initiales : assez soutenues pour un texte blanc lisible, sur thème clair comme sombre.
+AVATAR_COLORS = ('#D93F45', '#D0612A', '#A97700', '#3E8E4F', '#0F8C80', '#1F7FD6', '#4458C7', '#7E4CB8', '#C43A8B', '#6F6152')
+
+
+def avatar(sender: str) -> tuple:
+    """(initiales, couleur) d’un expéditeur « Nom <adresse> » : couleur stable, tirée de l’adresse.
+
+    Aucune photo n’est cherchée en ligne (Gravatar, logos…) : cela révélerait à un tiers qui vous écrit."""
+    import hashlib
+    from email.utils import parseaddr
+    name, address = parseaddr(sender or '')
+    if '@' in name:
+        name = ''  # « Nom » qui est en fait une adresse : initiales tirées de l’adresse.
+    words = [word for word in re.split(r'[\s,.\-_]+', name.strip(' "\'')) if word and word[0].isalnum()]
+    if not words:
+        words = [part for part in re.split(r'[._\-]+', address.split('@')[0]) if part] or ['?']
+    letters = (words[0][0] + (words[1][0] if len(words) > 1 else (words[0][1] if len(words[0]) > 1 else ''))).upper()
+    key = (address or name or '?').casefold().encode('utf-8')
+    return letters, AVATAR_COLORS[int(hashlib.sha1(key).hexdigest(), 16) % len(AVATAR_COLORS)]
+
 
 def label(text='', role='', wrap=False):
     widget = QLabel(text)
@@ -111,6 +133,11 @@ class LocalTextBrowser(QTextBrowser):
         return None
 
 HEADER_ROLE = Qt.UserRole + 2   # Titre de groupe de dates (« Aujourd’hui »…) dessiné au-dessus de la ligne.
+GROUP_ROLE = Qt.UserRole + 3    # Groupe de dates de la ligne (« Hier »…).
+COLLAPSED_ROLE = Qt.UserRole + 4  # Première ligne d’un groupe replié : seul le titre est dessiné.
+GROUP_COUNT_ROLE = Qt.UserRole + 5  # Nombre de lignes du groupe (affiché quand il est replié).
+FILTERED_ROLE = Qt.UserRole + 6  # Ligne masquée par le filtre (Non lus, pièces jointes…), indépendamment du repli.
+ALWAYS_OPEN = 'Aujourd’hui'
 HEADER_HEIGHT = 28
 # Actions au survol : (nom, icône, infobulle) ; l’icône de lecture dépend de l’état du message.
 ROW_ACTIONS = (('archive', 'archive', 'Archiver'), ('trash', 'trash-2', 'Supprimer'), ('read', None, None))
@@ -123,6 +150,8 @@ class MailDelegate(QStyledItemDelegate):
         self.on_action = None  # Rappel (index, nom de l’action) pour les boutons affichés au survol.
 
     def sizeHint(self, option, index):
+        if index.data(COLLAPSED_ROLE):
+            return QSize(300, HEADER_HEIGHT + 4)
         return QSize(300, self.theme.row_height + (HEADER_HEIGHT if index.data(HEADER_ROLE) else 0))
 
     @staticmethod
@@ -169,10 +198,18 @@ class MailDelegate(QStyledItemDelegate):
         painter.setRenderHint(QPainter.Antialiasing)
         header = index.data(HEADER_ROLE)
         if header:
+            collapsed = bool(index.data(COLLAPSED_ROLE))
+            if header != ALWAYS_OPEN:  # Flèche : clic sur le titre pour replier ou déplier le groupe.
+                icon('chevron-right' if collapsed else 'chevron-down', t['muted'], 14).paint(
+                    painter, option.rect.left()+8, option.rect.top()+HEADER_HEIGHT-18, 14, 14)
             painter.setFont(QFont('Segoe UI', 8, QFont.Bold))
             painter.setPen(QColor(t['muted']))
-            painter.drawText(QRectF(option.rect.left()+16, option.rect.top()+6, option.rect.width()-32, HEADER_HEIGHT-8),
-                             Qt.AlignLeft|Qt.AlignBottom, header.upper())
+            text = header.upper() + (f'  ({index.data(GROUP_COUNT_ROLE)})' if collapsed else '')
+            painter.drawText(QRectF(option.rect.left()+26, option.rect.top()+6, option.rect.width()-42, HEADER_HEIGHT-8),
+                             Qt.AlignLeft|Qt.AlignBottom, text)
+            if collapsed:
+                painter.restore()
+                return
         rect = self.message_rect(option, index)
         selected = bool(option.state & QStyle.State_Selected)
         hovered = bool(option.state & QStyle.State_MouseOver) and self.on_action is not None
@@ -185,15 +222,17 @@ class MailDelegate(QStyledItemDelegate):
             painter.drawLine(rect.left()+1, rect.top()+10, rect.left()+1, rect.bottom()-10)
         left = rect.left()+16
         top = rect.top()+8
-        if self.theme.variant == 2:
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(t['panel'] if not selected else t['surface']))
-            painter.drawEllipse(QRectF(left, top+4, 34,34))
-            painter.setPen(QColor(t['muted']))
-            painter.setFont(QFont('Segoe UI', 9, QFont.DemiBold))
-            initials = ''.join(word[0] for word in mail.sender.split()[:2])
-            painter.drawText(QRectF(left,top+4,34,34), Qt.AlignCenter, initials)
-            left += 45
+        # Initiales colorées de l’expéditeur (le plus récent d’une conversation), dans tous les styles.
+        initials, color = avatar(mail.raw.get('sender', '') if isinstance(getattr(mail, 'raw', None), dict) else mail.sender)
+        size = 34 if rect.height() >= 60 else 28
+        circle = QRectF(left, top+4, size, size)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(color))
+        painter.drawEllipse(circle)
+        painter.setPen(QColor('#FFFFFF'))
+        painter.setFont(QFont('Segoe UI', 9 if size >= 34 else 8, QFont.DemiBold))
+        painter.drawText(circle, Qt.AlignCenter, initials)
+        left += size + 11
         width = rect.right()-left-16
         # Non lu : expéditeur en gras ; lu : expéditeur normal et estompé. La différence se voit d’un coup d’œil.
         sender_font = QFont('Segoe UI', 10, QFont.Bold if mail.unread else QFont.Normal)

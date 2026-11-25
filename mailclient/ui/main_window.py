@@ -20,7 +20,7 @@ from mailclient.ui.theme import VARIANTS, ACCENTS
 from mailclient.ui.view_models import MessageRow, MessageList, DRAG_MIME, date_group, count
 from mailclient.core.threads import timestamp
 
-GROUP_ROLE = Qt.UserRole + 3  # Groupe de dates de la ligne (« Hier »…).
+from mailclient.ui.components import GROUP_ROLE, COLLAPSED_ROLE, GROUP_COUNT_ROLE, FILTERED_ROLE, ALWAYS_OPEN  # noqa: E402
 
 class MainWindow(QMainWindow):
     def __init__(self, database, secrets, tls, auto_load=True):
@@ -209,6 +209,7 @@ class MainWindow(QMainWindow):
         self.table.setMouseTracking(True)
         self.table.setItemDelegate(MailDelegate(self.appearance,self.table))
         self.table.itemDelegate().on_action = self.row_action  # Archiver / supprimer / lu au survol d’une ligne.
+        self.table.header_clicked = self.toggle_group  # Titres de groupes de dates repliables.
         self.list_stack = QStackedWidget()
         self.list_stack.addWidget(self.table)
         self.list_stack.addWidget(Skeleton(self.appearance))
@@ -1248,19 +1249,39 @@ class MainWindow(QMainWindow):
             self.table.addItem(item)
 
     def refresh_headers(self):
-        """Titre de date au-dessus du premier message visible de chaque groupe (filtres compris)."""
+        """Titre de date au-dessus du premier message visible de chaque groupe (filtres compris) ; un groupe
+        replié n’affiche que son titre et son nombre de messages."""
         from mailclient.ui.components import HEADER_ROLE
+        collapsed = set(self.database.setting('collapsed_groups', []) or []) - {ALWAYS_OPEN}
+        items = [self.table.item(index) for index in range(self.table.count())]
+        visible = [item for item in items if not item.data(FILTERED_ROLE)]
+        counts = {}
+        for item in visible:
+            counts[item.data(GROUP_ROLE)] = counts.get(item.data(GROUP_ROLE), 0) + 1
         previous = None
-        for index in range(self.table.count()):
-            item = self.table.item(index)
-            if item.isHidden():
+        for item in items:
+            if item.data(FILTERED_ROLE):
+                item.setHidden(True)
                 continue
             group = item.data(GROUP_ROLE)
-            header = group if group != previous else None
-            if item.data(HEADER_ROLE) != header:
-                item.setData(HEADER_ROLE, header)
+            first = group != previous
+            folded = group in collapsed
+            item.setHidden(folded and not first)
+            for role, value in ((HEADER_ROLE, group if first else None), (COLLAPSED_ROLE, folded and first),
+                                (GROUP_COUNT_ROLE, counts.get(group, 0) if first else None)):
+                if item.data(role) != value:
+                    item.setData(role, value)
             previous = group
         self.table.doItemsLayout()
+
+    def toggle_group(self, group):
+        """Clic sur le titre d’un groupe de dates : repli ou dépli, mémorisé pour les prochaines fois."""
+        if not group or group == ALWAYS_OPEN:
+            return
+        collapsed = set(self.database.setting('collapsed_groups', []) or [])
+        collapsed ^= {group}
+        self.database.set_setting('collapsed_groups', sorted(collapsed))
+        self.refresh_headers()
 
     def row_action(self, index, name):
         """Bouton d’une ligne au survol : l’action porte sur cette ligne (conversation entière)."""
@@ -1331,6 +1352,10 @@ class MainWindow(QMainWindow):
         self.runner.run(lambda: self.service.message(account, row, offline), done, failed)
 
     def read_selected(self):
+        current = self.table.currentItem()
+        if current is not None and current.data(COLLAPSED_ROLE) and len(self.table.selectedItems()) <= 1:
+            QTimer.singleShot(0, lambda: self.toggle_group(current.data(GROUP_ROLE)))
+            return
         view = self.selected_view()
         row = view.raw if view else None
         if self.busy:
@@ -1978,6 +2003,7 @@ class MainWindow(QMainWindow):
                     except (ValueError,TypeError,OverflowError):
                         hidden = True
             item.setHidden(hidden)
+            item.setData(FILTERED_ROLE, hidden)
             visible += not hidden
         current = self.table.currentItem()
         if current and current.isHidden():

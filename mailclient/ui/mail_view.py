@@ -446,7 +446,10 @@ class MailView(QWidget):
         self.sender_address.setText(address if name else '')
         self.sender_address.setToolTip(address)
         self.sender_address.setVisible(bool(name and address))
-        self.avatar.setText(''.join(word[0] for word in (name or address or '?').split()[:2]).upper())
+        from mailclient.ui.components import avatar
+        initials, color = avatar(mail.sender)
+        self.avatar.setText(initials)
+        self.avatar.setStyleSheet(f'background: {color}; color: #FFFFFF;')  # Même couleur que dans la liste.
         self.recipient_summary.setText('À : '+mail.recipients)
         self.recipient_summary.setToolTip('À : '+mail.recipients+('\nCc : '+mail.cc if mail.cc else ''))
         try:

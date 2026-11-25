@@ -70,6 +70,19 @@ class MessageList(QListWidget):
         self.setDragEnabled(True)
         self.setDragDropMode(QListWidget.DragOnly)
         self.setDefaultDropAction(Qt.MoveAction)
+        self.header_clicked = None  # Rappel (groupe) : clic sur un titre de groupe de dates.
+
+    def mousePressEvent(self, event):
+        """Clic sur le titre d’un groupe (« HIER », « OCTOBRE 2026 »…) : repli ou dépli, sans sélectionner."""
+        from mailclient.ui.components import ALWAYS_OPEN, COLLAPSED_ROLE, GROUP_ROLE, HEADER_HEIGHT, HEADER_ROLE
+        index = self.indexAt(event.position().toPoint())
+        if self.header_clicked and index.isValid() and index.data(HEADER_ROLE) and index.data(HEADER_ROLE) != ALWAYS_OPEN:
+            on_title = event.position().y() < self.visualRect(index).top() + HEADER_HEIGHT
+            if index.data(COLLAPSED_ROLE) or on_title:
+                self.header_clicked(index.data(GROUP_ROLE))
+                event.accept()
+                return
+        super().mousePressEvent(event)
 
     def mimeTypes(self):
         return [DRAG_MIME]
