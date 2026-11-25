@@ -27,7 +27,9 @@ class SingleInstance(QObject):
             return False
         socket.write(json.dumps(payload).encode('utf-8'))
         socket.flush()
-        delivered = socket.waitForBytesWritten(2000)
+        # flush() envoie souvent tout d’un coup sous Windows : il ne reste alors rien à attendre, et
+        # waitForBytesWritten() répondrait « échec » alors que la demande est partie.
+        delivered = socket.bytesToWrite() == 0 or socket.waitForBytesWritten(2000)
         socket.disconnectFromServer()
         return delivered
 
