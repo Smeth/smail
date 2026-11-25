@@ -25,6 +25,8 @@ def close_webengine_readers():
 def dispose(*widgets):
     """Détruit les fenêtres d’un test (sinon leurs minuteries et threads survivent : plantage aléatoire en CI)."""
     from shiboken6 import delete, isValid
+    QThreadPool.globalInstance().waitForDone(10_000)  # Détection de compte, tâches réseau : terminées avant destruction.
+    APP.processEvents()
     for widget in widgets:
         if isValid(widget):
             if hasattr(widget, 'reader'):
