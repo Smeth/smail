@@ -2,6 +2,9 @@
 
 ## Non publié
 
+## 1.5.0 — 2026-11-25
+
+
 Correctif de sécurité important, sauvegarde et restauration, sélection de plusieurs messages, réponses qui gardent la mise en forme, transfert en pièce jointe, brouillons du serveur et thème qui suit Windows (contraste élevé et taille du texte compris).
 
 - Sécurité : un expéditeur ne peut plus faire interpréter du HTML dans une infobulle ou une boîte de dialogue (au survol d’un message, une « image » sur un partage réseau pouvait transmettre l’empreinte du mot de passe Windows). Les pièces jointes enregistrées portent la marque Internet de Windows (mode protégé d’Office, SmartScreen) ; une soixantaine de types de fichiers dangereux en plus (.iso, .vhd, .one, .xll…). Sur un PC partagé, un autre compte ne peut plus empêcher Smail de démarrer.
