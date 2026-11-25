@@ -1,4 +1,5 @@
 """Branchement des ressources visuelles validées sur l'application réelle."""
+from mailclient.i18n import tr
 from PySide6.QtWidgets import QApplication
 from mailclient.ui.fonts import configure_fonts
 from mailclient.ui.icons import icon
@@ -10,7 +11,7 @@ def install_theme(database) -> Theme:
     """Relit les préférences visuelles via l'API existante, sans les modifier."""
     app = QApplication.instance()
     if app is None:
-        raise RuntimeError('Une application Qt doit être créée avant son thème.')
+        raise RuntimeError(tr('Une application Qt doit être créée avant son thème.'))
     theme = getattr(app, 'smail_theme', None)
     if theme is None:
         app.setStyle('Fusion')

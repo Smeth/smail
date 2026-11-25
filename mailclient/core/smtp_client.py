@@ -1,4 +1,5 @@
 """SMTP chiffré, en-têtes validés et Cci uniquement dans l’enveloppe."""
+from mailclient.i18n import tr
 import smtplib
 import mimetypes
 import re
@@ -20,13 +21,13 @@ def display_address(pair) -> str:
 
 def addresses(value: str) -> list[tuple[str, str]]:
     if any(ord(c) < 32 or ord(c) == 127 for c in value):
-        raise ValueError('Les en-têtes ne doivent pas contenir de caractères de contrôle.')
+        raise ValueError(tr('Les en-têtes ne doivent pas contenir de caractères de contrôle.'))
     value = value.strip().rstrip(',;').strip()  # Virgule finale laissée par l’autocomplétion.
     if not value:
         return []
     result = getaddresses([value])
     if not result or any(not address.isascii() or len(address) > 254 or not re.fullmatch(r'[^\s@<>;,]+@[^\s@<>;,]+\.[^\s@<>;,]+', address) for _, address in result):
-        raise ValueError('Adresse destinataire invalide. Séparez les adresses par des virgules.')
+        raise ValueError(tr('Adresse destinataire invalide. Séparez les adresses par des virgules.'))
     return result
 
 def build_message(account, to: str, cc: str, bcc: str, subject: str, body: str, attachments=(), reply_id='', references='', allow_empty=False, html='', calendar=''):
@@ -34,11 +35,11 @@ def build_message(account, to: str, cc: str, bcc: str, subject: str, body: str, 
     account.validate()
     for value in (subject, reply_id, references):
         if any(ord(c) < 32 or ord(c) == 127 for c in value):
-            raise ValueError('Caractère de contrôle interdit dans un en-tête.')
+            raise ValueError(tr('Caractère de contrôle interdit dans un en-tête.'))
     groups = [addresses(value) for value in (to, cc, bcc)]
     recipients = list({address.casefold(): address for group in groups for _, address in group}.values())
     if not recipients and not allow_empty:
-        raise ValueError('Ajoutez au moins un destinataire.')
+        raise ValueError(tr('Ajoutez au moins un destinataire.'))
     message = EmailMessage(policy=policy.SMTP)
     message['From'] = formataddr((account.name, account.email))
     for header, group in zip(('To', 'Cc'), groups):
@@ -143,7 +144,7 @@ def send_message(account, password, tls, message, recipients, progress=None):
         return client.send_message(message, from_addr=account.email, to_addrs=recipients)
     except (smtplib.SMTPServerDisconnected, TimeoutError, ConnectionError) as error:
         raise DeliveryUncertain(
-            'Le serveur d’envoi n’a pas confirmé la réception du message (connexion coupée ou réponse trop lente). '
-            'Il a peut-être été envoyé : vérifiez auprès du destinataire ou dans les Envoyés avant de réessayer.') from error
+            tr('Le serveur d’envoi n’a pas confirmé la réception du message (connexion coupée ou réponse trop lente). '
+            'Il a peut-être été envoyé : vérifiez auprès du destinataire ou dans les Envoyés avant de réessayer.')) from error
     finally:
         client.close()

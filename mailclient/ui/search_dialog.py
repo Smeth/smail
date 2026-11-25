@@ -1,4 +1,5 @@
 """Filtres de recherche : formulaire qui écrit les opérateurs (de:, objet:, a:pj…) à la place de l’utilisateur."""
+from mailclient.i18n import tr
 from PySide6.QtCore import QDate
 from PySide6.QtWidgets import QCheckBox, QDateEdit, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLineEdit
 from mailclient.core.search_query import parse
@@ -32,7 +33,7 @@ def build_query(words='', sender='', recipient='', subject='', attachment=False,
 class SearchDialog(QDialog):
     def __init__(self, current='', parent=None):
         super().__init__(parent)
-        self.setWindowTitle('Filtres de recherche')
+        self.setWindowTitle(tr('Filtres de recherche'))
         self.setMinimumWidth(420)
         form = QFormLayout(self)
         query = parse(current)
@@ -40,17 +41,17 @@ class SearchDialog(QDialog):
         self.sender = QLineEdit(' '.join(query.sender))
         self.recipient = QLineEdit(' '.join(query.to))
         self.subject = QLineEdit(' '.join(query.subject))
-        self.words.setPlaceholderText('Mots à trouver n’importe où')
-        self.sender.setPlaceholderText('Nom ou adresse')
-        self.recipient.setPlaceholderText('Nom ou adresse')
-        self.attachment = QCheckBox('Avec pièce jointe')
-        self.unread = QCheckBox('Non lus seulement')
-        self.starred = QCheckBox('Suivis seulement')
+        self.words.setPlaceholderText(tr('Mots à trouver n’importe où'))
+        self.sender.setPlaceholderText(tr('Nom ou adresse'))
+        self.recipient.setPlaceholderText(tr('Nom ou adresse'))
+        self.attachment = QCheckBox(tr('Avec pièce jointe'))
+        self.unread = QCheckBox(tr('Non lus seulement'))
+        self.starred = QCheckBox(tr('Suivis seulement'))
         self.attachment.setChecked(bool(query.attachment))  # None (aucun filtre) refusé par Qt : plantage de la 1.2.0.
         self.unread.setChecked(query.unread is True)
         self.starred.setChecked(bool(query.starred))
-        self.since_on, self.since = QCheckBox('Après le'), QDateEdit()
-        self.before_on, self.before = QCheckBox('Avant le'), QDateEdit()
+        self.since_on, self.since = QCheckBox(tr('Après le')), QDateEdit()
+        self.before_on, self.before = QCheckBox(tr('Avant le')), QDateEdit()
         for check, edit, value in ((self.since_on, self.since, query.since), (self.before_on, self.before, query.before)):
             edit.setCalendarPopup(True)
             edit.setDisplayFormat('dd/MM/yyyy')
@@ -58,10 +59,10 @@ class SearchDialog(QDialog):
             check.setChecked(value is not None)
             edit.setEnabled(value is not None)
             check.toggled.connect(edit.setEnabled)
-        form.addRow('Contient', self.words)
-        form.addRow('De', self.sender)
-        form.addRow('À', self.recipient)
-        form.addRow('Objet', self.subject)
+        form.addRow(tr('Contient'), self.words)
+        form.addRow(tr('De'), self.sender)
+        form.addRow(tr('À'), self.recipient)
+        form.addRow(tr('Objet'), self.subject)
         for widget in (self.attachment, self.unread, self.starred):
             form.addRow('', widget)
         for check, edit in ((self.since_on, self.since), (self.before_on, self.before)):
@@ -70,9 +71,9 @@ class SearchDialog(QDialog):
             row.addWidget(edit, 1)
             form.addRow(row)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Reset | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Ok).setText('Rechercher')
-        buttons.button(QDialogButtonBox.Reset).setText('Effacer')
-        buttons.button(QDialogButtonBox.Cancel).setText('Annuler')
+        buttons.button(QDialogButtonBox.Ok).setText(tr('Rechercher'))
+        buttons.button(QDialogButtonBox.Reset).setText(tr('Effacer'))
+        buttons.button(QDialogButtonBox.Cancel).setText(tr('Annuler'))
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         buttons.button(QDialogButtonBox.Reset).clicked.connect(self.clear)

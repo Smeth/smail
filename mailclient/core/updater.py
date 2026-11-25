@@ -6,6 +6,7 @@ la signature du manifeste est valide avec la clé publique ci-dessous ET si l’
 correspond. Une publication modifiée à la main, ou un fichier altéré en route, est donc refusé.
 
 Aucune donnée personnelle n’est envoyée : une requête anonyme vers l’API publique de GitHub."""
+from mailclient.i18n import tr
 import hashlib
 import json
 import os
@@ -46,7 +47,7 @@ class Update:
 def parse_version(text: str) -> tuple:
     match = VERSION.fullmatch((text or '').strip().removeprefix('v'))
     if not match:
-        raise UpdateError(f'Numéro de version invalide : {text!r}')
+        raise UpdateError(tr('Numéro de version invalide : {text!r}').format(text=text))
     return tuple(int(part) for part in match.groups())
 
 
@@ -57,7 +58,7 @@ def newer(candidate: str, current: str) -> bool:
 def checked_url(url: str) -> str:
     parsed = urlparse(url)
     if parsed.scheme != 'https' or parsed.hostname not in HOSTS:
-        raise UpdateError('Adresse de téléchargement inattendue : mise à jour refusée.')
+        raise UpdateError(tr('Adresse de téléchargement inattendue : mise à jour refusée.'))
     return url
 
 
@@ -67,7 +68,7 @@ def fetch(url: str, limit: int, accept='application/octet-stream', opener=None) 
         checked_url(response.geturl())  # Redirections comprises.
         data = response.read(limit + 1)
     if len(data) > limit:
-        raise UpdateError('Réponse trop volumineuse : mise à jour refusée.')
+        raise UpdateError(tr('Réponse trop volumineuse : mise à jour refusée.'))
     return data
 
 
@@ -77,17 +78,17 @@ def verify_manifest(data: bytes, signature: bytes, public_key: bytes = PUBLIC_KE
     try:
         Ed25519PublicKey.from_public_bytes(public_key).verify(signature, data)
     except (InvalidSignature, ValueError):
-        raise UpdateError('Signature de la mise à jour invalide : elle n’est pas installée.') from None
+        raise UpdateError(tr('Signature de la mise à jour invalide : elle n’est pas installée.')) from None
     manifest = json.loads(data.decode('utf-8'))
     if not isinstance(manifest, dict):
-        raise UpdateError('Manifeste de mise à jour invalide.')
+        raise UpdateError(tr('Manifeste de mise à jour invalide.'))
     parse_version(manifest.get('version', ''))
     if not INSTALLER_NAME.fullmatch(str(manifest.get('file', ''))):
-        raise UpdateError('Nom de fichier de mise à jour inattendu.')
+        raise UpdateError(tr('Nom de fichier de mise à jour inattendu.'))
     if not re.fullmatch(r'[0-9a-f]{64}', str(manifest.get('sha256', ''))):
-        raise UpdateError('Empreinte de mise à jour invalide.')
+        raise UpdateError(tr('Empreinte de mise à jour invalide.'))
     if not isinstance(manifest.get('size'), int) or not 0 < manifest['size'] <= MAX_INSTALLER:
-        raise UpdateError('Taille de mise à jour invalide.')
+        raise UpdateError(tr('Taille de mise à jour invalide.'))
     return manifest
 
 
@@ -102,13 +103,13 @@ def check(current: str, opener=None, public_key: bytes = PUBLIC_KEY) -> Update |
     assets = {asset.get('name'): asset.get('browser_download_url') for asset in release.get('assets', [])
               if isinstance(asset, dict)}
     if MANIFEST not in assets or SIGNATURE not in assets:
-        raise UpdateError(f'La version {tag} n’est pas signée : elle n’est pas installée automatiquement.')
+        raise UpdateError(tr('La version {tag} n’est pas signée : elle n’est pas installée automatiquement.').format(tag=tag))
     data = fetch(assets[MANIFEST], 64 * 1024, opener=opener)
     manifest = verify_manifest(data, fetch(assets[SIGNATURE], 1024, opener=opener), public_key)
     if parse_version(manifest['version']) != parse_version(tag):
-        raise UpdateError('La version signée ne correspond pas à la publication.')
+        raise UpdateError(tr('La version signée ne correspond pas à la publication.'))
     if manifest['file'] not in assets:
-        raise UpdateError('Fichier d’installation absent de la publication.')
+        raise UpdateError(tr('Fichier d’installation absent de la publication.'))
     return Update(manifest['version'], checked_url(assets[manifest['file']]), manifest['file'], manifest['sha256'],
                   manifest['size'], str(release.get('body') or '')[:4000])
 
@@ -135,14 +136,14 @@ def download(update: Update, directory: Path, opener=None, cancelled=lambda: Fal
             checked_url(response.geturl())
             while block := response.read(1 << 16):
                 if cancelled():
-                    raise UpdateError('Téléchargement interrompu.')
+                    raise UpdateError(tr('Téléchargement interrompu.'))
                 size += len(block)
                 if size > update.size:
-                    raise UpdateError('Fichier de mise à jour plus gros qu’annoncé : refusé.')
+                    raise UpdateError(tr('Fichier de mise à jour plus gros qu’annoncé : refusé.'))
                 digest.update(block)
                 stream.write(block)
         if size != update.size or digest.hexdigest() != update.sha256:
-            raise UpdateError('Fichier de mise à jour altéré (empreinte différente) : refusé.')
+            raise UpdateError(tr('Fichier de mise à jour altéré (empreinte différente) : refusé.'))
         os.replace(partial, target)
     finally:
         partial.unlink(missing_ok=True)

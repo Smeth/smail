@@ -4,6 +4,7 @@ Principe constant : un envoi SMTP n’est jamais relancé automatiquement. Un en
 l’état « sending » avant la connexion SMTP ; s’il est retrouvé dans cet état au démarrage (coupure,
 arrêt brutal), il devient « uncertain » et attend une décision de l’utilisateur.
 """
+from mailclient.i18n import tr
 import base64
 import logging
 from datetime import datetime, timezone
@@ -68,7 +69,7 @@ def copy_to_sent(service, account, raw, local_id=None) -> str:
     folders, _ = service.folders(account)
     folder = next((name for name, label in folders if any(word in (name + ' ' + label).casefold() for word in ('envoyés', 'sent'))), None)
     if not folder:
-        raise RuntimeError('Dossier Envoyés introuvable. La copie locale est conservée.')
+        raise RuntimeError(tr('Dossier Envoyés introuvable. La copie locale est conservée.'))
     service.client(account).append(folder, raw, False)
     if local_id:
         copy = service.db.cache_get('sent-copy', local_id)
@@ -101,7 +102,7 @@ def retry_sent_copies(service, accounts) -> int:
                 folders, _ = service.folders(account)
                 folder = next((name for name, label in folders if any(word in (name + ' ' + label).casefold() for word in ('envoyés', 'sent'))), None)
                 if not folder:
-                    raise RuntimeError('Dossier Envoyés introuvable.')
+                    raise RuntimeError(tr('Dossier Envoyés introuvable.'))
                 message_id = (message_from_bytes(raw[:65536]).get('Message-ID') or '').strip()
                 found = service.client(account).find_by_message_id(folder, message_id)[0] if message_id else ''
                 if not found:
@@ -119,7 +120,7 @@ def retry_sent_copies(service, accounts) -> int:
 
 def schedule(db, account, state, files, when: datetime, item_id=None) -> dict:
     if when <= now_utc():
-        raise ValueError('Choisissez une date et une heure à venir.')
+        raise ValueError(tr('Choisissez une date et une heure à venir.'))
     item = dict(id=item_id or str(uuid4()), account=account.id, state=dict(state), files=encode_files(files),
                 send_at=iso(when), status='scheduled', error='')
     db.cache_put('outbox', item['id'], item, account.id)
@@ -163,11 +164,11 @@ def deliver_item(service, account, item, progress=None) -> tuple:
         from mailclient.core.smtp_client import DeliveryUncertain
         uncertain = isinstance(error, DeliveryUncertain)
         item.update(status='uncertain' if uncertain else 'failed',
-                    error=friendly_error(error) + ('' if uncertain else ' Aucun renvoi automatique : vérifiez vos Envoyés.'))
+                    error=friendly_error(error) + ('' if uncertain else ' ' + tr('Aucun renvoi automatique : vérifiez vos Envoyés.')))
         service.db.cache_put('outbox', item['id'], item, account.id)
         return ('uncertain' if uncertain else 'failed'), subject, item['error']
     if refused:
-        item.update(status='partial', error='Destinataires refusés : ' + ', '.join(refused) + '. Les autres ont reçu le message.')
+        item.update(status='partial', error=tr('Destinataires refusés : {addresses}. Les autres ont reçu le message.').format(addresses=', '.join(refused)))
         service.db.cache_put('outbox', item['id'], item, account.id)
         event = ('partial', subject, item['error'])
     else:
@@ -180,7 +181,7 @@ def deliver_item(service, account, item, progress=None) -> tuple:
     except Exception as error:
         log.warning('Copie Envoyés d’un envoi non effectuée (%s)', type(error).__name__)
         if event[0] == 'sent':
-            event = ('sent', subject, 'Copie dans Envoyés non effectuée ; une copie locale est conservée.')
+            event = ('sent', subject, tr('Copie dans Envoyés non effectuée ; une copie locale est conservée.'))
     return event
 
 
@@ -201,7 +202,7 @@ def recover(db) -> int:
     count = 0
     for item in db.cache_list('outbox'):
         if item.get('status') == 'sending':
-            item.update(status='uncertain', error='Smail a été fermé pendant l’envoi. Vérifiez vos Envoyés avant toute nouvelle tentative.')
+            item.update(status='uncertain', error=tr('Smail a été fermé pendant l’envoi. Vérifiez vos Envoyés avant toute nouvelle tentative.'))
             db.cache_put('outbox', item['id'], item, item['account'])
             count += 1
     return count
@@ -231,16 +232,16 @@ def snooze_folder(service, account) -> str:
         return found
     found = find(service.manage_folder(account, 'create', SNOOZE_NAMES[0]))
     if not found:
-        raise RuntimeError('Dossier « Reportés » introuvable après sa création. Actualisez les dossiers puis réessayez.')
+        raise RuntimeError(tr('Dossier « Reportés » introuvable après sa création. Actualisez les dossiers puis réessayez.'))
     return found
 
 
 def snooze(service, account, rows, until: datetime) -> str:
     """Déplace les messages vers « Reportés » et mémorise leur retour (retrouvés par Message-ID)."""
     if until <= now_utc():
-        raise ValueError('Choisissez une date et une heure à venir.')
+        raise ValueError(tr('Choisissez une date et une heure à venir.'))
     if any(not row.get('message_id') for row in rows):
-        raise RuntimeError('Ce message n’a pas d’identifiant Message-ID : il ne peut pas être reporté. Actualisez le dossier puis réessayez.')
+        raise RuntimeError(tr('Ce message n’a pas d’identifiant Message-ID : il ne peut pas être reporté. Actualisez le dossier puis réessayez.'))
     folder = snooze_folder(service, account)
     sources = [row for row in rows if row['folder'] != folder]
     if sources:

@@ -1,3 +1,4 @@
+from mailclient.i18n import tr
 from PySide6.QtCore import Qt, QEvent
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QScrollArea, QLineEdit, QListWidget, QListWidgetItem
 from mailclient.ui.components import label, Card, Button, later
@@ -7,7 +8,7 @@ class Dialog(QDialog):
     def __init__(self, theme, title, subtitle, parent=None, size=(800,700)):
         super().__init__(parent)
         self.theme = theme
-        self.setWindowTitle(title + ' · Maquette Smail')
+        self.setWindowTitle(title + tr(' · Maquette Smail'))
         self.resize(*size)
         self.setMinimumSize(min(size[0],660), min(size[1],480))
         self.outer = QVBoxLayout(self)
@@ -26,11 +27,11 @@ class Dialog(QDialog):
         self.refresh()
 
     def refresh(self):
-        self.eyebrow.setText(f'SMAIL  /  0{self.theme.variant} · {VARIANTS[self.theme.variant][0].upper()}')
+        self.eyebrow.setText(tr('SMAIL  /  0{variant} · {valeur}').format(variant=self.theme.variant, valeur=VARIANTS[self.theme.variant][0].upper()))
 
     def footer(self, primary='Enregistrer', callback=None, cancel='Annuler'):
         row = QHBoxLayout()
-        row.addWidget(label('Données fictives · aucune opération réelle', 'Small'))
+        row.addWidget(label(tr('Données fictives · aucune opération réelle'), 'Small'))
         row.addStretch()
         back = Button(cancel, self.theme, role='Secondary')
         self.cancel_button = back
@@ -46,18 +47,18 @@ class Dialog(QDialog):
 
 class CommandPalette(Dialog):
     def __init__(self, theme, commands, parent=None):
-        super().__init__(theme, 'Que souhaitez-vous faire ?', 'Tapez une action, puis Entrée. Les flèches parcourent les résultats.', parent, (760,610))
+        super().__init__(theme, tr('Que souhaitez-vous faire ?'), tr('Tapez une action, puis Entrée. Les flèches parcourent les résultats.'), parent, (760,610))
         self.commands = commands
         self.search = QLineEdit()
         self.search.setObjectName('CommandInput')
-        self.search.setPlaceholderText('Rechercher une commande…')
-        self.search.setAccessibleName('Rechercher une commande')
+        self.search.setPlaceholderText(tr('Rechercher une commande…'))
+        self.search.setAccessibleName(tr('Rechercher une commande'))
         self.content.box.addWidget(self.search)
         self.list = QListWidget()
         self.list.setObjectName('Commands')
-        self.list.setAccessibleName('Commandes disponibles')
+        self.list.setAccessibleName(tr('Commandes disponibles'))
         self.content.box.addWidget(self.list,1)
-        self.content.box.addWidget(label('↑ ↓  choisir       Entrée  exécuter       Échap  fermer', 'Small'))
+        self.content.box.addWidget(label(tr('↑ ↓  choisir       Entrée  exécuter       Échap  fermer'), 'Small'))
         self.search.textChanged.connect(self.filter)
         self.search.returnPressed.connect(self.execute)
         self.list.itemActivated.connect(lambda item: self.execute())

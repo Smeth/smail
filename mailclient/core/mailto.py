@@ -1,4 +1,5 @@
 """Liens « mailto: » (RFC 6068) : ouverture d’un nouveau message prérempli, jamais d’envoi automatique."""
+from mailclient.i18n import tr
 from urllib.parse import parse_qsl, unquote, urlsplit
 
 FIELDS = ('to', 'cc', 'bcc', 'subject', 'body')
@@ -12,7 +13,7 @@ def is_mailto(value: str) -> bool:
 def parse(url: str) -> dict:
     """Champs d’un nouveau message ; adresses séparées par des virgules, textes décodés, longueurs bornées."""
     if not is_mailto(url):
-        raise ValueError('Lien mailto invalide.')
+        raise ValueError(tr('Lien mailto invalide.'))
     parts = urlsplit(url.strip())
     fields = {name: '' for name in FIELDS}
     recipients = [unquote(address).strip() for address in parts.path.split(',') if address.strip()]

@@ -3,6 +3,7 @@
 Ordre de préférence : désabonnement en un clic (requête POST HTTPS, sans navigateur), puis e-mail
 de désabonnement (mailto:), puis page web ouverte dans le navigateur. Rien n’est fait sans confirmation.
 """
+from mailclient.i18n import tr
 import ipaddress
 import re
 import socket
@@ -77,7 +78,7 @@ def one_click(url: str, timeout: int = 15) -> int:
     """POST RFC 8058, sans cookie ni redirection ; renvoie le code HTTP."""
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != 'https' or not public_host(parsed.hostname or ''):
-        raise RuntimeError('Adresse de désabonnement refusée (HTTPS public requis).')
+        raise RuntimeError(tr('Adresse de désabonnement refusée (HTTPS public requis).'))
     request = urllib.request.Request(url, data=ONE_CLICK_BODY, method='POST',
                                      headers={'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Smail'})
     opener = urllib.request.build_opener(_NoRedirect)
@@ -87,5 +88,5 @@ def one_click(url: str, timeout: int = 15) -> int:
     except urllib.error.HTTPError as error:
         status = error.code
     if not 200 <= status < 400:
-        raise RuntimeError(f'Le serveur de la liste a refusé la demande (HTTP {status}).')
+        raise RuntimeError(tr('Le serveur de la liste a refusé la demande (HTTP {status}).').format(status=status))
     return status

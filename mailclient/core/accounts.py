@@ -1,4 +1,5 @@
 """Configuration publique des comptes, sans secret."""
+from mailclient.i18n import tr
 from dataclasses import dataclass, field, fields, asdict
 from uuid import uuid4
 import re
@@ -22,7 +23,7 @@ class Server:
 
     def validate(self) -> None:
         if not re.fullmatch(r'[A-Za-z0-9._:-]+', self.host) or not 1 <= self.port <= 65535 or self.mode not in MODES:
-            raise ValueError('Serveur, port ou type de connexion invalide.')
+            raise ValueError(tr('Serveur, port ou type de connexion invalide.'))
 
 @dataclass
 class Account:
@@ -50,23 +51,23 @@ class Account:
 
     def validate(self) -> None:
         if not self.name.strip() or len(self.name) > 200 or any(ord(c) < 32 or ord(c) == 127 for c in self.name + self.email):
-            raise ValueError('Nom ou adresse invalide.')
+            raise ValueError(tr('Nom ou adresse invalide.'))
         if not self.email.isascii() or len(self.email) > 254 or not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', self.email):
-            raise ValueError('Adresse e-mail invalide.')
+            raise ValueError(tr('Adresse e-mail invalide.'))
         self.imap.validate()
         self.smtp.validate()
         for login in (self.imap_login, self.smtp_login):
             if len(login) > 254 or login != login.strip() or any(ord(c) < 32 or ord(c) == 127 for c in login):
-                raise ValueError('Identifiant de connexion invalide.')
+                raise ValueError(tr('Identifiant de connexion invalide.'))
         if self.auth_method not in {'password', 'google', 'microsoft'}:
-            raise ValueError('Méthode d’authentification inconnue.')
+            raise ValueError(tr('Méthode d’authentification inconnue.'))
         if self.auth_method != 'password':
             if not self.oauth_client_id.strip() or any(c in self.oauth_client_id for c in '\r\n\x00'):
-                raise ValueError('Un identifiant client OAuth2 est requis.')
+                raise ValueError(tr('Un identifiant client OAuth2 est requis.'))
             if self.imap.mode == 'Aucun' or self.smtp.mode == 'Aucun':
-                raise ValueError('OAuth2 exige une connexion chiffrée sur les deux serveurs.')
+                raise ValueError(tr('OAuth2 exige une connexion chiffrée sur les deux serveurs.'))
             if not re.fullmatch(r'[A-Za-z0-9.-]{1,200}', self.oauth_tenant):
-                raise ValueError('Tenant Microsoft invalide.')
+                raise ValueError(tr('Tenant Microsoft invalide.'))
 
     def to_dict(self) -> dict:
         return asdict(self)

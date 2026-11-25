@@ -1,4 +1,5 @@
 """Sessions IMAP dédiées : lecture, actions UID et surveillance IDLE."""
+from mailclient.i18n import tr, N_
 import base64
 import hashlib
 import imaplib
@@ -15,7 +16,7 @@ UID_SET = re.compile(r'[1-9][0-9]*(?:,[1-9][0-9]*)*')
 
 def quote_folder(folder: str) -> str:
     if any(c in folder for c in '\r\n\x00'):
-        raise ValueError('Nom de dossier invalide.')
+        raise ValueError(tr('Nom de dossier invalide.'))
     return '"' + folder.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
 def encode_folder(value: str) -> str:
@@ -38,13 +39,13 @@ def encode_folder(value: str) -> str:
 def valid_folder_name(name: str) -> str:
     name = name.strip()
     if not name or len(name) > 200 or any(ord(c) < 32 or c in '*%' for c in name):
-        raise ValueError('Nom de dossier invalide : évitez les caractères * et %.')
+        raise ValueError(tr('Nom de dossier invalide : évitez les caractères * et %.'))
     return name
 
 # Dossiers usuels sans attribut SPECIAL-USE (Courier, cPanel, anciens Dovecot) : libellé français.
-COMMON_LABELS = {'sent': 'Envoyés', 'sent items': 'Envoyés', 'sent messages': 'Envoyés', 'drafts': 'Brouillons',
-                 'trash': 'Corbeille', 'deleted items': 'Corbeille', 'deleted messages': 'Corbeille',
-                 'junk': 'Spam', 'spam': 'Spam', 'junk e-mail': 'Spam', 'archive': 'Archives', 'archives': 'Archives'}
+COMMON_LABELS = {'sent': N_('Envoyés'), 'sent items': N_('Envoyés'), 'sent messages': N_('Envoyés'), 'drafts': N_('Brouillons'),
+                 'trash': N_('Corbeille'), 'deleted items': N_('Corbeille'), 'deleted messages': N_('Corbeille'),
+                 'junk': N_('Spam'), 'spam': N_('Spam'), 'junk e-mail': N_('Spam'), 'archive': N_('Archives'), 'archives': N_('Archives')}
 QUOTED = rb'"((?:[^"\\]|\\.)*)"'
 
 def unquote(value: bytes) -> str:
@@ -156,20 +157,20 @@ class ConnectionPool:
 def uid_set(uids) -> str:
     value = ','.join(str(uid) for uid in ([uids] if isinstance(uids, str) else uids))
     if not UID_SET.fullmatch(value):
-        raise ValueError('Actualisez le dossier avant de modifier ce message.')
+        raise ValueError(tr('Actualisez le dossier avant de modifier ce message.'))
     return value
 
 class IMAPClient:
     def select(self, client, folder, readonly=True, expected=None):
         status, counts = client.select(quote_folder(folder), readonly=readonly)
         if status != 'OK':
-            raise RuntimeError('Impossible d’ouvrir ce dossier.')
+            raise RuntimeError(tr('Impossible d’ouvrir ce dossier.'))
         self.exists = int(counts[0]) if isinstance(counts, list) and counts and isinstance(counts[0], bytes) and counts[0].isdigit() else 0
         response = client.response('UIDVALIDITY')
         values = response[1] if isinstance(response, tuple) else None
         self.uidvalidity = values[0].decode('ascii') if isinstance(values, list) and values and isinstance(values[0], bytes) else ''
         if expected and self.uidvalidity != expected:
-            raise RuntimeError('Le dossier a été recréé sur le serveur. Actualisez avant de modifier les messages.')
+            raise RuntimeError(tr('Le dossier a été recréé sur le serveur. Actualisez avant de modifier les messages.'))
 
     def message(self, folder: str, uid: str) -> Mail:
         """Télécharge le MIME sans positionner le drapeau IMAP Seen."""
@@ -177,16 +178,16 @@ class IMAPClient:
 
     def message_raw(self, folder: str, uid: str) -> bytes:
         if not re.fullmatch(r'[1-9][0-9]*', uid):
-            raise ValueError('Identifiant de message invalide.')
+            raise ValueError(tr('Identifiant de message invalide.'))
         with self.session() as client:
             self.select(client, folder)
             status, parts = client.uid('fetch', uid, '(BODY.PEEK[])')
             if status != 'OK':
-                raise RuntimeError('Impossible de charger le message.')
+                raise RuntimeError(tr('Impossible de charger le message.'))
             for part in parts:
                 if isinstance(part, tuple) and isinstance(part[1], bytes):
                     return part[1]
-            raise RuntimeError('Ce message n’est plus disponible sur le serveur.')
+            raise RuntimeError(tr('Ce message n’est plus disponible sur le serveur.'))
 
     def __init__(self, account, password, tls, pool=None):
         self.account, self.password, self.tls, self.pool = account, password, tls, pool
@@ -247,7 +248,7 @@ class IMAPClient:
         with self.session() as client:
             status, data = client.list()
             if status != 'OK':
-                raise RuntimeError('Impossible de lister les dossiers.')
+                raise RuntimeError(tr('Impossible de lister les dossiers.'))
             entries, delimiter = [], None
             for line in data:
                 if not isinstance(line, bytes):
@@ -264,10 +265,10 @@ class IMAPClient:
             namespace, separator = personal_namespace(client)
             delimiter = delimiter or separator
             prefix = folder_prefix([name for name, _ in entries], delimiter, namespace)
-            labels = {b'\\sent': 'Envoyés', b'\\drafts': 'Brouillons', b'\\trash': 'Corbeille', b'\\junk': 'Spam', b'\\archive': 'Archives'}
+            labels = {b'\\sent': N_('Envoyés'), b'\\drafts': N_('Brouillons'), b'\\trash': N_('Corbeille'), b'\\junk': N_('Spam'), b'\\archive': N_('Archives')}
             folders, special = [], set()
             for name, flags in entries:
-                label = 'Boîte de réception' if name.upper() == 'INBOX' else \
+                label = N_('Boîte de réception') if name.upper() == 'INBOX' else \
                         next((v for k, v in labels.items() if k in flags), None)
                 special.add(name) if label else None
                 folders.append((name, label or folder_label(name, delimiter, prefix)))
@@ -335,7 +336,7 @@ class IMAPClient:
             else:
                 status, data = client.uid('search', None, *args)
             if status != 'OK':
-                raise RuntimeError('Le serveur a refusé cette recherche.')
+                raise RuntimeError(tr('Le serveur a refusé cette recherche.'))
             uids = set(data[0].split()) if data and data[0] else set()
             found = uids if found is None else found & uids
             if not found:
@@ -347,7 +348,7 @@ class IMAPClient:
                 chunk = ordered[start:start + 500]
                 status, parts = client.uid('fetch', b','.join(chunk).decode(), '(UID BODYSTRUCTURE)')
                 if status != 'OK':
-                    raise RuntimeError('Le serveur a refusé cette recherche.')
+                    raise RuntimeError(tr('Le serveur a refusé cette recherche.'))
                 items = fetch_items(parts)
                 kept += [uid for uid in chunk if uid.decode() in items and
                          re.search(rb'"(?:ATTACHMENT|FILENAME|NAME)"', items[uid.decode()][0], re.I)]
@@ -364,7 +365,7 @@ class IMAPClient:
             # Une seule commande FETCH pour toute la page.
             status, parts = client.uid('fetch', ','.join(wanted), '(UID FLAGS BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE CONTENT-TYPE CONTENT-DISPOSITION MESSAGE-ID IN-REPLY-TO REFERENCES)])')
             if status != 'OK':
-                raise RuntimeError('Impossible de charger la liste des messages.')
+                raise RuntimeError(tr('Impossible de charger la liste des messages.'))
             items = fetch_items(parts)
             rows = []
             for uid in wanted:
@@ -381,7 +382,7 @@ class IMAPClient:
         """uid accepte un UID ou une liste d’UID du même dossier : une seule commande IMAP."""
         uid = uid_set(uid)
         if not expected:
-            raise ValueError('Actualisez le dossier avant de modifier ce message.')
+            raise ValueError(tr('Actualisez le dossier avant de modifier ce message.'))
         with self.session() as client:
             self.select(client, folder, False, expected)
             if action == 'delete':
@@ -394,22 +395,22 @@ class IMAPClient:
                 status, _ = client.uid('store', uid, operation, f'({flag})')
             elif action == 'move':
                 if not target or target == folder:
-                    raise ValueError('Choisissez un autre dossier de destination.')
+                    raise ValueError(tr('Choisissez un autre dossier de destination.'))
                 if b'MOVE' in client.capabilities:
                     status, _ = client.uid('MOVE', uid, quote_folder(target))
                 else:
                     status, _ = client.uid('COPY', uid, quote_folder(target))
                     if status != 'OK':
-                        raise RuntimeError('Copie refusée : le message source est conservé.')
+                        raise RuntimeError(tr('Copie refusée : le message source est conservé.'))
                     status, _ = client.uid('STORE', uid, '+FLAGS.SILENT', '(\\Deleted)')
                     if status != 'OK':
-                        raise RuntimeError('La copie a réussi, mais la suppression de la source a échoué. Actualisez les deux dossiers.')
+                        raise RuntimeError(tr('La copie a réussi, mais la suppression de la source a échoué. Actualisez les deux dossiers.'))
                     if b'UIDPLUS' in client.capabilities:
                         status, _ = client.uid('EXPUNGE', uid)
             else:
-                raise ValueError('Action inconnue.')
+                raise ValueError(tr('Action inconnue.'))
             if status != 'OK':
-                raise RuntimeError('Le serveur a refusé cette action. Actualisez le dossier avant de réessayer.')
+                raise RuntimeError(tr('Le serveur a refusé cette action. Actualisez le dossier avant de réessayer.'))
 
     @staticmethod
     def _expunge(client, uid, allow_global=False):
@@ -424,12 +425,12 @@ class IMAPClient:
             self.select(client, folder, False)
             status, data = client.uid('search', None, 'UNSEEN')
             if status != 'OK':
-                raise RuntimeError('Impossible de rechercher les messages non lus.')
+                raise RuntimeError(tr('Impossible de rechercher les messages non lus.'))
             uids = data[0].split() if data and data[0] else []
             for start in range(0, len(uids), 500):
                 status, _ = client.uid('STORE', b','.join(uids[start:start+500]).decode('ascii'), '+FLAGS.SILENT', '(\\Seen)')
                 if status != 'OK':
-                    raise RuntimeError('Le serveur a refusé de marquer les messages comme lus.')
+                    raise RuntimeError(tr('Le serveur a refusé de marquer les messages comme lus.'))
             return len(uids)
 
     def empty_folder(self, folder: str):
@@ -438,13 +439,13 @@ class IMAPClient:
             self.select(client, folder, False)
             status, data = client.uid('search', None, 'ALL')
             if status != 'OK':
-                raise RuntimeError('Impossible de lister les messages du dossier.')
+                raise RuntimeError(tr('Impossible de lister les messages du dossier.'))
             uids = data[0].split() if data and data[0] else []
             for start in range(0, len(uids), 500):
                 chunk = b','.join(uids[start:start+500]).decode('ascii')
                 status, _ = client.uid('STORE', chunk, '+FLAGS.SILENT', '(\\Deleted)')
                 if status != 'OK' or self._expunge(client, chunk, allow_global=True) != 'OK':
-                    raise RuntimeError('Le serveur a refusé la suppression définitive. Actualisez le dossier.')
+                    raise RuntimeError(tr('Le serveur a refusé la suppression définitive. Actualisez le dossier.'))
             return len(uids)
 
     def manage_folder(self, operation: str, name: str, new_name: str = ''):
@@ -466,19 +467,19 @@ class IMAPClient:
             elif operation == 'delete':
                 status, _ = client.delete(quote_folder(name))
             else:
-                raise ValueError('Opération de dossier inconnue.')
+                raise ValueError(tr('Opération de dossier inconnue.'))
             if status != 'OK':
-                raise RuntimeError('Le serveur a refusé cette opération sur le dossier (nom déjà utilisé ou dossier protégé ?).')
+                raise RuntimeError(tr('Le serveur a refusé cette opération sur le dossier (nom déjà utilisé ou dossier protégé ?).'))
 
     def find_by_message_id(self, folder: str, message_id: str):
         """UID des messages portant ce Message-ID dans le dossier, et UIDVALIDITY ; un UID change à chaque déplacement."""
         if not re.fullmatch(r'<[^<>\s"\\]{1,250}>', message_id):
-            raise ValueError('Identifiant de message invalide.')
+            raise ValueError(tr('Identifiant de message invalide.'))
         with self.session() as client:
             self.select(client, folder)
             status, data = client.uid('search', None, 'HEADER', 'Message-ID', f'"{message_id}"')
             if status != 'OK':
-                raise RuntimeError('Recherche du message refusée par le serveur.')
+                raise RuntimeError(tr('Recherche du message refusée par le serveur.'))
             return ','.join(uid.decode() for uid in (data[0].split() if data and data[0] else [])), self.uidvalidity
 
     APPEND_TIMEOUT = 300
@@ -501,7 +502,7 @@ class IMAPClient:
                     except OSError:
                         pass  # Session coupée : elle sera fermée et non réutilisée.
             if status != 'OK':
-                raise RuntimeError('Le serveur a refusé l’enregistrement de la copie.')
+                raise RuntimeError(tr('Le serveur a refusé l’enregistrement de la copie.'))
 
     def snapshot(self, folder: str, limit: int, cancelled, known=None):
         """Capture du dossier et téléchargement borné des derniers messages."""
@@ -509,7 +510,7 @@ class IMAPClient:
             self.select(client, folder)
             status, data = client.uid('search', None, 'UNDELETED')
             if status != 'OK':
-                raise RuntimeError('Synchronisation du dossier refusée.')
+                raise RuntimeError(tr('Synchronisation du dossier refusée.'))
             ids = [uid.decode() for uid in reversed(data[0].split())]
             wanted = ids[:limit]
             cached = {uid: known(uid, self.uidvalidity) for uid in wanted} if known else {}
@@ -556,7 +557,7 @@ class IMAPClient:
                 if line.startswith(b'+'):
                     break
                 if line.startswith(tag) or not line or line.startswith(b'* BYE'):
-                    raise RuntimeError('Le serveur a refusé IMAP IDLE.')
+                    raise RuntimeError(tr('Le serveur a refusé IMAP IDLE.'))
             deadline, changed = time.monotonic() + seconds, False
             try:
                 while time.monotonic() < deadline and not cancelled.is_set():
@@ -575,7 +576,7 @@ class IMAPClient:
                     line = client.readline()
                     if line.startswith(tag):
                         if b' OK' not in line.upper():
-                            raise RuntimeError('Le serveur a interrompu IMAP IDLE.')
+                            raise RuntimeError(tr('Le serveur a interrompu IMAP IDLE.'))
                         break
                     if not line:
                         raise ConnectionError('Connexion IDLE interrompue.')

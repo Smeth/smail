@@ -3,14 +3,16 @@
 Module sans Qt ni réseau : il décide, le service applique. Les réglages sont conservés dans le cache
 (chiffré avec lui), car les listes d’expéditeurs sont des données personnelles.
 """
+from mailclient.i18n import tr, N_
 import re
 from email.utils import getaddresses, parseaddr
 from uuid import uuid4
 
-FIELDS = {'from': 'De', 'to': 'À ou Cc', 'subject': 'Objet', 'any': 'De, À, Cc ou objet'}
-OPERATORS = {'contains': 'contient', 'is': 'est exactement', 'ends': 'se termine par'}
-ACTIONS = {'move': 'Déplacer vers', 'read': 'Marquer comme lu', 'star': 'Étoiler', 'trash': 'Mettre à la corbeille',
-           'junk': 'Déplacer vers les indésirables'}
+# Libellés affichés avec tr().
+FIELDS = {'from': N_('De'), 'to': N_('À ou Cc'), 'subject': N_('Objet'), 'any': N_('De, À, Cc ou objet')}
+OPERATORS = {'contains': N_('contient'), 'is': N_('est exactement'), 'ends': N_('se termine par')}
+ACTIONS = {'move': N_('Déplacer vers'), 'read': N_('Marquer comme lu'), 'star': N_('Étoiler'),
+           'trash': N_('Mettre à la corbeille'), 'junk': N_('Déplacer vers les indésirables')}
 JUNK_WORDS = ('spam', 'junk', 'indésirable', 'courrier indésirable', 'bulk')
 TRASH_WORDS = ('corbeille', 'trash', 'deleted', 'éléments supprimés')
 DEFAULTS = dict(rules=[], blocked=[], safe=[], spam_headers=True)
@@ -33,19 +35,19 @@ def new_rule(**values) -> dict:
 
 def validate_rule(rule: dict) -> dict:
     if rule['field'] not in FIELDS or rule['op'] not in OPERATORS or rule['action'] not in ACTIONS:
-        raise ValueError('Règle incomplète.')
+        raise ValueError(tr('Règle incomplète.'))
     rule['value'] = rule['value'].strip()
     if not rule['value'] or len(rule['value']) > 300 or any(ord(c) < 32 for c in rule['value']):
-        raise ValueError('Saisissez le texte à rechercher (300 caractères au plus).')
+        raise ValueError(tr('Saisissez le texte à rechercher (300 caractères au plus).'))
     if rule['action'] == 'move' and not rule.get('target'):
-        raise ValueError('Choisissez le dossier de destination.')
+        raise ValueError(tr('Choisissez le dossier de destination.'))
     rule['name'] = (rule.get('name') or '').strip()[:120] or describe(rule)
     return rule
 
 
 def describe(rule: dict) -> str:
-    action = ACTIONS[rule['action']].lower() + (f' « {rule["target"]} »' if rule['action'] == 'move' else '')
-    return f'Si {FIELDS[rule["field"]]} {OPERATORS[rule["op"]]} « {rule["value"]} » : {action}'
+    action = tr(ACTIONS[rule['action']]).lower() + (f' « {rule["target"]} »' if rule['action'] == 'move' else '')
+    return tr('Si {valeur} {valeur2} « {valeur3} » : {action}').format(valeur=tr(FIELDS[rule["field"]]), valeur2=tr(OPERATORS[rule["op"]]), valeur3=rule["value"], action=action)
 
 
 def normalize_sender(value: str) -> str:
@@ -53,15 +55,15 @@ def normalize_sender(value: str) -> str:
     # Une seule adresse : l’analyse de « a@b.fr, c@d.fr » varie selon la version de Python.
     found = [address for _, address in getaddresses([value]) if address]
     if len(found) > 1:
-        raise ValueError('Une seule adresse ou un seul domaine à la fois.')
+        raise ValueError(tr('Une seule adresse ou un seul domaine à la fois.'))
     value = parseaddr(value)[1] or value
     value = value.strip().casefold()
     if not value or len(value) > 254 or any(c in value for c in ' <>,;"\'') or any(ord(c) < 33 for c in value):
-        raise ValueError('Adresse ou domaine invalide.')
+        raise ValueError(tr('Adresse ou domaine invalide.'))
     if '@' not in value:
         value = '@' + value
     if not re.fullmatch(r'[^@\s]*@[^@\s]+\.[^@\s]+', value):
-        raise ValueError('Adresse ou domaine invalide.')
+        raise ValueError(tr('Adresse ou domaine invalide.'))
     return value
 
 
@@ -100,12 +102,12 @@ def decide(row: dict, data: dict, account_id: str):
     trusted = bool(address) and sender_in(address, data.get('safe', []))
     if not trusted:
         if address and sender_in(address, data.get('blocked', [])):
-            return 'junk', '', 'expéditeur bloqué'
+            return 'junk', '', tr('expéditeur bloqué')
         if data.get('spam_headers', True) and server_flagged_spam(row):
-            return 'junk', '', 'signalé comme spam par le serveur'
+            return 'junk', '', tr('signalé comme spam par le serveur')
     for rule in data.get('rules', []):
         if rule.get('enabled', True) and rule.get('account') in ('', account_id) and _matches(rule, row):
-            return rule['action'], rule.get('target', ''), f'règle « {rule["name"]} »'
+            return rule['action'], rule.get('target', ''), tr('règle « {name} »').format(name=rule['name'])
     return None
 
 

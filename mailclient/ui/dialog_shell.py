@@ -1,4 +1,5 @@
 """Coque de dialogue reprise des maquettes, raccordée à l'apparence réelle."""
+from mailclient.i18n import tr
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QScrollArea, QApplication
 from mailclient.ui.components import label, Card
 
@@ -23,7 +24,7 @@ def dialog_layout(dialog: QDialog, title: str, subtitle: str, size=(900,760)):
     outer = QVBoxLayout(dialog)
     margin = {1:20,2:28,3:18}[theme.variant]
     outer.setContentsMargins(margin,margin,margin,margin)
-    outer.addWidget(label('SMAIL', 'Eyebrow'))
+    outer.addWidget(label(tr('SMAIL'), 'Eyebrow'))
     outer.addWidget(label(title,'DialogTitle'))
     outer.addWidget(label(subtitle,'Subtitle',True))
     content = Card(margin=20 if theme.variant != 2 else 28)

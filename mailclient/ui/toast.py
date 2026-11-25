@@ -2,6 +2,7 @@
 
 Plus visible que la barre d’état, elle disparaît seule après quelques secondes (plus longtemps si elle propose
 une action) ; une nouvelle notification remplace la précédente. Le texte reste aussi dans la barre d’état."""
+from mailclient.i18n import tr
 from PySide6.QtCore import QEvent, QObject, QTimer, Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton
 
@@ -12,7 +13,7 @@ class Toast(QFrame):
         self.host = host
         self.colors = colors or (lambda: {'bg': '#FFFFFF'})  # Couleurs du thème courant (icône de fermeture).
         self.setObjectName('Toast')
-        self.setAccessibleName('Notification')
+        self.setAccessibleName(tr('Notification'))
         row = QHBoxLayout(self)
         row.setContentsMargins(16, 8, 8, 8)
         row.setSpacing(6)
@@ -23,7 +24,7 @@ class Toast(QFrame):
         self.action.setCursor(Qt.PointingHandCursor)
         self.close_button = QPushButton()  # Icône « x » de l’application : le caractère ✕ manque dans certaines polices.
         self.close_button.setFixedWidth(32)
-        self.close_button.setAccessibleName('Fermer la notification')
+        self.close_button.setAccessibleName(tr('Fermer la notification'))
         self.close_button.setCursor(Qt.PointingHandCursor)
         row.addWidget(self.text, 1)
         row.addWidget(self.action)

@@ -4,6 +4,7 @@ Les identifiants client sont ceux de l'application Smail (mailclient/core/oauth_
 clic) ou ceux d'une application enregistrée par l'utilisateur (réglages avancés).
 Les jetons et le secret client Google restent exclusivement dans keyring.
 """
+from mailclient.i18n import tr
 import base64
 import hashlib
 import hmac
@@ -27,7 +28,7 @@ PROVIDERS = {
 
 def xoauth2(address: str, token: str) -> bytes:
     if any(c in address + token for c in '\r\n\x00\x01'):
-        raise ValueError('Identifiants OAuth2 invalides.')
+        raise ValueError(tr('Identifiants OAuth2 invalides.'))
     return f'user={address}\x01auth=Bearer {token}\x01\x01'.encode('utf-8')
 
 class OAuth:
@@ -61,9 +62,9 @@ class OAuth:
             with urlopen(request, timeout=20) as response:
                 result = json.load(response)
         except (HTTPError, URLError, ValueError):
-            raise RuntimeError('OAuth2 : autorisation refusée ou expirée. Vérifiez la configuration et reconnectez ce compte.') from None
+            raise RuntimeError(tr('OAuth2 : autorisation refusée ou expirée. Vérifiez la configuration et reconnectez ce compte.')) from None
         if not result.get('access_token'):
-            raise RuntimeError('OAuth2 : aucun jeton reçu.')
+            raise RuntimeError(tr('OAuth2 : aucun jeton reçu.'))
         result['expires_at'] = time.time() + int(result.get('expires_in', 3600))
         result['client_id'] = account.oauth_client_id
         result['provider'] = account.auth_method
@@ -92,7 +93,7 @@ class OAuth:
                 self.send_header('Content-Type', 'text/plain; charset=utf-8')
                 self.send_header('Cache-Control', 'no-store')
                 self.end_headers()
-                self.wfile.write('Vous pouvez fermer cet onglet et revenir dans Smail.'.encode('utf-8'))
+                self.wfile.write(tr('Vous pouvez fermer cet onglet et revenir dans Smail.').encode('utf-8'))
             def log_message(self, *args):
                 pass
         with HTTPServer(('127.0.0.1', 0), Handler) as server:
@@ -105,12 +106,12 @@ class OAuth:
             if account.auth_method == 'google':
                 values.update(access_type='offline', prompt='consent')
             if not webbrowser.open(self.provider(account)[0] + '?' + urlencode(values)):
-                raise RuntimeError('Impossible d’ouvrir le navigateur système pour OAuth2.')
+                raise RuntimeError(tr('Impossible d’ouvrir le navigateur système pour OAuth2.'))
             deadline = time.monotonic() + 180
             while not callback and not cancelled.is_set() and time.monotonic() < deadline:
                 server.handle_request()
         if not callback.get('code') or cancelled.is_set():
-            raise RuntimeError('Autorisation OAuth2 annulée ou délai dépassé.')
+            raise RuntimeError(tr('Autorisation OAuth2 annulée ou délai dépassé.'))
         result = self._request(account, dict(grant_type='authorization_code', code=callback['code'],
                                             code_verifier=verifier, redirect_uri=redirect))
         with self.lock:
@@ -129,12 +130,12 @@ class OAuth:
             try:
                 tokens = json.loads(self.vault.get(account.id + ':oauth'))
             except (RuntimeError, ValueError):
-                raise RuntimeError('Connectez ce compte avec le bouton OAuth2 dans les paramètres du compte.') from None
+                raise RuntimeError(tr('Connectez ce compte avec le bouton OAuth2 dans les paramètres du compte.')) from None
             if (tokens.get('client_id'), tokens.get('provider'), tokens.get('email'), tokens.get('tenant', 'common')) != (account.oauth_client_id, account.auth_method, account.email, account.oauth_tenant):
-                raise RuntimeError('La configuration OAuth2 a changé : reconnectez ce compte.')
+                raise RuntimeError(tr('La configuration OAuth2 a changé : reconnectez ce compte.'))
             if tokens.get('expires_at', 0) <= time.time() + 90:
                 if not tokens.get('refresh_token'):
-                    raise RuntimeError('Autorisation OAuth2 expirée : reconnectez ce compte.')
+                    raise RuntimeError(tr('Autorisation OAuth2 expirée : reconnectez ce compte.'))
                 fresh = self._request(account, dict(grant_type='refresh_token', refresh_token=tokens['refresh_token']))
                 tokens.update(fresh)
                 self.vault.set(account.id + ':oauth', json.dumps(tokens))

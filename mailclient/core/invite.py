@@ -3,6 +3,7 @@
 Smail ne gère pas d’agenda : il lit l’invitation reçue et renvoie à l’organisateur une réponse
 standard (METHOD:REPLY) que comprennent Outlook, Google Agenda, Thunderbird ou Apple Calendrier.
 """
+from mailclient.i18n import tr, N_
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -10,7 +11,7 @@ from email.utils import parseaddr
 from uuid import uuid4
 
 LIMIT = 300_000  # Au-delà, ce n’est pas une invitation ordinaire.
-PARTSTAT = {'ACCEPTED': 'Accepté', 'TENTATIVE': 'Provisoire', 'DECLINED': 'Refusé'}
+PARTSTAT = {'ACCEPTED': N_('Accepté'), 'TENTATIVE': N_('Provisoire'), 'DECLINED': N_('Refusé')}  # Affichés avec tr().
 # Noms de fuseaux Windows (Outlook) les plus courants → IANA.
 WINDOWS_ZONES = {
     'Romance Standard Time': 'Europe/Paris', 'W. Europe Standard Time': 'Europe/Berlin',
@@ -96,7 +97,7 @@ def parse_time(value: str, params: dict):
     if tz is not None:
         return moment.replace(tzinfo=tz), ''
     if tzid:
-        return None, f'{moment:%d/%m/%Y %H:%M} (fuseau « {tzid} »)'
+        return None, tr('{moment} (fuseau « {tzid} »)').format(moment=f'{moment:%d/%m/%Y %H:%M}', tzid=tzid)
     return moment.astimezone(), ''  # Heure flottante : heure locale.
 
 
@@ -169,14 +170,14 @@ def find(mail) -> tuple[Invite | None, object]:
 
 def when(invite: Invite) -> str:
     """Date lisible, en heure locale."""
-    days = ('lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.')
+    days = (N_('lun.'), N_('mar.'), N_('mer.'), N_('jeu.'), N_('ven.'), N_('sam.'), N_('dim.'))
     start, end = invite.start, invite.end
     if start is None:
-        return invite.start_label or 'date non précisée'
+        return invite.start_label or tr('date non précisée')
     if isinstance(start, date) and not isinstance(start, datetime):
-        return f'{days[start.weekday()]} {start:%d/%m/%Y}, journée entière'
+        return tr('{day} {date}, journée entière').format(day=tr(days[start.weekday()]), date=f'{start:%d/%m/%Y}')
     start = start.astimezone()
-    text = f'{days[start.weekday()]} {start:%d/%m/%Y} à {start:%H:%M}'
+    text = tr('{valeur} {start:%d/%m/%Y} à {start:%H:%M}').format(valeur=days[start.weekday()], start=start)
     if isinstance(end, datetime):
         end = end.astimezone()
         text += f' – {end:%H:%M}' if end.date() == start.date() else f' – {days[end.weekday()]} {end:%d/%m %H:%M}'
@@ -203,7 +204,7 @@ def fold(line: str) -> str:
 def reply(invite: Invite, account, partstat: str) -> str:
     """Réponse iTIP METHOD:REPLY pour ce compte."""
     if partstat not in PARTSTAT or not invite.answerable:
-        raise ValueError('Cette invitation ne peut pas recevoir de réponse.')
+        raise ValueError(tr('Cette invitation ne peut pas recevoir de réponse.'))
     me = next((entry for entry in invite.attendees if entry[0].casefold() == account.email.casefold()), None)
     name = (me[1] if me and me[1] else account.name) or account.email
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
@@ -222,6 +223,7 @@ def response_state(invite: Invite, account, partstat: str) -> dict:
     """Message de réponse, au format des états d’envoi de Smail (scheduler.send_and_record)."""
     label = PARTSTAT[partstat]
     subject = f'{label} : {invite.summary or "invitation"}'
-    body = f'{account.name or account.email} a répondu « {label} » à l’invitation « {invite.summary or "sans titre"} » ({when(invite)}).'
+    body = tr('{name} a répondu « {answer} » à l’invitation « {title} » ({when}).').format(
+        name=account.name or account.email, answer=tr(label), title=invite.summary or tr('sans titre'), when=when(invite))
     return dict(to=invite.organizer, cc='', bcc='', subject=subject.replace('\n', ' ')[:250], body=body, mail_html='',
                 reply_id='', references='', calendar=reply(invite, account, partstat), id=str(uuid4()))

@@ -3,6 +3,7 @@
 Chaque message passe par la boîte d’envoi locale (scheduler) : délai d’annulation, puis envoi un par un.
 Les règles de sûreté restent celles de la boîte d’envoi : état « sending » enregistré avant SMTP, jamais de
 renvoi automatique, échec et envoi incertain conservés dans Fichier › Envois programmés."""
+from mailclient.i18n import tr
 import logging
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QSystemTrayIcon, QWidget
@@ -47,7 +48,7 @@ class SendQueue(QObject):
         self.stage = None         # Dernière étape signalée par la tâche.
         self.alert = None         # (texte, infobulle) d’un échec, affiché jusqu’à « Voir » ou ×.
         self.widget = QWidget()
-        self.widget.setAccessibleName('Envoi en cours')
+        self.widget.setAccessibleName(tr('Envoi en cours'))
         row = QHBoxLayout(self.widget)
         row.setContentsMargins(0, 0, 0, 0)
         self.text = QLabel()
@@ -55,9 +56,9 @@ class SendQueue(QObject):
         self.bar.setFixedWidth(150)
         self.bar.setTextVisible(False)
         self.bar.setMaximumHeight(8)
-        self.cancel_button = Button('Annuler', window.appearance, 'x', 'Secondary', 'Annuler l’envoi et rouvrir le message')
-        self.show_button = Button('Voir', window.appearance, 'clock', 'Secondary', 'Ouvrir Fichier › Envois programmés')
-        self.dismiss_button = Button('', window.appearance, 'x', 'Secondary', 'Masquer')
+        self.cancel_button = Button(tr('Annuler'), window.appearance, 'x', 'Secondary', tr('Annuler l’envoi et rouvrir le message'))
+        self.show_button = Button(tr('Voir'), window.appearance, 'clock', 'Secondary', tr('Ouvrir Fichier › Envois programmés'))
+        self.dismiss_button = Button('', window.appearance, 'x', 'Secondary', tr('Masquer'))
         for button in (self.cancel_button, self.show_button, self.dismiss_button):
             button.setMinimumHeight(26)
         self.cancel_button.clicked.connect(self.cancel)
@@ -129,25 +130,25 @@ class SendQueue(QObject):
         kind, subject, detail = event
         self.task = self.stage = None
         if kind == 'sent':
-            self.window.notify(f'Message « {subject} » envoyé.' + (f' {detail}' if detail else ''))
+            self.window.notify(tr('Message « {subject} » envoyé.').format(subject=subject) + (f' {detail}' if detail else ''))
             if not self.window.isActiveWindow():
-                self.notify(f'Message « {subject} » envoyé.')
+                self.notify(tr('Message « {subject} » envoyé.').format(subject=subject))
         else:
-            texts = {'failed': 'Échec de l’envoi', 'uncertain': 'Envoi incertain', 'partial': 'Envoi partiel'}
-            self.alert = (f'{texts.get(kind, "Envoi")} de « {subject} »', detail)
-            self.window.notify(f'{texts.get(kind, "Envoi")} de « {subject} ». {detail}', 'Voir', self.show_outbox, 'error')
-            self.notify(f'{texts.get(kind, "Envoi")} de « {subject} » : voir Fichier › Envois programmés.')
+            texts = {'failed': tr('Échec de l’envoi'), 'uncertain': tr('Envoi incertain'), 'partial': tr('Envoi partiel')}
+            self.alert = (tr('{what} de « {subject} »').format(what=texts.get(kind, tr('Envoi')), subject=subject), detail)
+            self.window.notify(tr('{valeur} de « {subject} ». {detail}').format(valeur=texts.get(kind, tr("Envoi")), subject=subject, detail=detail), tr('Voir'), self.show_outbox, 'error')
+            self.notify(tr('{valeur} de « {subject} » : voir Fichier › Envois programmés.').format(valeur=texts.get(kind, tr("Envoi")), subject=subject))
         self.tick()
 
     def crashed(self, _):
         subject = self.task[1] if self.task else ''
         self.task = self.stage = None
-        self.alert = (f'Envoi de « {subject} » interrompu', 'Vérifiez vos Envoyés avant toute nouvelle tentative.')
+        self.alert = (tr('Envoi de « {subject} » interrompu').format(subject=subject), tr('Vérifiez vos Envoyés avant toute nouvelle tentative.'))
         self.tick()
 
     def notify(self, text):
         if self.window.tray and self.database.setting('notifications', True):
-            self.window.tray.showMessage('Smail', text[:240], QSystemTrayIcon.Information, 6000)
+            self.window.tray.showMessage(tr('Smail'), text[:240], QSystemTrayIcon.Information, 6000)
 
     def render(self):
         waiting = self.waiting()
@@ -156,17 +157,17 @@ class SendQueue(QObject):
             stage, done, total = self.stage or ('connect', 0, 0)
             subject = self.task[1]
             if stage == 'upload' and total:
-                text = f'Envoi de « {subject} » — {megabytes(done)} / {megabytes(total)} Mo'
+                text = tr('Envoi de « {subject} » — {valeur} / {valeur2} Mo').format(subject=subject, valeur=megabytes(done), valeur2=megabytes(total))
                 self.bar.setRange(0, 1000)
                 self.bar.setValue(int(done * 1000 / total))
             else:
-                steps = {'connect': 'connexion au serveur…', 'verify': 'vérification par le serveur…',
-                         'copy': 'copie dans Envoyés…'}
-                text = f'Envoi de « {subject} » — {steps.get(stage, "…")}'
+                steps = {'connect': tr('connexion au serveur…'), 'verify': tr('vérification par le serveur…'),
+                         'copy': tr('copie dans Envoyés…')}
+                text = tr('Envoi de « {subject} » — {valeur}').format(subject=subject, valeur=steps.get(stage, "…"))
                 self.bar.setRange(0, 0)  # Animation d’attente : la durée dépend du serveur.
             if waiting:
                 text += f' (+{len(waiting)} en attente)'
-            self.text.setToolTip('Le message part en arrière-plan ; vous pouvez continuer à travailler.')
+            self.text.setToolTip(tr('Le message part en arrière-plan ; vous pouvez continuer à travailler.'))
         elif self.alert:
             text = self.alert[0]
             self.text.setToolTip(self.alert[1])
@@ -176,12 +177,12 @@ class SendQueue(QObject):
             subject = item['state'].get('subject') or '(Sans objet)'
             left = (scheduler.parse(item['send_at']) - scheduler.now_utc()).total_seconds()
             if self.window.offline.isChecked():
-                text = f'« {subject} » partira à la reconnexion'
+                text = tr('« {subject} » partira à la reconnexion').format(subject=subject)
             elif left > 0:
-                text = f'Envoi de « {subject} » dans {int(left) + 1} s'
+                text = tr('Envoi de « {subject} » dans {valeur} s').format(subject=subject, valeur=int(left) + 1)
             else:
-                text = f'Envoi de « {subject} »…'
-            self.text.setToolTip('« Annuler » rouvre le message en brouillon.')
+                text = tr('Envoi de « {subject} »…').format(subject=subject)
+            self.text.setToolTip(tr('« Annuler » rouvre le message en brouillon.'))
             cancel = True
         else:
             self.widget.hide()
@@ -204,7 +205,7 @@ class SendQueue(QObject):
             draft = dict(item['state'], id=item['id'], account=item['account'], attachments=item['files'])
             self.database.cache_put('draft', item['id'], draft, item['account'])
             self.window.reopen_draft(draft)
-            self.window.notify('Envoi annulé : le message est rouvert en brouillon.')
+            self.window.notify(tr('Envoi annulé : le message est rouvert en brouillon.'))
         self.tick()
 
     def show_outbox(self):

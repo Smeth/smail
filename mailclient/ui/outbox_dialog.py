@@ -1,12 +1,13 @@
 """Envois programmés : consulter, modifier (retour en brouillon) ou supprimer."""
+from mailclient.i18n import tr
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QListWidget, QListWidgetItem, QMessageBox, QVBoxLayout
 from mailclient.core import scheduler
 from mailclient.ui.components import Button, label
 from mailclient.ui.presentation import install_theme
 
-STATUS = {'scheduled': 'Programmé', 'sending': 'Envoi en cours', 'failed': 'Échec — non renvoyé',
-          'partial': 'Envoi partiel', 'uncertain': 'État incertain — vérifiez vos Envoyés'}
+STATUS = {'scheduled': tr('Programmé'), 'sending': tr('Envoi en cours'), 'failed': tr('Échec — non renvoyé'),
+          'partial': tr('Envoi partiel'), 'uncertain': tr('État incertain — vérifiez vos Envoyés')}
 
 
 class OutboxDialog(QDialog):
@@ -16,21 +17,21 @@ class OutboxDialog(QDialog):
         self.accounts = {account.id: account for account in accounts}
         self.reopen = None  # Brouillon à rouvrir dans une fenêtre de rédaction.
         theme = install_theme(database)
-        self.setWindowTitle('Envois programmés')
+        self.setWindowTitle(tr('Envois programmés'))
         self.setMinimumSize(620, 380)
         layout = QVBoxLayout(self)
-        layout.addWidget(label('Envois programmés', 'Title'))
-        layout.addWidget(label('Envoyés par Smail à l’heure prévue s’il est ouvert (sinon au prochain démarrage). On y retrouve aussi '
+        layout.addWidget(label(tr('Envois programmés'), 'Title'))
+        layout.addWidget(label(tr('Envoyés par Smail à l’heure prévue s’il est ouvert (sinon au prochain démarrage). On y retrouve aussi '
                                'les envois en échec ou incertains. Un échec n’est jamais renvoyé automatiquement : « Modifier… » '
-                               'rouvre le message pour le corriger et le renvoyer.', 'Subtitle', True))
+                               'rouvre le message pour le corriger et le renvoyer.'), 'Subtitle', True))
         self.list = QListWidget()
         self.list.setObjectName('FramedList')
-        self.list.setAccessibleName('Envois programmés')
+        self.list.setAccessibleName(tr('Envois programmés'))
         layout.addWidget(self.list, 1)
         row = QHBoxLayout()
-        self.edit = Button('Modifier…', theme, 'file-pen-line', 'Secondary', 'Annule la programmation et rouvre le message en brouillon')
-        self.remove = Button('Supprimer', theme, 'trash-2', 'QuietDanger')
-        close = Button('Fermer', theme, role='Secondary')
+        self.edit = Button(tr('Modifier…'), theme, 'file-pen-line', 'Secondary', tr('Annule la programmation et rouvre le message en brouillon'))
+        self.remove = Button(tr('Supprimer'), theme, 'trash-2', 'QuietDanger')
+        close = Button(tr('Fermer'), theme, role='Secondary')
         self.edit.clicked.connect(self.edit_item)
         self.remove.clicked.connect(self.remove_item)
         close.clicked.connect(self.accept)
@@ -51,10 +52,10 @@ class OutboxDialog(QDialog):
             account = self.accounts.get(item['account'])
             entry = QListWidgetItem(f'{moment:%d/%m %H:%M} · {STATUS.get(item["status"], item["status"])} · '
                                     f'{state.get("subject") or "(Sans objet)"} → {state.get("to", "")}')
-            entry.setToolTip((account.email if account else 'Compte supprimé') + ('\n' + item['error'] if item.get('error') else ''))
+            entry.setToolTip((account.email if account else tr('Compte supprimé')) + ('\n' + item['error'] if item.get('error') else ''))
             self.list.addItem(entry)
         if not self.items:
-            empty = QListWidgetItem('Aucun envoi programmé. Dans une rédaction, utilisez le bouton horloge « Envoyer plus tard ».')
+            empty = QListWidgetItem(tr('Aucun envoi programmé. Dans une rédaction, utilisez le bouton horloge « Envoyer plus tard ».'))
             empty.setFlags(Qt.NoItemFlags)
             self.list.addItem(empty)
         self.update_buttons()
@@ -73,7 +74,7 @@ class OutboxDialog(QDialog):
         if not item:
             return
         if item['status'] in {'partial', 'uncertain'} and QMessageBox.question(
-                self, 'Modifier', 'Ce message a peut-être déjà été reçu par certains destinataires. Le rouvrir quand même en brouillon ?',
+                self, tr('Modifier'), tr('Ce message a peut-être déjà été reçu par certains destinataires. Le rouvrir quand même en brouillon ?'),
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
             return
         scheduler.cancel(self.database, item['id'])
@@ -84,7 +85,7 @@ class OutboxDialog(QDialog):
 
     def remove_item(self):
         item = self.current()
-        if item and QMessageBox.question(self, 'Supprimer', 'Supprimer définitivement cet envoi programmé ?',
+        if item and QMessageBox.question(self, tr('Supprimer'), tr('Supprimer définitivement cet envoi programmé ?'),
                                          QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
             scheduler.cancel(self.database, item['id'])
             self.refresh()

@@ -3,6 +3,7 @@
 Dictionnaire français de pyspellchecker (local, aucune connexion). Ne sont jamais signalés : les mots avec
 majuscule (noms propres, sigles), les mots de moins de trois lettres, les adresses e-mail et les liens, les mots
 ajoutés au dictionnaire personnel (Préférences enregistrées dans la base locale)."""
+from mailclient.i18n import tr
 import re
 
 from PySide6.QtGui import QColor, QSyntaxHighlighter, QTextCharFormat, QTextCursor
@@ -15,7 +16,10 @@ SETTING = 'spelling_words'
 
 
 class Speller:
-    def __init__(self, database=None, language='fr'):
+    def __init__(self, database=None, language=None):
+        if language is None:  # Le correcteur suit la langue de l’interface.
+            from mailclient.i18n import current
+            language = current()
         self.database = database
         self.checker = None
         self.cache = {}
@@ -116,10 +120,10 @@ def add_suggestions(editor, speller: Speller, menu, position):
         action.triggered.connect(lambda checked=False, s=suggestion, c=selection: c.insertText(s))
         menu.insertAction(first, action)
     if not suggestions:
-        empty = menu.addAction('Aucune suggestion')
+        empty = menu.addAction(tr('Aucune suggestion'))
         empty.setEnabled(False)
         menu.insertAction(first, empty)
-    add = menu.addAction(f'Ajouter « {word} » au dictionnaire')
+    add = menu.addAction(tr('Ajouter « {word} » au dictionnaire').format(word=word))
     add.triggered.connect(lambda: (speller.add(word), editor.spell_highlighter.rehighlight()))
     menu.insertAction(first, add)
     menu.insertSeparator(first)

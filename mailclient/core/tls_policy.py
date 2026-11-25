@@ -3,6 +3,7 @@
 La sonde et la vérification d'empreinte précèdent toujours l'authentification.
 Une exception temporaire ne dure que pendant la session de l'application.
 """
+from mailclient.i18n import tr
 import hashlib
 import ssl
 import threading
@@ -43,9 +44,9 @@ class TLSPolicy:
         context = ssl.create_default_context()
         try:
             connection = factory(context)
-            reason = 'Le certificat a changé depuis votre décision de confiance.'
+            reason = tr('Le certificat a changé depuis votre décision de confiance.')
         except ssl.SSLCertVerificationError as error:
-            reason = f'Échec de vérification : {error.verify_message}'
+            reason = tr('Échec de vérification : {message}').format(message=error.verify_message)
             connection = factory(ssl._create_unverified_context())
         try:
             der = connection.sock.getpeercert(binary_form=True)
@@ -64,4 +65,4 @@ class TLSPolicy:
 
 def require_starttls(available: bool) -> None:
     if not available:
-        raise RuntimeError('Le serveur ne propose pas STARTTLS. Connexion annulée ; aucun repli en clair.')
+        raise RuntimeError(tr('Le serveur ne propose pas STARTTLS. Connexion annulée ; aucun repli en clair.'))

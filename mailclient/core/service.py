@@ -1,4 +1,5 @@
 """Coordination du cache, de l’authentification et des opérations réseau."""
+from mailclient.i18n import tr
 import base64
 import html
 import re
@@ -146,7 +147,7 @@ class MailService:
             step = {'read': 'read', 'star': 'star'}.get(action, 'move')
             try:
                 client = client or self.client(account)
-                client.action('INBOX', ','.join(row['uid'] for row in group), validity, step, target or '')
+                client.action(tr('INBOX'), ','.join(row['uid'] for row in group), validity, step, target or '')
             except CertificateAlert:
                 raise
             except Exception as error:
@@ -199,7 +200,7 @@ class MailService:
         else:
             target = filters.special_folder(folders, filters.JUNK_WORDS, source)
             if not target:
-                raise RuntimeError('Dossier des indésirables introuvable sur le serveur. Créez-le (Comptes › Dossier) puis actualisez.')
+                raise RuntimeError(tr('Dossier des indésirables introuvable sur le serveur. Créez-le (Comptes › Dossier) puis actualisez.'))
         if rows and source != target:
             self.action(account, rows, 'move', target)
         return target
@@ -349,12 +350,12 @@ class MailService:
         if cached:
             return parse_message(base64.b64decode(cached))
         if cache_only:
-            raise RuntimeError('Ce message n’a pas encore été téléchargé. Reconnectez-vous pour le lire.')
+            raise RuntimeError(tr('Ce message n’a pas encore été téléchargé. Reconnectez-vous pour le lire.'))
         client = self.client(account)
         # message_raw évite une sérialisation susceptible d’altérer le MIME original.
         raw = client.message_raw(row['folder'], row['uid'])
         if row.get('uidvalidity') and client.uidvalidity != row['uidvalidity']:
-            raise RuntimeError('Le dossier a changé sur le serveur. Actualisez avant de lire ce message.')
+            raise RuntimeError(tr('Le dossier a changé sur le serveur. Actualisez avant de lire ce message.'))
         self.db.cache_put('body', self.body_key(row), base64.b64encode(raw).decode('ascii'), account.id)
         mail = parse_message(raw)
         self.index_body(dict(row, account=account.id), raw, mail)
@@ -370,7 +371,7 @@ class MailService:
         if not rows:
             return
         if any(row.get('server') != server for row in rows):
-            raise RuntimeError('La configuration du serveur a changé. Actualisez avant de modifier ce message.')
+            raise RuntimeError(tr('La configuration du serveur a changé. Actualisez avant de modifier ce message.'))
         groups = {}
         for row in rows:
             groups.setdefault((row['folder'], row.get('uidvalidity', '')), []).append(row)
@@ -481,7 +482,7 @@ class MailService:
             except Exception:
                 failures += 1
         if failures:
-            raise RuntimeError('Compte supprimé, mais certains secrets n’ont pas pu être retirés du Gestionnaire d’identifiants Windows (service SmailDesktop).')
+            raise RuntimeError(tr('Compte supprimé, mais certains secrets n’ont pas pu être retirés du Gestionnaire d’identifiants Windows (service SmailDesktop).'))
 
     def sync_account(self, account, cancelled, limit=100):
         folders = self.client(account).folders()

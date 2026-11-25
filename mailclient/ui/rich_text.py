@@ -4,6 +4,7 @@ Le HTML envoyé n’est jamais celui de Qt (toHtml), verbeux et chargé de style
 à partir du document, avec un ensemble fermé de balises (div, br, b, i, u, a, ul, ol, li, h1-h3).
 Chaque texte est échappé et seuls les liens http, https et mailto sont conservés.
 """
+from mailclient.i18n import tr, N_
 import html
 import re
 from PySide6.QtCore import QEvent, Qt, Signal
@@ -211,12 +212,12 @@ class FormatBar(QWidget):
         row.setSpacing(2)
         self.buttons = {}
         for key, icon_name, tooltip, shortcut in [
-                ('bold', 'bold', 'Gras', 'Ctrl+B'), ('italic', 'italic', 'Italique', 'Ctrl+I'),
-                ('underline', 'underline', 'Souligné', 'Ctrl+U'), ('bullets', 'list', 'Liste à puces', 'Ctrl+Shift+8'),
-                ('numbers', 'list-ordered', 'Liste numérotée', 'Ctrl+Shift+7'), ('link', 'link', 'Insérer un lien', 'Ctrl+Shift+K'),
-                ('clear', 'remove-formatting', 'Effacer la mise en forme', 'Ctrl+Space')]:
-            button = Button('', theme, icon_name, tooltip=f'{tooltip} ({QKeySequence(shortcut).toString(QKeySequence.NativeText)})')
-            button.setAccessibleName(tooltip)
+                ('bold', 'bold', N_('Gras'), 'Ctrl+B'), ('italic', 'italic', N_('Italique'), 'Ctrl+I'),
+                ('underline', 'underline', N_('Souligné'), 'Ctrl+U'), ('bullets', 'list', N_('Liste à puces'), 'Ctrl+Shift+8'),
+                ('numbers', 'list-ordered', N_('Liste numérotée'), 'Ctrl+Shift+7'), ('link', 'link', N_('Insérer un lien'), 'Ctrl+Shift+K'),
+                ('clear', 'remove-formatting', N_('Effacer la mise en forme'), 'Ctrl+Space')]:
+            button = Button('', theme, icon_name, tooltip=f'{tr(tooltip)} ({QKeySequence(shortcut).toString(QKeySequence.NativeText)})')
+            button.setAccessibleName(tr(tooltip))
             button.setFixedSize(30, 30)
             button.setMinimumHeight(30)
             button.setFocusPolicy(Qt.NoFocus)  # Le curseur reste dans le texte.
@@ -287,14 +288,14 @@ class FormatBar(QWidget):
 
     def insert_link(self, cursor):
         current = cursor.charFormat().anchorHref() if cursor.charFormat().isAnchor() else 'https://'
-        url, ok = QInputDialog.getText(self, 'Insérer un lien', 'Adresse (https://…, ou une adresse e-mail)', text=current)
+        url, ok = QInputDialog.getText(self, tr('Insérer un lien'), tr('Adresse (https://…, ou une adresse e-mail)'), text=current)
         url = url.strip()
         if not ok or not url or url == 'https://':
             return
         if '@' in url and '://' not in url and not url.lower().startswith('mailto:'):
             url = 'mailto:' + url
         if not SAFE_LINK.match(url):
-            QMessageBox.warning(self, 'Lien refusé', 'Seuls les liens https://, http:// et mailto: sont acceptés.')
+            QMessageBox.warning(self, tr('Lien refusé'), tr('Seuls les liens https://, http:// et mailto: sont acceptés.'))
             return
         fmt = QTextCharFormat()
         fmt.setAnchor(True)

@@ -1,4 +1,5 @@
 """Ajout de compte et test asynchrone des deux serveurs."""
+from mailclient.i18n import tr, N_
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit, QComboBox,
                                QSpinBox, QLabel, QCheckBox, QPushButton, QDialogButtonBox, QGroupBox, QPlainTextEdit, QScrollArea, QWidget)
 from PySide6.QtCore import Qt
@@ -14,7 +15,7 @@ from mailclient.ui.dialog_shell import dialog_layout
 from mailclient.ui.components import Card, label, Button
 from PySide6.QtWidgets import QHBoxLayout
 
-WARNING = 'Votre mot de passe et vos mails circuleront en clair et pourront être lus par des tiers. Non recommandé.'
+WARNING = N_('Votre mot de passe et vos mails circuleront en clair et pourront être lus par des tiers. Non recommandé.')
 
 class AccountDialog(QDialog):
     def __init__(self, database, secrets, tls, parent=None, account=None):
@@ -26,42 +27,42 @@ class AccountDialog(QDialog):
         self.oauth = OAuth(secrets)
         self.oauth_cancelled = threading.Event()
         self.busy = False
-        self.setWindowTitle('Ajouter un compte')
-        self.appearance, outer, layout = dialog_layout(self,'Paramètres du compte' if account else 'Ajouter un compte','Vos accès et la sécurité de chaque serveur.',(960,800))
+        self.setWindowTitle(tr('Ajouter un compte'))
+        self.appearance, outer, layout = dialog_layout(self,tr('Paramètres du compte') if account else tr('Ajouter un compte'),tr('Vos accès et la sécurité de chaque serveur.'),(960,800))
         form = QFormLayout()
         form.setSpacing(10)
         self.name, self.address, self.password = QLineEdit(), QLineEdit(), QLineEdit()
         self.password.setEchoMode(QLineEdit.Password)
-        self.name.setPlaceholderText('ex. Marie Dupont ou Livrango')
-        self.name.setToolTip('Nom affiché à vos destinataires à côté de votre adresse, et dans Smail pour ce compte.')
-        self.address.setPlaceholderText('vous@exemple.fr')
-        self.password.setToolTip('Gmail, Yahoo et iCloud exigent un « mot de passe d’application » créé dans les réglages '
-                                 'de sécurité du compte, ou la connexion OAuth2.')
-        form.addRow('Votre nom (vu par vos destinataires)', self.name)
-        form.addRow('Adresse e-mail', self.address)
-        form.addRow('Mot de passe', self.password)
+        self.name.setPlaceholderText(tr('ex. Marie Dupont ou Livrango'))
+        self.name.setToolTip(tr('Nom affiché à vos destinataires à côté de votre adresse, et dans Smail pour ce compte.'))
+        self.address.setPlaceholderText(tr('vous@exemple.fr'))
+        self.password.setToolTip(tr('Gmail, Yahoo et iCloud exigent un « mot de passe d’application » créé dans les réglages '
+                                 'de sécurité du compte, ou la connexion OAuth2.'))
+        form.addRow(tr('Votre nom (vu par vos destinataires)'), self.name)
+        form.addRow(tr('Adresse e-mail'), self.address)
+        form.addRow(tr('Mot de passe'), self.password)
         self.detect_status = label('', 'Small', True)
         form.addRow('', self.detect_status)
         self.auth = QComboBox()
-        self.auth.addItems(['Mot de passe', 'OAuth2 Google', 'OAuth2 Microsoft'])
+        self.auth.addItems([tr('Mot de passe'), tr('OAuth2 Google'), tr('OAuth2 Microsoft')])
         self.client_id = QLineEdit()
         self.client_secret = QLineEdit()
         self.client_secret.setEchoMode(QLineEdit.Password)
         self.tenant = QLineEdit('common')
-        self.authorize_button = Button('Connecter avec OAuth2 dans le navigateur',self.appearance,'arrow-up-right','Secondary')
+        self.authorize_button = Button(tr('Connecter avec OAuth2 dans le navigateur'),self.appearance,'arrow-up-right','Secondary')
         self.authorize_button.clicked.connect(self.authorize)
-        form.addRow('Authentification', self.auth)
+        form.addRow(tr('Authentification'), self.auth)
         layout.addLayout(form)
         # Connexion en un clic avec l’application Smail : aucun identifiant technique à saisir.
         from mailclient.core import oauth_apps
         self.quick = QWidget()
         quick_row = QHBoxLayout(self.quick)
         quick_row.setContentsMargins(0, 0, 0, 0)
-        quick_row.addWidget(label('Compte Gmail, Outlook ou Microsoft 365 ?', 'Bold'))
+        quick_row.addWidget(label(tr('Compte Gmail, Outlook ou Microsoft 365 ?'), 'Bold'))
         self.quick_buttons = {}
-        for provider, text in (('google', 'Se connecter avec Google'), ('microsoft', 'Se connecter avec Microsoft')):
-            button = Button(text, self.appearance, 'arrow-up-right', 'Secondary',
-                            'Ouvre la page de connexion dans votre navigateur ; Smail ne voit jamais votre mot de passe.')
+        for provider, text in (('google', N_('Se connecter avec Google')), ('microsoft', N_('Se connecter avec Microsoft'))):
+            button = Button(tr(text), self.appearance, 'arrow-up-right', 'Secondary',
+                            tr('Ouvre la page de connexion dans votre navigateur ; Smail ne voit jamais votre mot de passe.'))
             button.clicked.connect(lambda checked=False, p=provider: self.one_click(p))
             button.setVisible(oauth_apps.available(provider))
             quick_row.addWidget(button)
@@ -69,21 +70,21 @@ class AccountDialog(QDialog):
         quick_row.addStretch()
         self.quick.setVisible(any(oauth_apps.available(p) for p in ('google', 'microsoft')))
         layout.addWidget(self.quick)
-        self.own_app = QCheckBox('Utiliser ma propre application OAuth2 (avancé)')
+        self.own_app = QCheckBox(tr('Utiliser ma propre application OAuth2 (avancé)'))
         self.own_app.toggled.connect(self.auth_changed)
         layout.addWidget(self.own_app)
-        self.oauth_group = QGroupBox('Autorisation OAuth2')
+        self.oauth_group = QGroupBox(tr('Autorisation OAuth2'))
         oauth_form = QFormLayout(self.oauth_group)
-        oauth_form.addRow('Identifiant client OAuth2',self.client_id)
-        oauth_form.addRow('Secret client Google (si requis)',self.client_secret)
-        oauth_form.addRow('Tenant Microsoft',self.tenant)
+        oauth_form.addRow(tr('Identifiant client OAuth2'),self.client_id)
+        oauth_form.addRow(tr('Secret client Google (si requis)'),self.client_secret)
+        oauth_form.addRow(tr('Tenant Microsoft'),self.tenant)
         oauth_form.addRow(self.authorize_button)
         layout.addWidget(self.oauth_group)
         self.servers = {}
         self.logins = {}
         # Réglages des serveurs : remplis par la détection, repliés tant qu’ils ne demandent rien.
-        self.server_toggle = Button('Réglages des serveurs', self.appearance, 'settings-2', 'Secondary',
-                                    'Afficher ou masquer les serveurs IMAP et SMTP')
+        self.server_toggle = Button(tr('Réglages des serveurs'), self.appearance, 'settings-2', 'Secondary',
+                                    tr('Afficher ou masquer les serveurs IMAP et SMTP'))
         self.server_toggle.clicked.connect(lambda: self.show_servers(not self.server_panel.isVisible()))
         layout.addWidget(self.server_toggle, 0, Qt.AlignLeft)
         self.server_panel = QWidget()
@@ -96,44 +97,45 @@ class AccountDialog(QDialog):
             group = QGroupBox(protocol.upper())
             fields = QFormLayout(group)
             host = QLineEdit()
-            host.setAccessibleName('Serveur '+protocol.upper())
+            host.setAccessibleName(tr('Serveur ')+protocol.upper())
             host.textEdited.connect(self.servers_edited)
             mode = QComboBox()
-            mode.setAccessibleName('Chiffrement '+protocol.upper())
-            mode.addItems(MODES)
+            mode.setAccessibleName(tr('Chiffrement ')+protocol.upper())
+            for value in MODES:  # « Aucun » affiché traduit, enregistré tel quel.
+                mode.addItem(tr(value), value)
             port = QSpinBox()
-            port.setAccessibleName('Port '+protocol.upper())
+            port.setAccessibleName(tr('Port ')+protocol.upper())
             port.setRange(1, 65535)
             port.setValue(PORTS[protocol][0])
-            fields.addRow('Serveur', host)
-            fields.addRow('Type de connexion chiffrée', mode)
-            fields.addRow('Port', port)
+            fields.addRow(tr('Serveur'), host)
+            fields.addRow(tr('Type de connexion chiffrée'), mode)
+            fields.addRow(tr('Port'), port)
             login = QLineEdit()
-            login.setPlaceholderText('Vide : l’adresse e-mail')
-            login.setAccessibleName('Identifiant de connexion '+protocol.upper())
-            login.setToolTip('À renseigner seulement si votre hébergeur fournit un identifiant différent de l’adresse e-mail.')
-            fields.addRow('Identifiant', login)
+            login.setPlaceholderText(tr('Vide : l’adresse e-mail'))
+            login.setAccessibleName(tr('Identifiant de connexion ')+protocol.upper())
+            login.setToolTip(tr('À renseigner seulement si votre hébergeur fournit un identifiant différent de l’adresse e-mail.'))
+            fields.addRow(tr('Identifiant'), login)
             self.logins[protocol] = login
             if protocol == 'smtp':
-                self.same_smtp_password = QCheckBox('Mot de passe SMTP identique à celui du compte')
+                self.same_smtp_password = QCheckBox(tr('Mot de passe SMTP identique à celui du compte'))
                 self.same_smtp_password.setChecked(True)
                 self.smtp_password = QLineEdit()
                 self.smtp_password.setEchoMode(QLineEdit.Password)
-                self.smtp_password.setAccessibleName('Mot de passe SMTP')
-                self.smtp_password.setPlaceholderText('Mot de passe du serveur d’envoi')
+                self.smtp_password.setAccessibleName(tr('Mot de passe SMTP'))
+                self.smtp_password.setPlaceholderText(tr('Mot de passe du serveur d’envoi'))
                 self.smtp_password.setEnabled(False)
                 self.same_smtp_password.toggled.connect(lambda same: self.smtp_password.setEnabled(not same and self.auth.currentIndex() == 0))
                 fields.addRow('', self.same_smtp_password)
-                fields.addRow('Mot de passe SMTP', self.smtp_password)
+                fields.addRow(tr('Mot de passe SMTP'), self.smtp_password)
             self.servers[protocol] = (host, mode, port)
             mode.currentIndexChanged.connect(lambda index, p=protocol: self.mode_changed(p, index))
             servers_row.addWidget(group)
-        self.warning = QLabel(WARNING)
+        self.warning = QLabel(tr(WARNING))
         self.warning.setWordWrap(True)
         self.warning.setTextFormat(Qt.PlainText)
         self.warning_frame = Card('Danger',12)
         self.warning_frame.box.addWidget(self.warning)
-        self.confirm = QCheckBox('Je comprends et j’accepte le risque de connexion en clair.')
+        self.confirm = QCheckBox(tr('Je comprends et j’accepte le risque de connexion en clair.'))
         layout.addWidget(self.warning_frame)
         layout.addWidget(self.confirm)
         self.warning.hide()
@@ -143,9 +145,9 @@ class AccountDialog(QDialog):
         self.signature.setTabChangesFocus(True)
         self.signature.setMinimumHeight(90)
         self.signature.setMaximumHeight(140)
-        self.signature.setPlaceholderText('Signature ajoutée aux nouveaux messages et réponses (gras, liens, listes…)')
-        self.signature.setAccessibleName('Signature du compte')
-        layout.addWidget(label('Signature du compte','Bold'))
+        self.signature.setPlaceholderText(tr('Signature ajoutée aux nouveaux messages et réponses (gras, liens, listes…)'))
+        self.signature.setAccessibleName(tr('Signature du compte'))
+        layout.addWidget(label(tr('Signature du compte'),'Bold'))
         self.signature_bar = FormatBar(self.signature, self.appearance)
         layout.addWidget(self.signature_bar)
         layout.addWidget(self.signature)
@@ -153,20 +155,20 @@ class AccountDialog(QDialog):
         self.status.setWordWrap(True)
         self.status.setTextFormat(Qt.PlainText)
         layout.addWidget(self.status)
-        self.test = Button('Tester la connexion IMAP et SMTP',self.appearance,'refresh-cw','Secondary')
+        self.test = Button(tr('Tester la connexion IMAP et SMTP'),self.appearance,'refresh-cw','Secondary')
         self.test.clicked.connect(self.test_servers)
         layout.addWidget(self.test)
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         self.save_button = buttons.button(QDialogButtonBox.Save)
-        self.save_button.setText('Enregistrer')
+        self.save_button.setText(tr('Enregistrer'))
         self.save_button.setObjectName('Primary')
-        buttons.button(QDialogButtonBox.Cancel).setText('Annuler')
+        buttons.button(QDialogButtonBox.Cancel).setText(tr('Annuler'))
         buttons.accepted.connect(self.save)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
         self.address.editingFinished.connect(self.detect)
         if account:
-            self.setWindowTitle('Paramètres du compte')
+            self.setWindowTitle(tr('Paramètres du compte'))
             self.name.setText(account.name)
             self.address.setText(account.email)
             self.client_id.setText(account.oauth_client_id)
@@ -187,7 +189,7 @@ class AccountDialog(QDialog):
             try:
                 secrets.get(account.id + ':smtp')
                 self.same_smtp_password.setChecked(False)  # Un mot de passe SMTP distinct est enregistré.
-                self.smtp_password.setPlaceholderText('Enregistré — saisir pour le remplacer')
+                self.smtp_password.setPlaceholderText(tr('Enregistré — saisir pour le remplacer'))
             except Exception:
                 pass
         self.auth.currentIndexChanged.connect(self.auth_changed)
@@ -222,7 +224,7 @@ class AccountDialog(QDialog):
 
     def mode_changed(self, protocol, index):
         self.servers[protocol][2].setValue(PORTS[protocol][index])
-        insecure = any(fields[1].currentText() == 'Aucun' for fields in self.servers.values())
+        insecure = any(fields[1].currentData() == 'Aucun' for fields in self.servers.values())
         self.warning.setVisible(insecure)
         self.warning_frame.setVisible(insecure)
         self.confirm.setVisible(insecure)
@@ -230,7 +232,7 @@ class AccountDialog(QDialog):
 
     def show_servers(self, visible):
         self.server_panel.setVisible(visible)
-        self.server_toggle.setText('Masquer les réglages des serveurs' if visible else 'Réglages des serveurs')
+        self.server_toggle.setText(tr('Masquer les réglages des serveurs') if visible else tr('Réglages des serveurs'))
 
     def servers_edited(self, *_):
         self.manual_servers = True  # Saisie manuelle : la détection ne l’écrase plus.
@@ -243,14 +245,12 @@ class AccountDialog(QDialog):
             mode.setCurrentIndex(MODES.index(server.mode))  # Remet le port par défaut du mode…
             port.setValue(server.port)                     # … puis le port annoncé.
             self.logins[protocol].setText(getattr(found, protocol + '_login'))
-        self.detect_status.setText(f'Réglages trouvés ({found.source}) : réception {found.imap.host}:{found.imap.port}, '
-                                   f'envoi {found.smtp.host}:{found.smtp.port}. Utilisez « Tester la connexion » pour vérifier.')
+        self.detect_status.setText(tr('Réglages trouvés ({source}) : réception {host}:{port}, envoi {host2}:{port2}. Utilisez « Tester la connexion » pour vérifier.').format(source=found.source, host=found.imap.host, port=found.imap.port, host2=found.smtp.host, port2=found.smtp.port))
         from mailclient.core import oauth_apps
         provider = oauth_apps.provider_for(found.imap.host)
         if provider and oauth_apps.available(provider) and self.auth.currentIndex() == 0:
             name = 'Google' if provider == 'google' else 'Microsoft'
-            self.detect_status.setText(f'Compte {name} : le plus simple est « Se connecter avec {name} », '
-                                       'sans mot de passe à saisir dans Smail.')
+            self.detect_status.setText(tr('Compte {name} : le plus simple est « Se connecter avec {name} », sans mot de passe à saisir dans Smail.').format(name=name))
 
     def preset(self):
         """Fournisseurs connus : réglages immédiats, sans réseau."""
@@ -270,7 +270,7 @@ class AccountDialog(QDialog):
             return
         self.detection += 1
         ticket = self.detection
-        self.detect_status.setText('Recherche des réglages de votre messagerie…')
+        self.detect_status.setText(tr('Recherche des réglages de votre messagerie…'))
         def done(found):
             if ticket != self.detection or self.manual_servers or self.address.text().strip() != address:
                 return  # Adresse modifiée ou saisie manuelle entre-temps.
@@ -279,8 +279,8 @@ class AccountDialog(QDialog):
                 if 'habituels' in found.source:
                     self.show_servers(True)
             else:
-                self.detect_status.setText('Réglages introuvables automatiquement : renseignez les serveurs fournis par votre '
-                                           'hébergeur ci-dessous.')
+                self.detect_status.setText(tr('Réglages introuvables automatiquement : renseignez les serveurs fournis par votre '
+                                           'hébergeur ci-dessous.'))
                 self.show_servers(True)
         def failed(message):
             if ticket == self.detection:
@@ -288,7 +288,7 @@ class AccountDialog(QDialog):
         self.runner.run(lambda: autoconfig.detect(address), done, failed)
 
     def values(self):
-        servers = {p: Server(h.text().strip(), port.value(), m.currentText()) for p, (h,m,port) in self.servers.items()}
+        servers = {p: Server(h.text().strip(), port.value(), m.currentData()) for p, (h,m,port) in self.servers.items()}
         account = Account(self.name.text().strip(), self.address.text().strip(), **servers)
         account.auth_method = ['password', 'google', 'microsoft'][self.auth.currentIndex()]
         account.oauth_client_id = self.client_id.text().strip()
@@ -298,16 +298,16 @@ class AccountDialog(QDialog):
             account.imap_login = self.logins['imap'].text().strip()
             account.smtp_login = self.logins['smtp'].text().strip()
             if '\x00' in self.smtp_password.text():
-                raise ValueError('Saisissez un mot de passe SMTP valide.')
+                raise ValueError(tr('Saisissez un mot de passe SMTP valide.'))
         if self.account_id:
             account.id = self.account_id
         else:
             self.account_id = account.id
         account.validate()
         if account.auth_method == 'password' and ((not self.password.text() and (not self.original or self.original.auth_method != 'password')) or '\x00' in self.password.text()):
-            raise ValueError('Saisissez un mot de passe valide.')
+            raise ValueError(tr('Saisissez un mot de passe valide.'))
         if any(s.mode == 'Aucun' for s in servers.values()) and not self.confirm.isChecked():
-            raise ValueError('Vous devez confirmer explicitement le risque de connexion en clair.')
+            raise ValueError(tr('Vous devez confirmer explicitement le risque de connexion en clair.'))
         return account, self.password.text()
 
     def set_busy(self, busy):
@@ -326,12 +326,12 @@ class AccountDialog(QDialog):
         from mailclient.core import autoconfig, oauth_apps
         address = self.address.text().strip()
         if not autoconfig.domain_of(address):
-            self.status.setText('Saisissez d’abord votre adresse e-mail (et votre nom), puis cliquez de nouveau.')
+            self.status.setText(tr('Saisissez d’abord votre adresse e-mail (et votre nom), puis cliquez de nouveau.'))
             self.address.setFocus()
             return
         self.own_app.setChecked(False)
         self.client_secret.clear()
-        self.tenant.setText('common')
+        self.tenant.setText(tr('common'))
         self.client_id.setText(oauth_apps.client_id(provider))
         self.auth.setCurrentIndex(1 if provider == 'google' else 2)
         if oauth_apps.provider_for(self.servers['imap'][0].text()) != provider:
@@ -348,13 +348,13 @@ class AccountDialog(QDialog):
             self.status.setText(str(error))
             return
         except Exception:
-            self.status.setText('Vérifiez les paramètres du compte, l’identifiant client et le coffre Windows.')
+            self.status.setText(tr('Vérifiez les paramètres du compte, l’identifiant client et le coffre Windows.'))
             return
         self.oauth_cancelled.clear()
         self.set_busy(True)
-        self.status.setText('Connectez-vous et autorisez Smail dans votre navigateur (3 minutes au plus). Annuler permet d’interrompre.')
+        self.status.setText(tr('Connectez-vous et autorisez Smail dans votre navigateur (3 minutes au plus). Annuler permet d’interrompre.'))
         self.runner.run(lambda: self.oauth.authorize(account, self.oauth_cancelled),
-                        lambda _: self.finished_test('Connexion autorisée. Cliquez sur « Enregistrer » pour terminer.'), self.finished_test)
+                        lambda _: self.finished_test(tr('Connexion autorisée. Cliquez sur « Enregistrer » pour terminer.')), self.finished_test)
 
     def test_servers(self):
         try:
@@ -363,7 +363,7 @@ class AccountDialog(QDialog):
             self.status.setText(str(error))
             return
         self.set_busy(True)
-        self.status.setText('Test des deux serveurs en cours…')
+        self.status.setText(tr('Test des deux serveurs en cours…'))
         smtp_password = self.smtp_password.text() if not self.same_smtp_password.isChecked() else ''
         def operation():
             credential = password if account.auth_method == 'password' and password else self.oauth.credential(account)
@@ -372,7 +372,7 @@ class AccountDialog(QDialog):
             smtp_credential = smtp_password or (credential if account.auth_method != 'password' or password or self.same_smtp_password.isChecked()
                                                 else self.oauth.credential(account, 'smtp'))
             test_connection(account, smtp_credential, self.runner.tls)
-        self.runner.run(operation, lambda _: self.finished_test('Connexions IMAP et SMTP réussies.'), self.finished_test)
+        self.runner.run(operation, lambda _: self.finished_test(tr('Connexions IMAP et SMTP réussies.')), self.finished_test)
 
     def finished_test(self, message):
         self.set_busy(False)
@@ -389,7 +389,7 @@ class AccountDialog(QDialog):
                 self.secrets.set(account.id, password)
             elif account.auth_method != 'password':
                 if not self.oauth.is_authorized(account):
-                    raise RuntimeError('Autorisation OAuth2 nécessaire.')
+                    raise RuntimeError(tr('Autorisation OAuth2 nécessaire.'))
             if account.auth_method == 'password':
                 if self.same_smtp_password.isChecked():
                     if hasattr(self.secrets, 'delete'):
@@ -400,7 +400,7 @@ class AccountDialog(QDialog):
             formatted = bool(self.signature.mail_parts()[0])
             save_signature(self.database, account.id, self.signature.toHtml() if formatted else '')
         except Exception:
-            self.status.setText('Enregistrement impossible. Vérifiez les champs, la confirmation de connexion en clair et la disponibilité du Gestionnaire d’identifiants Windows.')
+            self.status.setText(tr('Enregistrement impossible. Vérifiez les champs, la confirmation de connexion en clair et la disponibilité du Gestionnaire d’identifiants Windows.'))
             return
         self.password.clear()
         self.accept()

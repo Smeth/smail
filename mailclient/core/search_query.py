@@ -5,6 +5,7 @@ Opérateurs (français ou anglais) : de:/from:, à:/to:, objet:/subject:, a:pj/h
 est:nonlu|lu|étoilé / is:unread|read|starred, après:/after:, avant:/before: (AAAA-MM-JJ ou JJ/MM/AAAA).
 Un mot sans opérateur, ou une « expression entre guillemets », est cherché dans tout le message.
 """
+from mailclient.i18n import N_
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -13,8 +14,8 @@ from email.utils import parsedate_to_datetime
 MONTHS = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
 FIELD_ALIASES = {'de': 'sender', 'from': 'sender', 'à': 'to', 'a': 'to', 'to': 'to', 'pour': 'to',
                  'objet': 'subject', 'subject': 'subject', 'sujet': 'subject'}
-HELP = ('Opérateurs : de:nom · à:nom · objet:mot · a:pj · est:nonlu / est:suivi · après:2026-11-01 · avant:01/12/2026 · '
-        '"expression exacte"')
+HELP = N_('Opérateurs : de:nom · à:nom · objet:mot · a:pj · est:nonlu / est:suivi · après:2026-11-01 · avant:01/12/2026 · '
+        '"expression exacte"')  # Affiché avec tr() ; l’anglais cite from:, to:, has:attachment…
 
 
 @dataclass

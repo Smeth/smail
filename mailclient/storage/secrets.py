@@ -1,4 +1,5 @@
 """Secrets exclusivement dans le coffre système ; aucun repli fichier."""
+from mailclient.i18n import tr
 from uuid import uuid4
 
 class Secrets:
@@ -9,13 +10,13 @@ class Secrets:
         import keyring
         backend = keyring.get_keyring()
         if not type(backend).__module__.startswith('keyring.backends.Windows'):
-            raise RuntimeError('Le Gestionnaire d’identifiants Windows est requis pour stocker les mots de passe.')
+            raise RuntimeError(tr('Le Gestionnaire d’identifiants Windows est requis pour stocker les mots de passe.'))
         return keyring
 
     def get(self, account_id: str) -> str:
         value = self._backend().get_password(self.SERVICE, account_id)
         if value is None:
-            raise RuntimeError('Mot de passe absent du Gestionnaire d’identifiants Windows.')
+            raise RuntimeError(tr('Mot de passe absent du Gestionnaire d’identifiants Windows.'))
         if value.startswith(self.PREFIX):
             try:
                 generation, count = value[len(self.PREFIX):].split(':')
@@ -26,7 +27,7 @@ class Secrets:
                     raise ValueError()
                 value = ''.join(chunks)
             except (ValueError, TypeError):
-                raise RuntimeError('Secret incomplet dans le coffre Windows. Reconnectez ce compte.') from None
+                raise RuntimeError(tr('Secret incomplet dans le coffre Windows. Reconnectez ce compte.')) from None
         return value
 
     def delete(self, account_id: str) -> None:
@@ -54,7 +55,7 @@ class Secrets:
             generation = uuid4().hex
             chunks = [password[i:i+500] for i in range(0, len(password), 500)]
             if len(chunks) > 1000:
-                raise ValueError('Secret trop volumineux pour le coffre Windows.')
+                raise ValueError(tr('Secret trop volumineux pour le coffre Windows.'))
             for i, chunk in enumerate(chunks):
                 backend.set_password(self.SERVICE, f'{account_id}:{generation}:{i}', chunk)
             backend.set_password(self.SERVICE, account_id, f'{self.PREFIX}{generation}:{len(chunks)}')

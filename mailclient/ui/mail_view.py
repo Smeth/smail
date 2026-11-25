@@ -1,4 +1,5 @@
 """Visionneuse isolée ; aucun lien ni téléchargement WebEngine autorisé."""
+from mailclient.i18n import tr
 from pathlib import Path
 from html.parser import HTMLParser
 from email.utils import parseaddr, parsedate_to_datetime
@@ -89,7 +90,7 @@ def print_document(mail):
     document = QTextDocument()
     document.setDefaultStyleSheet('body{font-family:"Segoe UI",Arial,sans-serif;font-size:11pt}')
     document.setHtml(f'<h2>{html_module.escape(mail.subject or "(Sans objet)")}</h2><table>{header}</table><hr>{body}'
-                     + (f'<p style="color:#56657a">Pièces jointes : {html_module.escape(", ".join(a.name for a in mail.attachments))}</p>'
+                     + (f'<p style="color:#56657a">{tr("Pièces jointes :")} {html_module.escape(", ".join(a.name for a in mail.attachments))}</p>'
                         if mail.attachments else ''))
     return document
 
@@ -147,12 +148,12 @@ class MailView(QWidget):
         self.thread_card = Card('ReaderThread',8)
         self.thread_title = label('','Eyebrow')
         self.thread_card.box.addWidget(self.thread_title)
-        self.thread_list = self.thread_list_widget('Messages précédents de la conversation, Entrée pour lire', 0)
+        self.thread_list = self.thread_list_widget(tr('Messages précédents de la conversation, Entrée pour lire'), 0)
         self.thread_card.box.addWidget(self.thread_list)
         self.thread_card.hide()
         layout.addWidget(self.thread_card)
         self.thread_after_card = Card('ReaderThread',8)
-        self.thread_after = self.thread_list_widget('Messages suivants de la conversation, Entrée pour lire', 1)
+        self.thread_after = self.thread_list_widget(tr('Messages suivants de la conversation, Entrée pour lire'), 1)
         self.thread_after_card.box.addWidget(self.thread_after)
         self.thread_after_card.hide()
         self.message_card = Card('ReaderMessage',16)
@@ -184,13 +185,13 @@ class MailView(QWidget):
         response = QHBoxLayout()
         response.setSpacing(2)
         for title,name,signal in [('Répondre','reply',self.replyRequested),('Répondre à tous','reply-all',self.replyAllRequested),('Transférer','forward',self.forwardRequested)]:
-            button = Button('',self.theme,name,tooltip=title)
+            button = Button('',self.theme,name,tooltip=tr(title))
             button.setFixedSize(32,32)
             button.setMinimumHeight(32)
             button.clicked.connect(lambda checked=False,s=signal:s.emit())
             self.action_buttons.append(button)
             response.addWidget(button)
-        self.more_button = Button('…',self.theme,tooltip='Autres actions et mode de lecture')
+        self.more_button = Button('…',self.theme,tooltip=tr('Autres actions et mode de lecture'))
         self.more_button.setObjectName('ReaderMore')
         self.more_button.setFixedSize(36,32)
         self.more_button.setMinimumHeight(32)
@@ -210,18 +211,18 @@ class MailView(QWidget):
         self.headers.setMaximumHeight(80)
         message_layout.addWidget(self.headers)
         self.more_menu.addSeparator()
-        self.details_action = self.more_menu.addAction('Afficher les détails du message')
+        self.details_action = self.more_menu.addAction(tr('Afficher les détails du message'))
         self.details_action.setCheckable(True)
         self.details_action.toggled.connect(self.headers.setVisible)
-        self.remote_banner = Banner('Images distantes bloquées','Les images peuvent signaler votre lecture à l’expéditeur.',self.theme,'Info','image-off','Afficher les images')
+        self.remote_banner = Banner(tr('Images distantes bloquées'),tr('Les images peuvent signaler votre lecture à l’expéditeur.'),self.theme,'Info','image-off',tr('Afficher les images'))
         self.images = self.remote_banner.action
-        self.images.setToolTip('Les images distantes peuvent signaler votre lecture à l’expéditeur.')
+        self.images.setToolTip(tr('Les images distantes peuvent signaler votre lecture à l’expéditeur.'))
         self.images.clicked.connect(self.show_images)
         message_layout.addWidget(self.remote_banner)
-        self.danger_banner = Banner('Pièce jointe potentiellement dangereuse','Ce fichier peut exécuter du code. Il ne sera jamais ouvert automatiquement.',self.theme,'Danger','shield-alert')
+        self.danger_banner = Banner(tr('Pièce jointe potentiellement dangereuse'),tr('Ce fichier peut exécuter du code. Il ne sera jamais ouvert automatiquement.'),self.theme,'Danger','shield-alert')
         message_layout.addWidget(self.danger_banner)
-        self.unsubscribe_banner = Banner('Liste de diffusion','Vous pouvez vous désabonner sans ouvrir de lien dans le message.',
-                                         self.theme,'Info','mail-minus','Se désabonner')
+        self.unsubscribe_banner = Banner(tr('Liste de diffusion'),tr('Vous pouvez vous désabonner sans ouvrir de lien dans le message.'),
+                                         self.theme,'Info','mail-minus',tr('Se désabonner'))
         self.unsubscribe_banner.action.clicked.connect(self.unsubscribeRequested.emit)
         message_layout.addWidget(self.unsubscribe_banner)
         # Invitation de calendrier : résumé et réponse à l’organisateur.
@@ -239,18 +240,18 @@ class MailView(QWidget):
         invite_buttons = QHBoxLayout()
         self.invite_buttons = {}
         for partstat,text,role in (('ACCEPTED','Accepter','Primary'),('TENTATIVE','Provisoire','Secondary'),('DECLINED','Refuser','Secondary')):
-            button = Button(text,self.theme,role=role,tooltip='Envoie votre réponse à l’organisateur')
+            button = Button(text,self.theme,role=role,tooltip=tr('Envoie votre réponse à l’organisateur'))
             button.clicked.connect(lambda checked=False,value=partstat:self.inviteAnswered.emit(value))
             invite_buttons.addWidget(button)
             self.invite_buttons[partstat] = button
-        self.invite_import = Button('Ajouter au calendrier',self.theme,'download','Secondary',
-                                    'Ouvre l’invitation dans l’application de calendrier de Windows')
+        self.invite_import = Button(tr('Ajouter au calendrier'),self.theme,'download','Secondary',
+                                    tr('Ouvre l’invitation dans l’application de calendrier de Windows'))
         self.invite_import.clicked.connect(self.inviteImportRequested.emit)
         invite_buttons.addStretch()
         invite_buttons.addWidget(self.invite_import)
         self.invite_card.box.addLayout(invite_buttons)
         message_layout.addWidget(self.invite_card)
-        self.empty_message = label('Sélectionnez un message pour le lire.','Subtitle',True)
+        self.empty_message = label(tr('Sélectionnez un message pour le lire.'),'Subtitle',True)
         self.empty_message.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.empty_message,1)
         self.tabs = QTabWidget()
@@ -278,10 +279,10 @@ class MailView(QWidget):
                        QWebEngineSettings.PluginsEnabled, QWebEngineSettings.PdfViewerEnabled,
                        QWebEngineSettings.HyperlinkAuditingEnabled, QWebEngineSettings.DnsPrefetchEnabled):
             settings.setAttribute(option, False)
-        self.tabs.addTab(self.web, 'HTML sécurisé')
-        self.tabs.addTab(self.text, 'Texte brut')
-        self.print_action = self.more_menu.addAction('Imprimer…', self.print_message)
-        self.plain_action = self.more_menu.addAction('Lire en texte brut')
+        self.tabs.addTab(self.web, tr('HTML sécurisé'))
+        self.tabs.addTab(self.text, tr('Texte brut'))
+        self.print_action = self.more_menu.addAction(tr('Imprimer…'), self.print_message)
+        self.plain_action = self.more_menu.addAction(tr('Lire en texte brut'))
         self.plain_action.setCheckable(True)
         self.plain_action.toggled.connect(lambda checked:self.tabs.setCurrentIndex(1 if checked else 0))
         self.tabs.currentChanged.connect(lambda index:self.plain_action.setChecked(index == 1))
@@ -290,17 +291,17 @@ class MailView(QWidget):
         attachment_layout.setContentsMargins(0,0,0,0)
         attachment_layout.setSpacing(2)
         attachment_header = QHBoxLayout()
-        self.attachment_title = Button('Pièces jointes',self.theme,'paperclip',tooltip='Afficher ou masquer les pièces jointes')
+        self.attachment_title = Button(tr('Pièces jointes'),self.theme,'paperclip',tooltip=tr('Afficher ou masquer les pièces jointes'))
         self.attachment_title.setCheckable(True)
         self.attachment_title.setChecked(False)
         attachment_header.addWidget(self.attachment_title)
         attachment_header.addStretch()
-        self.save_button = Button('Enregistrer…',self.theme,'download','Secondary',tooltip='Enregistrer la pièce jointe sélectionnée')
+        self.save_button = Button(tr('Enregistrer…'),self.theme,'download','Secondary',tooltip=tr('Enregistrer la pièce jointe sélectionnée'))
         self.save_button.clicked.connect(self.save_attachment)
-        self.preview_button = Button('Aperçu',self.theme,'file-text','Secondary',tooltip='Aperçu de la pièce jointe sélectionnée (double-clic)')
+        self.preview_button = Button(tr('Aperçu'),self.theme,'file-text','Secondary',tooltip=tr('Aperçu de la pièce jointe sélectionnée (double-clic)'))
         self.preview_button.clicked.connect(self.preview_attachment)
-        self.save_all_button = Button('Tout enregistrer…',self.theme,'download','Secondary',
-                                      tooltip='Enregistrer toutes les pièces jointes dans un dossier')
+        self.save_all_button = Button(tr('Tout enregistrer…'),self.theme,'download','Secondary',
+                                      tooltip=tr('Enregistrer toutes les pièces jointes dans un dossier'))
         self.save_all_button.clicked.connect(self.save_all_attachments)
         attachment_header.addWidget(self.preview_button)
         attachment_header.addWidget(self.save_button)
@@ -387,12 +388,13 @@ class MailView(QWidget):
         self.thread_current = current if visible else -1
         self.fill_thread_list(self.thread_list, entries[:current] if visible else [], above=True)
         self.fill_thread_list(self.thread_after, entries[current+1:] if visible else [])
-        self.thread_title.setText(f'CONVERSATION · {len(entries)} MESSAGES · MESSAGE {current+1} SUR {len(entries)}'
-                                  + (f' · DONT {elsewhere} DANS D’AUTRES DOSSIERS' if elsewhere else ''))
+        self.thread_title.setText(tr('CONVERSATION · {valeur} MESSAGES · MESSAGE {valeur2} SUR {valeur}').format(valeur=len(entries), valeur2=current+1)
+                                  + (tr(' · DONT {elsewhere} DANS D’AUTRES DOSSIERS').format(elsewhere=elsewhere) if elsewhere else ''))
         self.thread_card.setVisible(visible)
         self.thread_after_card.setVisible(visible and current < len(entries) - 1)
 
-    def clear(self, message='Sélectionnez un message pour le lire.', keep_thread=False):
+    def clear(self, message=None, keep_thread=False):
+        message = tr('Sélectionnez un message pour le lire.') if message is None else message
         if not keep_thread:
             self.set_thread([])
         self.mail = None
@@ -427,7 +429,7 @@ class MailView(QWidget):
         self.text.clear()
         self.attachments.clear()
         self.images.setEnabled(False)
-        self.images.setText('Afficher les images')
+        self.images.setText(tr('Afficher les images'))
         self.save_button.setEnabled(False)
 
     def display(self, mail: Mail, keep_thread=False):
@@ -450,8 +452,8 @@ class MailView(QWidget):
         initials, color = avatar(mail.sender)
         self.avatar.setText(initials)
         self.avatar.setStyleSheet(f'background: {color}; color: #FFFFFF;')  # Même couleur que dans la liste.
-        self.recipient_summary.setText('À : '+mail.recipients)
-        self.recipient_summary.setToolTip('À : '+mail.recipients+('\nCc : '+mail.cc if mail.cc else ''))
+        self.recipient_summary.setText(tr('À : ')+mail.recipients)
+        self.recipient_summary.setToolTip(tr('À : ')+mail.recipients+(tr('\nCc : ')+mail.cc if mail.cc else ''))
         try:
             date = parsedate_to_datetime(mail.date).astimezone().strftime('%d/%m/%Y %H:%M')
         except (TypeError,ValueError,OverflowError):
@@ -472,11 +474,11 @@ class MailView(QWidget):
         self.preview_button.setVisible(bool(mail.attachments))
         self.update_preview_button(self.attachments.currentRow())
         self.attachment_section.setVisible(bool(mail.attachments))
-        self.attachment_title.setText(f'Pièces jointes · {len(mail.attachments)}')
+        self.attachment_title.setText(tr('Pièces jointes · {valeur}').format(valeur=len(mail.attachments)))
         self.attachment_title.setChecked(False)
         cc = f'\nCc : {mail.cc}' if mail.cc else ''
-        self.headers.setText(f'De : {mail.sender}\nÀ : {mail.recipients}{cc}\nDate : {mail.date}')
-        self.text.setPlainText(mail.text or 'Ce message ne contient pas de version texte brut. Consultez l’onglet HTML sécurisé.')
+        self.headers.setText(tr('De : {sender}\nÀ : {recipients}{cc}\nDate : {date}').format(sender=mail.sender, recipients=mail.recipients, cc=cc, date=mail.date))
+        self.text.setPlainText(mail.text or tr('Ce message ne contient pas de version texte brut. Consultez l’onglet HTML sécurisé.'))
         self.tabs.setCurrentIndex(0 if mail.html else 1)
         self.images.setEnabled(self.has_remote_images)
         self.render_html()
@@ -540,7 +542,7 @@ class MailView(QWidget):
             return
         invite = self.invite
         title = invite.summary or 'Invitation'
-        self.invite_title.setText(('Événement annulé : ' if invite.cancelled else 'Invitation : ') + title)
+        self.invite_title.setText((tr('Événement annulé : ') if invite.cancelled else tr('Invitation : ')) + title)
         details = [invites.when(invite)]
         if invite.location:
             details.append('Lieu : ' + invite.location)
@@ -556,15 +558,15 @@ class MailView(QWidget):
         """Après l’envoi : la réponse donnée remplace les boutons."""
         for button in self.invite_buttons.values():
             button.hide()
-        self.invite_details.setText(self.invite_details.text() + f'\nVotre réponse « {label_text} » a été envoyée.')
+        self.invite_details.setText(self.invite_details.text() + tr('\nVotre réponse « {label_text} » a été envoyée.').format(label_text=label_text))
 
     def update_preview_button(self, row):
         from mailclient.ui.attachment_preview import preview_kind
         attachments = self.mail.attachments if self.mail else []
         possible = 0 <= row < len(attachments) and preview_kind(attachments[row]) is not None
         self.preview_button.setEnabled(possible)
-        self.preview_button.setToolTip('Aperçu de la pièce jointe sélectionnée (double-clic)' if possible or row < 0 else
-                                       'Aperçu indisponible pour ce type de fichier : utilisez « Enregistrer… ».')
+        self.preview_button.setToolTip(tr('Aperçu de la pièce jointe sélectionnée (double-clic)') if possible or row < 0 else
+                                       tr('Aperçu indisponible pour ce type de fichier : utilisez « Enregistrer… ».'))
 
     def preview_attachment(self):
         from mailclient.ui.attachment_preview import AttachmentPreview, preview_kind
@@ -584,7 +586,7 @@ class MailView(QWidget):
         printer = QPrinter(QPrinter.HighResolution)
         printer.setDocName(self.mail.subject or 'Message')
         dialog = QPrintDialog(printer, self)
-        dialog.setWindowTitle('Imprimer le message')
+        dialog.setWindowTitle(tr('Imprimer le message'))
         if dialog.exec():
             print_document(self.mail).print_(printer)
 
@@ -593,15 +595,15 @@ class MailView(QWidget):
         from mailclient.core.parser import safe_filename
         if self.mail is None or not self.mail.attachments:
             return
-        folder = folder or QFileDialog.getExistingDirectory(self, 'Enregistrer toutes les pièces jointes dans…')
+        folder = folder or QFileDialog.getExistingDirectory(self, tr('Enregistrer toutes les pièces jointes dans…'))
         if not folder:
             return
         attachments = list(self.mail.attachments)
         risky = [a.name for a in attachments if dangerous_filename(a.name)]
         if risky and QMessageBox.warning(
-                self, 'Fichiers potentiellement dangereux',
-                'Ces fichiers peuvent exécuter du code : ' + ', '.join(risky) + '.\n\nLes enregistrer aussi ? '
-                '(Ils ne seront pas ouverts par Smail.) « Non » enregistre seulement les autres.',
+                self, tr('Fichiers potentiellement dangereux'),
+                tr('Ces fichiers peuvent exécuter du code : ') + ', '.join(risky) + tr('.\n\nLes enregistrer aussi ? '
+                '(Ils ne seront pas ouverts par Smail.) « Non » enregistre seulement les autres.'),
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
             attachments = [a for a in attachments if not dangerous_filename(a.name)]
         saved, failed = 0, []
@@ -618,10 +620,10 @@ class MailView(QWidget):
             else:
                 destination.cancelWriting()
                 failed.append(attachment.name)
-        message = f'{saved} pièce{"s" if saved > 1 else ""} jointe{"s" if saved > 1 else ""} enregistrée{"s" if saved > 1 else ""} dans {folder}.'
+        message = tr('{saved} pièce{valeur} jointe{valeur} enregistrée{valeur} dans {folder}.').format(saved=saved, valeur="s" if saved > 1 else "", folder=folder)
         if failed:
-            message += '\n\nÉchec pour : ' + ', '.join(failed)
-        QMessageBox.information(self, 'Pièces jointes', message)
+            message += '\n\n' + tr('Échec pour : ') + ', '.join(failed)
+        QMessageBox.information(self, tr('Pièces jointes'), message)
         return saved
 
     def save_attachment(self):
@@ -629,19 +631,19 @@ class MailView(QWidget):
         if self.mail is None or row < 0:
             return
         attachment = self.mail.attachments[row]
-        path, _ = QFileDialog.getSaveFileName(self, 'Enregistrer une pièce jointe', attachment.name)
+        path, _ = QFileDialog.getSaveFileName(self, tr('Enregistrer une pièce jointe'), attachment.name)
         if not path:
             return
         if dangerous_filename(attachment.name) or dangerous_filename(Path(path).name):
-            result = QMessageBox.warning(self, 'Fichier potentiellement dangereux',
-                'Ce fichier peut exécuter du code. Enregistrez-le uniquement si vous faites confiance à son origine. Il ne sera pas ouvert par Smail.',
+            result = QMessageBox.warning(self, tr('Fichier potentiellement dangereux'),
+                tr('Ce fichier peut exécuter du code. Enregistrez-le uniquement si vous faites confiance à son origine. Il ne sera pas ouvert par Smail.'),
                 QMessageBox.Save | QMessageBox.Cancel, QMessageBox.Cancel)
             if result != QMessageBox.Save:
                 return
         destination = QSaveFile(path)
         if not destination.open(QIODevice.WriteOnly):
-            QMessageBox.critical(self, 'Enregistrement impossible', 'Impossible d’écrire à cet emplacement.')
+            QMessageBox.critical(self, tr('Enregistrement impossible'), tr('Impossible d’écrire à cet emplacement.'))
             return
         if destination.write(attachment.data) != len(attachment.data) or not destination.commit():
             destination.cancelWriting()
-            QMessageBox.critical(self, 'Enregistrement impossible', 'Le fichier n’a pas pu être enregistré intégralement.')
+            QMessageBox.critical(self, tr('Enregistrement impossible'), tr('Le fichier n’a pas pu être enregistré intégralement.'))

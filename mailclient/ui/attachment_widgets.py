@@ -1,4 +1,5 @@
 """Ajout local de fichiers et miniatures raster, sans ouverture ni téléchargement."""
+from mailclient.i18n import tr, N_
 import mimetypes
 from pathlib import Path
 from PySide6.QtCore import Qt, Signal, QSize, QRect, QBuffer, QByteArray, QIODevice
@@ -7,7 +8,7 @@ from PySide6.QtWidgets import QListWidget, QListView, QPlainTextEdit, QApplicati
 from mailclient.core.parser import Attachment, safe_filename
 from mailclient.core.html_security import dangerous_filename
 
-IMAGE_FILTER = 'Images (*.png *.jpg *.jpeg *.gif *.webp *.bmp *.tif *.tiff *.ico *.avif);;Tous les fichiers (*)'
+IMAGE_FILTER = N_('Images (*.png *.jpg *.jpeg *.gif *.webp *.bmp *.tif *.tiff *.ico *.avif);;Tous les fichiers (*)')  # Traduit à l’affichage : tr(IMAGE_FILTER).
 RASTER_FORMATS = {b'png', b'jpg', b'jpeg', b'gif', b'webp', b'bmp', b'tif', b'tiff', b'ico', b'avif', b'heif'}
 
 def local_paths(mime):
@@ -39,12 +40,12 @@ def thumbnail(attachment, target=QSize(104,78)):
         return QImage(), ''
     dimensions = reader.size()
     if not dimensions.isValid() or dimensions.width()*dimensions.height() > 64_000_000:
-        return QImage(), 'Miniature indisponible : dimensions trop importantes. Le fichier original reste joint.'
+        return QImage(), tr('Miniature indisponible : dimensions trop importantes. Le fichier original reste joint.')
     reader.setAutoTransform(True)
     reader.setScaledSize(dimensions.scaled(target,Qt.KeepAspectRatio))
     image = reader.read()
     if image.isNull():
-        return QImage(), 'Miniature indisponible. Le fichier original reste joint.'
+        return QImage(), tr('Miniature indisponible. Le fichier original reste joint.')
     image = image.scaled(target,Qt.KeepAspectRatio,Qt.SmoothTransformation)
     return image, f'{dimensions.width()} × {dimensions.height()} pixels'
 
@@ -52,7 +53,7 @@ def clipboard_attachment(image, name):
     buffer = QBuffer()
     buffer.open(QIODevice.WriteOnly)
     if image.isNull() or not image.save(buffer,'PNG'):
-        raise RuntimeError('Impossible de joindre cette image depuis le presse-papiers.')
+        raise RuntimeError(tr('Impossible de joindre cette image depuis le presse-papiers.'))
     return Attachment(name,'image/png',bytes(buffer.data()))
 
 def clipboard_image(mime):
@@ -138,7 +139,7 @@ class AttachmentGrid(QListWidget):
         self.setAcceptDrops(True)
         self.setDragEnabled(False)
         self.setMouseTracking(True)
-        self.setAccessibleName('Pièces jointes : × ou Suppr pour retirer ; glissez des fichiers ou collez une image')
+        self.setAccessibleName(tr('Pièces jointes : × ou Suppr pour retirer ; glissez des fichiers ou collez une image'))
 
     def fit(self):
         """Hauteur ajustée au nombre de rangées (au plus deux)."""

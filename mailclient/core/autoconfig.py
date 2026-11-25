@@ -10,6 +10,7 @@ Sources, dans l’ordre (la première qui répond l’emporte) :
 
 Seul le nom de domaine est transmis, jamais l’adresse complète. Les connexions sans chiffrement ne sont jamais proposées.
 La vérification TLS des serveurs reste faite à la connexion, comme pour une saisie manuelle."""
+from mailclient.i18n import N_
 import re
 import socket
 import urllib.request
@@ -54,7 +55,7 @@ def known(address: str) -> Detected | None:
     if not hosts:
         return None
     smtp = Server(hosts[1], 587, 'STARTTLS') if hosts[1] in STARTTLS_SMTP else Server(hosts[1], 465, 'SSL/TLS')
-    return Detected(Server(hosts[0], 993, 'SSL/TLS'), smtp, 'fournisseur connu')
+    return Detected(Server(hosts[0], 993, 'SSL/TLS'), smtp, N_('fournisseur connu'))
 
 
 def fetch(url: str, opener=None) -> bytes | None:
@@ -128,7 +129,7 @@ def guess(domain: str, connect=socket.create_connection) -> Detected | None:
     for host in dict.fromkeys((imap.host, f'smtp.{domain}')):
         for port, mode in ((465, 'SSL/TLS'), (587, 'STARTTLS')):
             if open_port(host, port):
-                return Detected(imap, Server(host, port, mode), 'noms de serveurs habituels (à vérifier)')
+                return Detected(imap, Server(host, port, mode), N_('noms de serveurs habituels (à vérifier)'))
     return None
 
 
@@ -140,15 +141,15 @@ def detect(address: str, opener=None, connect=socket.create_connection) -> Detec
     found = known(address)
     if found:
         return found
-    for url, source in ((f'https://autoconfig.{domain}/mail/config-v1.1.xml', 'votre hébergeur'),
-                        (f'https://{domain}/.well-known/autoconfig/mail/config-v1.1.xml', 'votre hébergeur'),
-                        (ISPDB.format(domain=domain), 'base publique de Thunderbird')):
+    for url, source in ((f'https://autoconfig.{domain}/mail/config-v1.1.xml', N_('votre hébergeur')),
+                        (f'https://{domain}/.well-known/autoconfig/mail/config-v1.1.xml', N_('votre hébergeur')),
+                        (ISPDB.format(domain=domain), N_('base publique de Thunderbird'))):
         data = fetch(url, opener)
         found = parse(data, address, source) if data else None
         if found:
             return found
     data = fetch(f'http://autoconfig.{domain}/mail/config-v1.1.xml', opener)
-    found = parse(data, address, 'votre hébergeur') if data else None
+    found = parse(data, address, N_('votre hébergeur')) if data else None
     if found and in_domain(found.imap.host, domain) and in_domain(found.smtp.host, domain):
         return found
     return guess(domain, connect)

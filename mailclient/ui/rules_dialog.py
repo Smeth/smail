@@ -1,4 +1,5 @@
 """Règles de tri, expéditeurs bloqués ou approuvés : éditeur de règle et page des préférences."""
+from mailclient.i18n import tr
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QVBoxLayout, QWidget)
@@ -13,36 +14,36 @@ class RuleDialog(QDialog):
         super().__init__(parent)
         self.database, self.accounts = database, list(accounts)
         self.rule = None
-        self.setWindowTitle('Règle de tri')
+        self.setWindowTitle(tr('Règle de tri'))
         self.setMinimumWidth(520)
         layout = QVBoxLayout(self)
-        layout.addWidget(label('Règle appliquée aux nouveaux messages de la réception', 'Bold', True))
+        layout.addWidget(label(tr('Règle appliquée aux nouveaux messages de la réception'), 'Bold', True))
         form = QFormLayout()
         self.name = QLineEdit()
-        self.name.setPlaceholderText('Facultatif : un nom est proposé automatiquement')
+        self.name.setPlaceholderText(tr('Facultatif : un nom est proposé automatiquement'))
         self.account = QComboBox()
-        self.account.addItem('Tous les comptes', '')
+        self.account.addItem(tr('Tous les comptes'), '')
         for account in self.accounts:
             self.account.addItem(f'{account.name} — {account.email}', account.id)
         self.field, self.op, self.action = QComboBox(), QComboBox(), QComboBox()
         for box, choices in ((self.field, filters.FIELDS), (self.op, filters.OPERATORS), (self.action, filters.ACTIONS)):
             for key, text in choices.items():
-                box.addItem(text, key)
+                box.addItem(tr(text), key)
         self.value = QLineEdit()
-        self.value.setPlaceholderText('Ex. : newsletter@exemple.fr, @exemple.fr, Facture…')
+        self.value.setPlaceholderText(tr('Ex. : newsletter@exemple.fr, @exemple.fr, Facture…'))
         self.target = QComboBox()
         self.target.setEditable(False)
-        self.enabled = QCheckBox('Règle active')
+        self.enabled = QCheckBox(tr('Règle active'))
         self.enabled.setChecked(True)
         condition = QHBoxLayout()
         condition.addWidget(self.field)
         condition.addWidget(self.op)
-        form.addRow('Nom', self.name)
-        form.addRow('Compte', self.account)
-        form.addRow('Si', condition)
-        form.addRow('Texte', self.value)
-        form.addRow('Alors', self.action)
-        form.addRow('Dossier', self.target)
+        form.addRow(tr('Nom'), self.name)
+        form.addRow(tr('Compte'), self.account)
+        form.addRow(tr('Si'), condition)
+        form.addRow(tr('Texte'), self.value)
+        form.addRow(tr('Alors'), self.action)
+        form.addRow(tr('Dossier'), self.target)
         layout.addLayout(form)
         layout.addWidget(self.enabled)
         self.error = QLabel()
@@ -50,8 +51,8 @@ class RuleDialog(QDialog):
         self.error.setWordWrap(True)
         layout.addWidget(self.error)
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Save).setText('Enregistrer')
-        buttons.button(QDialogButtonBox.Cancel).setText('Annuler')
+        buttons.button(QDialogButtonBox.Save).setText(tr('Enregistrer'))
+        buttons.button(QDialogButtonBox.Cancel).setText(tr('Annuler'))
         buttons.accepted.connect(self.save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -113,12 +114,12 @@ class FiltersPage(QWidget):
         self.theme = install_theme(database)
         self.data = filters.load(database)
         box = QVBoxLayout(self)
-        box.addWidget(label('Règles et courrier indésirable', 'Title', True))
-        box.addWidget(label('Appliqués automatiquement aux nouveaux messages de la réception, lors de la synchronisation. '
-                            'Chaque modification de cette page est enregistrée immédiatement.', 'Subtitle', True))
-        box.addWidget(label('Règles', 'Bold'))
+        box.addWidget(label(tr('Règles et courrier indésirable'), 'Title', True))
+        box.addWidget(label(tr('Appliqués automatiquement aux nouveaux messages de la réception, lors de la synchronisation. '
+                            'Chaque modification de cette page est enregistrée immédiatement.'), 'Subtitle', True))
+        box.addWidget(label(tr('Règles'), 'Bold'))
         self.rules = QListWidget()
-        self.rules.setAccessibleName('Règles de tri, case à cocher pour activer')
+        self.rules.setAccessibleName(tr('Règles de tri, case à cocher pour activer'))
         self.rules.setFixedHeight(130)
         self.rules.setObjectName('FramedList')
         self.rules.itemChanged.connect(self.toggled)
@@ -132,17 +133,17 @@ class FiltersPage(QWidget):
             row.addWidget(button)
             if text == 'Appliquer maintenant':
                 self.apply_button = button
-                button.setToolTip('Applique les règles et les blocages à toute la réception synchronisée')
+                button.setToolTip(tr('Applique les règles et les blocages à toute la réception synchronisée'))
                 button.setEnabled(apply_now is not None)
         row.addStretch()
         box.addLayout(row)
-        self.spam_headers = QCheckBox('Déplacer vers les indésirables les messages signalés comme spam par le serveur')
+        self.spam_headers = QCheckBox(tr('Déplacer vers les indésirables les messages signalés comme spam par le serveur'))
         self.spam_headers.setChecked(self.data.get('spam_headers', True))
         self.spam_headers.toggled.connect(self.spam_toggled)
         box.addWidget(self.spam_headers)
         lists = QHBoxLayout()
-        self.blocked = self.sender_list(lists, 'Expéditeurs bloqués', 'blocked', 'Leurs messages vont directement dans les indésirables.')
-        self.safe = self.sender_list(lists, 'Expéditeurs approuvés', 'safe', 'Jamais traités comme indésirables.')
+        self.blocked = self.sender_list(lists, tr('Expéditeurs bloqués'), 'blocked', tr('Leurs messages vont directement dans les indésirables.'))
+        self.safe = self.sender_list(lists, tr('Expéditeurs approuvés'), 'safe', tr('Jamais traités comme indésirables.'))
         box.addLayout(lists)
         box.addStretch()
         self.refresh()
@@ -157,12 +158,12 @@ class FiltersPage(QWidget):
         widget.setObjectName('FramedList')
         column.addWidget(widget)
         entry = QLineEdit()
-        entry.setPlaceholderText('nom@domaine.fr ou @domaine.fr')
-        entry.setAccessibleName(f'Ajouter à {title.lower()}')
-        add = Button('', self.theme, 'plus', 'Secondary', 'Ajouter (Entrée)')
-        remove = Button('', self.theme, 'x', 'Secondary', 'Retirer l’adresse sélectionnée')
-        add.setAccessibleName('Ajouter')
-        remove.setAccessibleName('Retirer')
+        entry.setPlaceholderText(tr('nom@domaine.fr ou @domaine.fr'))
+        entry.setAccessibleName(tr('Ajouter à {valeur}').format(valeur=title.lower()))
+        add = Button('', self.theme, 'plus', 'Secondary', tr('Ajouter (Entrée)'))
+        remove = Button('', self.theme, 'x', 'Secondary', tr('Retirer l’adresse sélectionnée'))
+        add.setAccessibleName(tr('Ajouter'))
+        remove.setAccessibleName(tr('Retirer'))
         controls = QHBoxLayout()
         controls.addWidget(entry, 1)
         controls.addWidget(add)
@@ -180,14 +181,14 @@ class FiltersPage(QWidget):
         self.rules.clear()
         names = {account.id: account.name for account in self.accounts}
         for rule in self.data['rules']:
-            scope = names.get(rule.get('account'), 'tous les comptes') if rule.get('account') else 'tous les comptes'
+            scope = names.get(rule.get('account'), tr('tous les comptes')) if rule.get('account') else tr('tous les comptes')
             item = QListWidgetItem(f'{rule["name"]}  ·  {scope}')
             item.setToolTip(filters.describe(rule))
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Checked if rule.get('enabled', True) else Qt.Unchecked)
             self.rules.addItem(item)
         if not self.data['rules']:
-            placeholder = QListWidgetItem('Aucune règle. « Ajouter… » ou, dans un message : Message › Créer une règle.')
+            placeholder = QListWidgetItem(tr('Aucune règle. « Ajouter… » ou, dans un message : Message › Créer une règle.'))
             placeholder.setFlags(Qt.NoItemFlags)
             self.rules.addItem(placeholder)
         self.rules.blockSignals(False)
@@ -222,7 +223,7 @@ class FiltersPage(QWidget):
         index = self.selected_rule()
         if index is None:
             return
-        if QMessageBox.question(self, 'Supprimer la règle', f'Supprimer la règle « {self.data["rules"][index]["name"]} » ?',
+        if QMessageBox.question(self, tr('Supprimer la règle'), tr('Supprimer la règle « {valeur} » ?').format(valeur=self.data["rules"][index]["name"]),
                                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
             del self.data['rules'][index]
             self.persist()
@@ -241,7 +242,7 @@ class FiltersPage(QWidget):
         try:
             value = filters.normalize_sender(entry.text())
         except ValueError as error:
-            QMessageBox.warning(self, 'Adresse invalide', str(error))
+            QMessageBox.warning(self, tr('Adresse invalide'), str(error))
             return
         other = 'safe' if key == 'blocked' else 'blocked'
         self.data[key] = sorted(set(self.data[key]) | {value})
@@ -257,6 +258,6 @@ class FiltersPage(QWidget):
 
     def run_now(self):
         if self.apply_now and QMessageBox.question(
-                self, 'Appliquer maintenant', 'Appliquer les règles et les blocages à tous les messages déjà synchronisés de la réception ?',
+                self, tr('Appliquer maintenant'), tr('Appliquer les règles et les blocages à tous les messages déjà synchronisés de la réception ?'),
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
             self.apply_now()

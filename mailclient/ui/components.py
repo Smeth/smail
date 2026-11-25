@@ -1,4 +1,5 @@
 """Composants visuels réutilisables, découplés de tout service métier."""
+from mailclient.i18n import tr
 import re
 from PySide6.QtCore import Qt, QSize, QRectF, QPropertyAnimation, QEasingCurve, QTimer
 from PySide6.QtGui import QColor, QPainter, QFont, QPen, QFontMetrics
@@ -127,7 +128,7 @@ class LocalTextBrowser(QTextBrowser):
         self.setOpenExternalLinks(False)
         self.setOpenLinks(False)
         self.setFrameShape(QFrame.NoFrame)
-        self.setAccessibleName('Corps du message')
+        self.setAccessibleName(tr('Corps du message'))
 
     def loadResource(self, resource_type, name):
         return None
@@ -137,7 +138,7 @@ GROUP_ROLE = Qt.UserRole + 3    # Groupe de dates de la ligne (« Hier »…).
 COLLAPSED_ROLE = Qt.UserRole + 4  # Première ligne d’un groupe replié : seul le titre est dessiné.
 GROUP_COUNT_ROLE = Qt.UserRole + 5  # Nombre de lignes du groupe (affiché quand il est replié).
 FILTERED_ROLE = Qt.UserRole + 6  # Ligne masquée par le filtre (Non lus, pièces jointes…), indépendamment du repli.
-ALWAYS_OPEN = 'Aujourd’hui'
+ALWAYS_OPEN = 'Aujourd’hui'  # Clé interne (date_group) ; affichée traduite.
 HEADER_HEIGHT = 28
 # Actions au survol : (nom, icône, infobulle) ; l’icône de lecture dépend de l’état du message.
 ROW_ACTIONS = (('archive', 'archive', 'Archiver'), ('trash', 'trash-2', 'Supprimer'), ('read', None, None))
@@ -180,8 +181,8 @@ class MailDelegate(QStyledItemDelegate):
         mail = index.data(Qt.UserRole)
         if mail is not None and self.on_action:
             from PySide6.QtWidgets import QToolTip
-            texts = {'archive': 'Archiver', 'trash': 'Supprimer',
-                     'read': 'Marquer comme lu' if mail.unread else 'Marquer comme non lu'}
+            texts = {'archive': tr('Archiver'), 'trash': tr('Supprimer'),
+                     'read': tr('Marquer comme lu') if mail.unread else tr('Marquer comme non lu')}
             for name, area in self.action_rects(self.message_rect(option, index)):
                 if area.contains(event.pos()):
                     QToolTip.showText(event.globalPos(), texts[name], view)
@@ -204,7 +205,8 @@ class MailDelegate(QStyledItemDelegate):
                     painter, option.rect.left()+8, option.rect.top()+HEADER_HEIGHT-18, 14, 14)
             painter.setFont(QFont('Segoe UI', 8, QFont.Bold))
             painter.setPen(QColor(t['muted']))
-            text = header.upper() + (f'  ({index.data(GROUP_COUNT_ROLE)})' if collapsed else '')
+            from mailclient.i18n import display_group
+            text = display_group(header).upper() + (f'  ({index.data(GROUP_COUNT_ROLE)})' if collapsed else '')
             painter.drawText(QRectF(option.rect.left()+26, option.rect.top()+6, option.rect.width()-42, HEADER_HEIGHT-8),
                              Qt.AlignLeft|Qt.AlignBottom, text)
             if collapsed:
@@ -295,7 +297,7 @@ class Skeleton(QWidget):
     def __init__(self, theme):
         super().__init__()
         self.theme = theme
-        self.setAccessibleName('Chargement des messages')
+        self.setAccessibleName(tr('Chargement des messages'))
         self.theme.changed.connect(self.update)
 
     def paintEvent(self, event):

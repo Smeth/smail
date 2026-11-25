@@ -1,4 +1,5 @@
 """Point d'entrée : python -m mailclient.main."""
+from mailclient.i18n import tr
 import sys
 from pathlib import Path
 from PySide6.QtGui import QIcon
@@ -6,11 +7,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from mailclient import __version__
 from mailclient.utils.config import data_directory
 from mailclient.utils.logger import configure
-from mailclient.storage.database import Database
-from mailclient.storage.secrets import Secrets
-from mailclient.core.tls_policy import TLSPolicy
-from mailclient.ui.main_window import MainWindow
-from mailclient.ui.presentation import install_theme
+# L’interface (fenêtres, menus) est importée dans main(), après le choix de la langue.
 
 def install_excepthook(logger):
     """Journalise les erreurs inattendues sans leur message (qui peut contenir des données de mail) et prévient une fois."""
@@ -21,9 +18,9 @@ def install_excepthook(logger):
         logger.error('Erreur inattendue (%s) %s', kind.__name__, frames)
         if not state['shown'] and QApplication.instance() is not None:
             state['shown'] = True
-            QMessageBox.critical(None, 'Erreur inattendue',
-                                 'Une erreur inattendue s’est produite. Smail continue de fonctionner, mais il est conseillé de le redémarrer.\n\n'
-                                 'Le type d’erreur a été noté dans smail.log, sans contenu de message.')
+            QMessageBox.critical(None, tr('Erreur inattendue'),
+                                 tr('Une erreur inattendue s’est produite. Smail continue de fonctionner, mais il est conseillé de le redémarrer.\n\n'
+                                 'Le type d’erreur a été noté dans smail.log, sans contenu de message.'))
     sys.excepthook = hook
 
 def main():
@@ -43,6 +40,14 @@ def main():
         if instance.forward({'mailto': mailto} if mailto else {'show': True}):
             return 0  # Smail est déjà ouvert : la demande lui est transmise.
         instance.listen()
+    from mailclient import i18n
+    i18n.set_language(i18n.stored_choice(directory / 'settings.db'))  # Avant toute fenêtre.
+    i18n.install_qt_translations(app)
+    from mailclient.storage.database import Database
+    from mailclient.storage.secrets import Secrets
+    from mailclient.core.tls_policy import TLSPolicy
+    from mailclient.ui.main_window import MainWindow
+    from mailclient.ui.presentation import install_theme
     logger = configure(directory)
     install_excepthook(logger)
     try:
@@ -50,7 +55,7 @@ def main():
         install_theme(database)
         window = MainWindow(database, Secrets(), TLSPolicy(database), auto_load='--smoke-test' not in sys.argv)
     except Exception:
-        QMessageBox.critical(None, 'Démarrage impossible', 'Impossible de charger la configuration locale. Vérifiez les droits d’accès au dossier Smail dans AppData.')
+        QMessageBox.critical(None, tr('Démarrage impossible'), tr('Impossible de charger la configuration locale. Vérifiez les droits d’accès au dossier Smail dans AppData.'))
         return 1
     logger.info('Démarrage de l’application %s', __version__)
     if '--minimized' in arguments and not mailto:

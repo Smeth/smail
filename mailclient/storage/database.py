@@ -1,4 +1,5 @@
 """Configuration et empreintes publiques uniquement ; aucun mot de passe."""
+from mailclient.i18n import tr
 import json
 import sqlite3
 import hashlib
@@ -33,7 +34,7 @@ class Database:
                              'CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS cache (kind TEXT, key TEXT, data BLOB NOT NULL, PRIMARY KEY(kind,key));')
             version = db.execute('PRAGMA user_version').fetchone()[0]
             if version > SCHEMA_VERSION:
-                raise RuntimeError('Cette base a été créée par une version plus récente de Smail.')
+                raise RuntimeError(tr('Cette base a été créée par une version plus récente de Smail.'))
             # Le rattachement des entrées de cache à leur compte vit dans une table séparée : la table cache
             # garde ses trois colonnes et Smail 1.0.0 reste capable d’écrire dans une base migrée.
             if version < 2:
@@ -93,14 +94,14 @@ class Database:
 
     def _fernet(self):
         if self.secrets is None:
-            raise RuntimeError('Le coffre Windows est nécessaire pour chiffrer le cache.')
+            raise RuntimeError(tr('Le coffre Windows est nécessaire pour chiffrer le cache.'))
         if self._key is None:
             try:
                 self._key = self.secrets.get('cache-encryption-key')
             except RuntimeError:
                 # Ne jamais remplacer une clé perdue d’un cache déjà chiffré.
                 if self.setting('cache_encrypted', False):
-                    raise RuntimeError('Clé de chiffrement absente. Restaurez le coffre Windows avant de lire le cache.')
+                    raise RuntimeError(tr('Clé de chiffrement absente. Restaurez le coffre Windows avant de lire le cache.'))
                 self._key = Fernet.generate_key().decode('ascii')
                 self.secrets.set('cache-encryption-key', self._key)
         return Fernet(self._key.encode('ascii'))

@@ -1,4 +1,5 @@
 """Exécution des opérations réseau hors du fil graphique."""
+from mailclient.i18n import tr
 import imaplib
 import smtplib
 import socket
@@ -9,22 +10,22 @@ from mailclient.core.tls_policy import CertificateAlert
 
 def friendly_error(error: Exception) -> str:
     if isinstance(error, smtplib.SMTPRecipientsRefused):
-        return 'Tous les destinataires ont été refusés par le serveur SMTP.'
+        return tr('Tous les destinataires ont été refusés par le serveur SMTP.')
     if isinstance(error, smtplib.SMTPDataError):
-        return 'Le serveur SMTP a refusé le message. Vérifiez sa taille et la politique d’envoi.'
+        return tr('Le serveur SMTP a refusé le message. Vérifiez sa taille et la politique d’envoi.')
     if isinstance(error, smtplib.SMTPSenderRefused):
-        return 'Le serveur SMTP a refusé l’adresse expéditrice.'
+        return tr('Le serveur SMTP a refusé l’adresse expéditrice.')
     if isinstance(error, smtplib.SMTPNotSupportedError):
-        return 'Le serveur ne propose pas le mécanisme d’authentification nécessaire.'
+        return tr('Le serveur ne propose pas le mécanisme d’authentification nécessaire.')
     if isinstance(error, (imaplib.IMAP4.error, smtplib.SMTPAuthenticationError)):
-        return 'Le serveur a refusé la demande. Vérifiez les identifiants, le mot de passe d’application et les autorisations IMAP/SMTP.'
+        return tr('Le serveur a refusé la demande. Vérifiez les identifiants, le mot de passe d’application et les autorisations IMAP/SMTP.')
     if isinstance(error, (TimeoutError, socket.timeout)):
-        return 'Délai de connexion dépassé.'
+        return tr('Délai de connexion dépassé.')
     if isinstance(error, OSError):
-        return 'Serveur injoignable ou connexion interrompue. Vérifiez le réseau et les paramètres.'
+        return tr('Serveur injoignable ou connexion interrompue. Vérifiez le réseau et les paramètres.')
     if isinstance(error, (RuntimeError, ValueError)):
         return str(error)
-    return 'L’opération a échoué. Vérifiez les paramètres et réessayez.'
+    return tr('L’opération a échoué. Vérifiez les paramètres et réessayez.')
 
 class Signals(QObject):
     done = Signal(object)
@@ -66,7 +67,7 @@ class Runner(QObject):
                     self.tls.approve(error, dialog.remember.isChecked())
                     self.run(function, done, failed)
                     return
-                failed('Connexion annulée : certificat non approuvé.')
+                failed(tr('Connexion annulée : certificat non approuvé.'))
             else:
                 failed(friendly_error(error))
         task.signals.done.connect(success)

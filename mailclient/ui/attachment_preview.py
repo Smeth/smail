@@ -3,6 +3,7 @@
 Images et PDF sont affichés ; les textes (y compris HTML, XML, calendrier) sont montrés en source
 brute, jamais interprétés. Les fichiers potentiellement dangereux ne sont jamais prévisualisés.
 """
+from mailclient.i18n import tr
 from pathlib import PurePosixPath
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt
 from PySide6.QtGui import QImage, QPixmap
@@ -47,21 +48,20 @@ class AttachmentPreview(QDialog):
         super().__init__(parent)
         self.attachment, self.kind = attachment, preview_kind(attachment)
         theme = appearance()
-        self.setWindowTitle(f'Aperçu — {attachment.name}')
+        self.setWindowTitle(tr('Aperçu — {name}').format(name=attachment.name))
         self.resize(900, 700)
         layout = QVBoxLayout(self)
         layout.addWidget(label(attachment.name, 'Bold', True))
-        layout.addWidget(label(f'{attachment.content_type or "type inconnu"} · {len(attachment.data) / 1024:.0f} Ko · '
-                               'aperçu dans Smail, sans ouvrir d’autre programme', 'Small', True))
+        layout.addWidget(label(tr('{valeur} · {valeur2:.0f} Ko · aperçu dans Smail, sans ouvrir d’autre programme').format(valeur=attachment.content_type or "type inconnu", valeur2=len(attachment.data) / 1024), 'Small', True))
         self.view = self.build_view()
         layout.addWidget(self.view, 1)
         row = QHBoxLayout()
         row.addStretch()
         if save:
-            button = Button('Enregistrer…', theme, 'download', 'Secondary')
+            button = Button(tr('Enregistrer…'), theme, 'download', 'Secondary')
             button.clicked.connect(save)
             row.addWidget(button)
-        close = Button('Fermer', theme, role='Primary')
+        close = Button(tr('Fermer'), theme, role='Primary')
         close.clicked.connect(self.accept)
         row.addWidget(close)
         layout.addLayout(row)
@@ -95,8 +95,8 @@ class AttachmentPreview(QDialog):
         text = QPlainTextEdit()
         text.setReadOnly(True)
         text.setLineWrapMode(QPlainTextEdit.WidgetWidth)
-        content = decode_text(self.attachment.data) if self.kind == 'text' else 'Aperçu indisponible pour ce type de fichier.'
+        content = decode_text(self.attachment.data) if self.kind == 'text' else tr('Aperçu indisponible pour ce type de fichier.')
         if self.kind == 'text' and len(self.attachment.data) > TEXT_LIMIT:
-            content += '\n\n[Aperçu limité aux 2 premiers Mo.]'
+            content += '\n\n' + tr('[Aperçu limité aux 2 premiers Mo.]')
         text.setPlainText(content)
         return text

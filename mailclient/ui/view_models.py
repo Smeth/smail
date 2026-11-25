@@ -1,5 +1,6 @@
 """Adaptateurs de présentation ; aucun accès réseau ou au cache depuis le dessin."""
 from dataclasses import dataclass
+from mailclient.i18n import N_
 from email.utils import parseaddr, parsedate_to_datetime
 from PySide6.QtCore import QMimeData, Qt
 from PySide6.QtWidgets import QListWidget
@@ -103,28 +104,29 @@ class MessageList(QListWidget):
             self.clear()
 
 
-MONTHS = ('Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre',
-          'Novembre', 'Décembre')
+MONTHS = (N_('Janvier'), N_('Février'), N_('Mars'), N_('Avril'), N_('Mai'), N_('Juin'), N_('Juillet'), N_('Août'),
+          N_('Septembre'), N_('Octobre'), N_('Novembre'), N_('Décembre'))  # Clés des groupes ; traduites à l’affichage.
 
 
 def date_group(stamp: float, now=None) -> str:
     """Groupe de dates d’un message pour la liste : « Aujourd’hui », « Hier », « Cette semaine »…"""
     from datetime import datetime, timedelta
     if not stamp:
-        return 'Date inconnue'
+        return N_('Date inconnue')
     now = now or datetime.now()
     day, today = datetime.fromtimestamp(stamp).date(), now.date()
     if day >= today:
-        return 'Aujourd’hui'
+        return N_('Aujourd’hui')
     if day == today - timedelta(days=1):
-        return 'Hier'
+        return N_('Hier')
     if day > today - timedelta(days=7):
-        return 'Cette semaine'
+        return N_('Cette semaine')
     if (day.year, day.month) == (today.year, today.month):
-        return 'Plus tôt ce mois-ci'
+        return N_('Plus tôt ce mois-ci')
     return f'{MONTHS[day.month - 1]} {day.year}'
 
 
 def count(number: int, singular: str, plural: str | None = None) -> str:
     """« 1 message », « 5 messages » : accord en nombre au lieu de « message(s) »."""
-    return f'{number} {singular if abs(number) < 2 else (plural or singular + "s")}'
+    from mailclient.i18n import tr
+    return f'{number} {tr(singular) if abs(number) < 2 else tr(plural or singular + "s")}'  # Mots traduits.
