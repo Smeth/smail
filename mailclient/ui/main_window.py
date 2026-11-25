@@ -1322,6 +1322,7 @@ class MainWindow(QMainWindow):
             self.reader.display(mail, keep_thread=True)
             self.reader.set_thread([self.thread_entry(r, account) for r in self.thread_rows], index, self.thread_elsewhere())
             self.set_busy(False)
+            self.mark_opened(account, row)
             if self.pending_window:
                 QTimer.singleShot(0, self.open_in_window)
         def failed(message):
@@ -1358,6 +1359,7 @@ class MainWindow(QMainWindow):
             self.remember_extract(messages[index], mail)
             self.reader.display(mail, keep_thread=True)
             self.reader.set_thread([self.thread_entry(r, account) for r in messages] if len(messages) > 1 else [], index, self.thread_elsewhere())
+            self.mark_opened(account, messages[index])
             current = self.table.currentItem()
             if current and current.data(Qt.UserRole).raw is row and messages[index] is row and mail.text:
                 from dataclasses import replace
@@ -1374,6 +1376,47 @@ class MainWindow(QMainWindow):
             self.reader.clear(message)
             self.failure(message)
         self.runner.run(operation, done, failed)
+
+    def mark_opened(self, account, row):
+        """Message ouvert : marqué comme lu dans Smail tout de suite, puis sur le serveur en arrière-plan.
+
+        Le téléchargement utilise BODY.PEEK (sans effet sur le serveur) : sans ce marquage, un message lu restait
+        « non lu » dans Smail, le webmail et le téléphone. Hors ligne ou réglage désactivé : rien ne change."""
+        if account is None or not row.get('unread') or self.offline.isChecked() \
+                or not self.database.setting('mark_read_on_open', True):
+            return
+        key = self.row_key(row)
+        targets = [item for item in self.rows if self.row_key(item) == key] + [row]
+        for item in targets:
+            item['unread'] = False
+        self.refresh_row_views(key)
+        self.adjust_unread(account, row.get('folder'), -1)
+        def failed(message):
+            for item in targets:
+                item['unread'] = True  # Le serveur n’a pas accepté : l’état réel est rétabli.
+            self.refresh_row_views(key)
+            self.adjust_unread(account, row.get('folder'), +1)
+            self.notify('Le message n’a pas pu être marqué comme lu sur le serveur : ' + message, kind='error')
+        self.runner.run(lambda: self.service.action(account, [dict(row)], 'read'), lambda _: None, failed)
+
+    def refresh_row_views(self, key):
+        """Ligne de la liste recalculée (gras, point, filtre « Non lus ») après un changement d’état local."""
+        from mailclient.ui.view_models import MessageRow as View
+        for index in range(self.table.count()):
+            item = self.table.item(index)
+            view = item.data(Qt.UserRole)
+            if isinstance(view, View) and any(self.row_key(r) == key for r in view.rows):
+                rows = [next((r for r in self.rows if self.row_key(r) == self.row_key(old)), old) for old in view.rows]
+                item.setData(Qt.UserRole, View.from_thread(rows, self.row_account(rows[0])))
+        self.table.viewport().update()
+
+    def adjust_unread(self, account, folder, delta):
+        """Nombre de non-lus du dossier ajusté sans attendre la prochaine synchronisation."""
+        counts = dict(self.service.unread(account))
+        if folder in counts:
+            counts[folder] = max(0, counts[folder] + delta)
+            self.database.cache_put('unread', account.id, counts, account.id)
+            self.update_folder_counts()
 
     def mutate(self, action, target='', rows=None, plan=None):
         """plan : [(compte, messages, action, cible)] ; par défaut la sélection courante et une seule action."""
@@ -1793,7 +1836,8 @@ class MainWindow(QMainWindow):
                       ui_style=dialog.style_combo.currentData(),ui_density=dialog.density.currentText(),
                       ui_accent=dialog.accent.currentText(),ui_custom_accent=dialog.custom_accent,
                       ui_reduced_motion=dialog.motion.isChecked(),undo_send_seconds=dialog.undo_send.value(),
-                      update_mode=dialog.update_mode.currentData(), auto_update=dialog.update_mode.currentData() != 'off')
+                      update_mode=dialog.update_mode.currentData(), auto_update=dialog.update_mode.currentData() != 'off',
+                      mark_read_on_open=dialog.mark_read.isChecked())
         encrypt = dialog.encrypt.isChecked()
         self.set_busy(True)
         def operation():

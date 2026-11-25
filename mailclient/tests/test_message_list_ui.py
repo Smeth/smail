@@ -3,6 +3,7 @@ import os
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from datetime import datetime, timedelta
 from email.utils import format_datetime
+from PySide6.QtCore import Qt
 from mailclient.ui.view_models import date_group
 
 NOW = datetime(2026, 11, 24, 15, 0)
@@ -98,6 +99,60 @@ def test_changing_folder_resets_filter_and_hides_unread_in_sent(tmp_path, monkey
         window.folders.setCurrentRow(0)  # Retour à la réception : « Non lus » revient.
         assert process_until(lambda: not window.busy)
         assert not window.filter_buttons['Non lus'].isHidden()
+    finally:
+        window.reader.shutdown()
+        window.close()
+        from shiboken6 import delete
+        delete(window)
+
+
+def test_opening_marks_as_read_in_smail_and_on_the_server(tmp_path, monkeypatch):
+    from mailclient.tests.test_ui import APP, process_until  # noqa: F401
+    from mailclient.core.service import MailService
+    from mailclient.core.tls_policy import TLSPolicy
+    from mailclient.storage.database import Database
+    from mailclient.tests.test_scheduler import ME, Client
+    from mailclient.ui.folder_list import COUNT_ROLE
+    from mailclient.ui.main_window import MainWindow
+    db = Database(tmp_path / 'settings.db')
+    db.save(ME)
+    db.set_setting('conversation_view', False)
+    db.cache_put('unread', ME.id, {'INBOX': 2}, ME.id)
+    client = Client()
+    client.uidvalidity = '7'
+    now = datetime.now().astimezone()
+    listing = [dict(uid=uid, subject=f'Sujet {uid}', sender='Alice <alice@example.com>', folder='INBOX', uidvalidity='7',
+                    date=format_datetime(now), unread=True, starred=False, attachment=False, message_id=f'<{uid}@x>',
+                    references='', in_reply_to='') for uid in ('9', '8')]
+    client.messages = lambda folder, page, query='': ([dict(r) for r in listing], 2)
+    client.message_raw = lambda folder, uid: f'From: a@x.fr\r\nSubject: Sujet {uid}\r\n\r\nCorps'.encode()
+    actions = []
+    client.action = lambda folder, uids, validity, action, target='': actions.append((folder, uids, action))
+    monkeypatch.setattr(MailService, 'client', lambda *args: client)
+    window = MainWindow(db, None, TLSPolicy(db), auto_load=False)
+    try:
+        window.reload_accounts()
+        window.select_account(ME.id)
+        assert process_until(lambda: not window.busy and window.table.count() == 2)
+        window.table.setCurrentRow(0)
+        assert process_until(lambda: actions and not window.busy)
+        assert actions == [('INBOX', '9', 'read')]  # Sur le serveur : plus « non lu » dans le webmail ni le téléphone.
+        assert not window.table.item(0).data(Qt.UserRole).unread  # Dans Smail : plus en gras.
+        assert window.folders.item(0).data(COUNT_ROLE) == 1  # Compteur du dossier ajusté.
+        db.set_setting('mark_read_on_open', False)  # Réglage désactivé : ouverture sans marquage.
+        window.table.setCurrentRow(1)
+        assert process_until(lambda: window.reader.mail is not None and not window.busy and window.reader.mail.subject == 'Sujet 8')
+        process_until(lambda: False, 0.3)
+        assert actions == [('INBOX', '9', 'read')] and window.table.item(1).data(Qt.UserRole).unread
+        db.set_setting('mark_read_on_open', True)
+        def refuse(*args, **kwargs):
+            raise RuntimeError('refusé')
+        client.action = refuse  # Le serveur refuse : l’état « non lu » revient.
+        window.table.setCurrentRow(0)
+        assert process_until(lambda: not window.busy and window.reader.mail.subject == 'Sujet 9')
+        window.table.setCurrentRow(1)
+        assert process_until(lambda: not window.busy and window.toast.property('kind') == 'error')
+        assert window.table.item(1).data(Qt.UserRole).unread
     finally:
         window.reader.shutdown()
         window.close()

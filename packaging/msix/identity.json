@@ -1,7 +1,7 @@
 {
-  "_note": "Valeurs provisoires. À remplacer par celles de Partner Center › Gestion des produits › Identité du produit (publiques, non secrètes).",
-  "name": "Smail.Provisoire",
-  "publisher": "CN=Smail-Provisoire",
-  "publisher_display_name": "Smail",
-  "display_name": "Smail"
+  "_note": "Valeurs de Partner Center › Gestion des produits › Identité du produit (produit 9NZG6PT58G5J). Publiques, non secrètes. display_name doit correspondre exactement à un nom réservé.",
+  "name": "Smeth-Dev.smail",
+  "publisher": "CN=66846981-9B72-4B2D-BE19-46D8B67B4CE7",
+  "publisher_display_name": "Smeth-Dev",
+  "display_name": "smail"
 }

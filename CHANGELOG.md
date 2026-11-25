@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Correction : un message ouvert est maintenant marqué comme lu, dans Smail et sur le serveur (il restait « non lu », y compris dans le webmail et sur le téléphone). Réglable dans Préférences › Réception.
+- Microsoft Store : identité du produit (Smeth-Dev.smail), fiche (`docs/STORE.md`) et captures d’exemple (`tools/store_screenshots.py`).
 ## 1.3.0 — 2026-11-25
 
 

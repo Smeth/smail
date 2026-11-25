@@ -120,7 +120,7 @@ def test_main_window_conversation_flow(tmp_path, monkeypatch):
     assert reader.mail.subject == 'Message 10' and reader.thread_card.isVisibleTo(reader)
     assert reader.thread_list.count() == 0 and reader.thread_after.count() == 1
     assert reader.thread_after_card.isVisibleTo(reader)
-    assert reader.thread_after.item(0).text().startswith('● Bob')  # Le non-lu reste signalé.
+    assert reader.thread_after.item(0).text().startswith('Bob')  # Ouvert juste avant : marqué comme lu, plus de « ● ».
     # L’aperçu calculé à l’ouverture sert d’extrait au message replié.
     assert reader.thread_after.item(0).text().endswith('Corps 12')
     reader.thread_after.itemClicked.emit(reader.thread_after.item(0))

@@ -116,15 +116,16 @@ def test_unified_duplicate_uid_selection_uses_account_identity(window,monkeypatc
     from mailclient.core.parser import Mail
     monkeypatch.setattr(window.service,'message',lambda account,row,offline:Mail('test@example.com',account.email,row['subject'],'',text='Contenu réel contrôlé'))
     calls = []
-    monkeypatch.setattr(window.service,'action',lambda account,rows,*args:calls.extend((account.id,row['uid']) for row in rows))
+    monkeypatch.setattr(window.service,'action',lambda account,rows,*args:calls.extend((account.id,row['uid'],args[0]) for row in rows))
     window.load_messages()
     wait_for(lambda:not window.busy and window.table.count() == 2)
     window.table.selectRow(1)
     wait_for(lambda:not window.busy and window.reader.mail is not None)
     assert window.selected_row()['account'] == second.id
     window.reader.action_buttons[2].click()  # Étoile, via la même commande que le menu.
-    wait_for(lambda:not window.busy and bool(calls))
-    assert calls == [(second.id,'12')]
+    wait_for(lambda:not window.busy and any(call[2] == 'star' for call in calls))
+    # Ouverture (marqué comme lu) puis étoile : toujours le compte du message choisi, jamais l’autre.
+    assert calls == [(second.id,'12','read'),(second.id,'12','star')]
 
 def test_delete_in_search_does_not_trigger_message_action(window,monkeypatch):
     calls = []
