@@ -27,28 +27,45 @@ def test_mailto_links():
         parse_mailto('https://exemple.fr')
 
 
+OPEN_COPY = r"""
+import json, subprocess, sys, time
+from PySide6.QtCore import QCoreApplication
+app = QCoreApplication([])
+from mailclient.ui.single_instance import SingleInstance
+key, root = sys.argv[1], sys.argv[2]
+first = SingleInstance(key)
+nobody = first.forward({'show': True})  # Personne n’écoute encore.
+assert first.listen()
+received = []
+first.received.connect(received.append)
+# Second lancement : un autre programme, comme un clic sur un lien mailto: pendant que Smail est ouvert.
+script = ('import sys; from PySide6.QtCore import QCoreApplication; app = QCoreApplication([]); '
+          'from mailclient.ui.single_instance import SingleInstance; '
+          'sys.exit(0 if SingleInstance(sys.argv[1]).forward({"mailto": "mailto:a@b.fr"}) else 1)')
+second = subprocess.Popen([sys.executable, '-c', script, key], cwd=root)
+deadline = time.monotonic() + 20
+while not (received and second.poll() is not None) and time.monotonic() < deadline:
+    app.processEvents()
+    time.sleep(0.01)
+first.close()
+app.processEvents()
+print(json.dumps(dict(nobody=nobody, received=received, returncode=second.returncode)))
+"""
+
+
 def test_second_launch_is_forwarded_to_the_open_copy(tmp_path):
-    from mailclient.tests.test_ui import APP, process_until  # noqa: F401
-    from mailclient.ui.single_instance import SingleInstance
+    """Copie ouverte et second lancement dans des processus séparés : le canal local de Qt (QLocalServer)
+    ne vit jamais dans le processus des tests (sa fermeture y provoquait un plantage 0xc0000374 en CI)."""
+    import json
     import subprocess
     import sys
     from pathlib import Path
-    first = SingleInstance(str(tmp_path))
-    assert not first.forward({'show': True})  # Personne n’écoute encore.
-    received = []
-    assert first.listen()
-    first.received.connect(received.append)
-    # Second lancement : un autre programme, comme un clic sur un lien mailto: pendant que Smail est ouvert.
-    script = ('import sys; from PySide6.QtCore import QCoreApplication; app = QCoreApplication([]); '
-              'from mailclient.ui.single_instance import SingleInstance; '
-              'sys.exit(0 if SingleInstance(sys.argv[1]).forward({"mailto": "mailto:a@b.fr"}) else 1)')
     root = Path(__file__).resolve().parents[2]
-    process = subprocess.Popen([sys.executable, '-c', script, str(tmp_path)], cwd=root,
-                               env=dict(os.environ, PYTHONPATH=str(root)))
-    assert process_until(lambda: received and process.poll() is not None, 20)
-    assert received == [{'mailto': 'mailto:a@b.fr'}] and process.returncode == 0
-    first.close()
-    process_until(lambda: False, 0.3)  # Fermeture du canal traitée avant la suite des tests.
+    result = subprocess.run([sys.executable, '-c', OPEN_COPY, str(tmp_path), str(root)], cwd=root, capture_output=True,
+                            text=True, timeout=60, env=dict(os.environ, PYTHONPATH=str(root)))
+    assert result.returncode == 0, result.stderr[-2000:]
+    shown = json.loads(result.stdout.strip().splitlines()[-1])
+    assert shown == dict(nobody=False, received=[{'mailto': 'mailto:a@b.fr'}], returncode=0)
 
 
 @pytest.fixture
