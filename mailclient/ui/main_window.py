@@ -1117,7 +1117,7 @@ class MainWindow(QMainWindow):
                 self.render_rows(keep_view=True)
                 self.filter_page(self.page_filter)
             self.update_list_status()
-            QTimer.singleShot(0, lambda: self.maybe_load_more(auto=True))
+            QTimer.singleShot(0, self, lambda: self.maybe_load_more(auto=True))
         def failed(message):
             if generation != self.list_generation:
                 return
@@ -1174,7 +1174,7 @@ class MainWindow(QMainWindow):
             if not self.rows and result['offline'] and self.total:
                 self.empty_title.setText('Page non téléchargée')
                 self.empty_description.setText(self.cache_status.text())
-            QTimer.singleShot(0, lambda: self.maybe_load_more(auto=True))
+            QTimer.singleShot(0, self, lambda: self.maybe_load_more(auto=True))
         if all_folders:
             offline = self.offline.isChecked() or cache_only
             operation = lambda: self.service.search_all(account, query, offline)
@@ -1354,7 +1354,8 @@ class MainWindow(QMainWindow):
     def read_selected(self):
         current = self.table.currentItem()
         if current is not None and current.data(COLLAPSED_ROLE) and len(self.table.selectedItems()) <= 1:
-            QTimer.singleShot(0, lambda: self.toggle_group(current.data(GROUP_ROLE)))
+            group = current.data(GROUP_ROLE)  # Lu maintenant : la ligne peut disparaître avant le déclenchement.
+            QTimer.singleShot(0, self, lambda: self.toggle_group(group))  # Annulé si la fenêtre est détruite.
             return
         view = self.selected_view()
         row = view.raw if view else None
@@ -1486,7 +1487,7 @@ class MainWindow(QMainWindow):
     def undo_move(self, moves):
         """« Annuler » d’un déplacement : les messages reviennent dans leur dossier d’origine."""
         if self.busy:
-            QTimer.singleShot(300, lambda: self.undo_move(moves))
+            QTimer.singleShot(300, self, lambda: self.undo_move(moves))
             return
         if self.offline.isChecked():
             self.notify('Reconnectez-vous pour annuler le déplacement.', kind='error')
@@ -1981,7 +1982,7 @@ class MainWindow(QMainWindow):
         """Filtre choisi par l’utilisateur : la liste filtrée se complète si elle est trop courte."""
         self.auto_loads = 0  # Avant le filtrage : masquer des lignes peut déjà déclencher un chargement.
         self.filter_page(value)
-        QTimer.singleShot(0, lambda: self.maybe_load_more(auto=True))
+        QTimer.singleShot(0, self, lambda: self.maybe_load_more(auto=True))
 
     def filter_page(self, value):
         self.page_filter = value

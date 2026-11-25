@@ -85,7 +85,7 @@ def test_original_shows_authentication_verdicts(window, monkeypatch):
     window.database.cache_put('body', window.service.body_key(row), base64.b64encode(RAW).decode(), ME.id)
     monkeypatch.setattr(window, 'selected_row', lambda: row)
     shown = []
-    monkeypatch.setattr(OriginalDialog, 'exec', lambda self: shown.append(self.verdict.text()))
+    monkeypatch.setattr(OriginalDialog, 'exec', lambda self: (shown.append(self.verdict.text()), self.deleteLater()))
     window.show_original()
     assert shown == ['SPF : échec partiel · DKIM : réussi · DMARC : réussi']
 
@@ -111,6 +111,8 @@ def test_save_all_attachments(tmp_path, monkeypatch):
         assert view.attachments.removable is False  # Pas de × sur les pièces jointes reçues.
     finally:
         view.shutdown()
+        from shiboken6 import delete
+        delete(view)
 
 
 def test_spelling(tmp_path):
@@ -143,6 +145,10 @@ def test_spelling(tmp_path):
     assert 'erreur' in texts and 'Ajouter « erreurr » au dictionnaire' in texts
     next(action for action in menu.actions() if action.text() == 'erreur').trigger()
     assert editor.toPlainText() == 'Une erreur ici'
+    from shiboken6 import delete
+    editor.spell_highlighter.setDocument(None)  # Le surligneur se détache avant la destruction du document.
+    delete(menu)
+    delete(editor)
 
 
 def test_local_drafts_shown_in_drafts_folder_and_refresh_does_both(window, monkeypatch):
