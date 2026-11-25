@@ -2,6 +2,7 @@
 
 ## Non publié
 
+- Préférences rangées par thème : Général, Comptes, Apparence, Réception, Rédaction, Sécurité, Règles et indésirables, Raccourcis. Page Comptes détaillée (méthode de connexion, serveurs) avec « Ajouter un compte » ; menu Comptes › Gérer les comptes….
 - Connexion Gmail et Outlook en un clic (« Se connecter avec Google / Microsoft ») avec l’application OAuth2 de Smail, une fois ses identifiants renseignés (`docs/OAUTH.md`) ; identifiants techniques réservés au mode avancé.
 
 ## 1.2.0 — 2026-11-25

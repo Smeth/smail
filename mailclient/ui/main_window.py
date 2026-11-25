@@ -94,7 +94,7 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.command_button)
         toolbar.addWidget(self.refresh)
         self.settings_button = Button('',self.appearance,'settings-2',tooltip='Paramètres')
-        self.settings_button.clicked.connect(self.preferences)
+        self.settings_button.clicked.connect(lambda: self.preferences())
         toolbar.addWidget(self.settings_button)
         self.offline = QCheckBox('Hors ligne')
         self.offline.setFocusPolicy(Qt.TabFocus)
@@ -286,6 +286,7 @@ class MainWindow(QMainWindow):
         action('Quitter', self.request_quit, 'Ctrl+Q', menu=file_menu)
         action('Ajouter un compte', self.add_account, menu=accounts_menu, icon_name='plus')
         action('Compte', self.edit_account, menu=accounts_menu, icon_name='settings-2')
+        action('Gérer les comptes…', lambda: self.preferences('Comptes'), menu=accounts_menu, icon_name='settings-2')
         self.delete_account_action = action('Supprimer le compte…', self.delete_account, menu=accounts_menu, icon_name='trash-2')
         self.offline_action = action('Hors ligne',self.offline.click,menu=accounts_menu)
         self.offline_action.setCheckable(True)
@@ -1693,12 +1694,14 @@ class MainWindow(QMainWindow):
         self.update_connection()
         self.load_folders()
 
-    def preferences(self):
+    def preferences(self, page='Général'):
         if self.busy:
             return
-        dialog = SettingsDialog(self.database, self)
+        dialog = SettingsDialog(self.database, self, page)
         if not dialog.exec():
             return
+        if dialog.conversations.isChecked() != self.conversations_enabled():
+            self.conversation_action.setChecked(dialog.conversations.isChecked())  # Enregistre et réaffiche la liste.
         values = dict(sync_minutes=dialog.minutes.value(), cache_limit=dialog.limit.value(), theme=dialog.theme.currentIndex(),
                       idle=dialog.idle.isChecked(), notifications=dialog.notifications.isChecked(), close_to_tray=dialog.tray.isChecked(),
                       ui_style=dialog.style_combo.currentData(),ui_density=dialog.density.currentText(),

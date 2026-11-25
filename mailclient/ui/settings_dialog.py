@@ -1,7 +1,7 @@
-"""Préférences réelles dans les catégories de la maquette validée."""
+"""Préférences, une page par thème : Général, Comptes, Apparence, Réception, Rédaction, Sécurité, Règles, Raccourcis."""
 from PySide6.QtWidgets import (QDialog, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QSpinBox, QComboBox, QCheckBox, QDialogButtonBox, QListWidget, QStackedWidget, QColorDialog, QMessageBox)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor
 from mailclient.ui.dialog_shell import dialog_layout
 from mailclient.ui.components import label, Button, Card, Banner
@@ -9,7 +9,9 @@ from mailclient.ui.presentation import install_theme
 from mailclient.ui.theme import VARIANTS, ACCENTS
 
 class SettingsDialog(QDialog):
-    def __init__(self, database, parent=None):
+    PAGES = ('Général', 'Comptes', 'Apparence', 'Réception', 'Rédaction', 'Sécurité', 'Règles et indésirables', 'Raccourcis')
+
+    def __init__(self, database, parent=None, page='Général'):
         super().__init__(parent)
         self.database = database
         self.appearance_theme = install_theme(database)
@@ -20,20 +22,21 @@ class SettingsDialog(QDialog):
         row = QHBoxLayout()
         self.nav = QListWidget()
         self.nav.setObjectName('SettingsNav')
-        self.nav.setFixedWidth(175)
+        self.nav.setFixedWidth(190)
         self.nav.setAccessibleName('Catégories des paramètres')
-        self.nav.addItems(['Apparence','Comptes','Sécurité','Raccourcis','Règles et indésirables'])
+        self.nav.addItems(list(self.PAGES))
         self.pages = QStackedWidget()
         from mailclient.ui.rules_dialog import FiltersPage
         owner = self.parent()
         self.filters_page = FiltersPage(database, database.accounts(), getattr(owner,'apply_filters_now',None))
-        for page in (self.appearance_page(),self.accounts_page(),self.security_page(),self.shortcuts_page(),self.filters_page):
-            self.pages.addWidget(page)
+        for widget in (self.general_page(), self.accounts_page(), self.appearance_page(), self.reception_page(),
+                       self.writing_page(), self.security_page(), self.filters_page, self.shortcuts_page()):
+            self.pages.addWidget(widget)
         row.addWidget(self.nav)
         row.addWidget(self.pages,1)
         layout.addLayout(row)
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
-        self.nav.setCurrentRow(0)
+        self.nav.setCurrentRow(self.PAGES.index(page) if page in self.PAGES else 0)
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Save).setText('Enregistrer')
         buttons.button(QDialogButtonBox.Save).setObjectName('Primary')
@@ -41,6 +44,35 @@ class SettingsDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
+
+    @staticmethod
+    def page(title, subtitle=''):
+        widget = QWidget()
+        box = QVBoxLayout(widget)
+        box.addWidget(label(title,'Title',True))
+        if subtitle:
+            box.addWidget(label(subtitle,'Subtitle',True))
+        return widget, box
+
+    def general_page(self):
+        widget, box = self.page('Général', 'Comportement de Smail sur ce PC.')
+        self.notifications = QCheckBox('Notifications de nouveaux messages')
+        self.notifications.setChecked(self.database.setting('notifications',True))
+        self.tray = QCheckBox('Réduire dans la zone de notification à la fermeture (Smail continue de recevoir vos messages)')
+        self.tray.setChecked(self.database.setting('close_to_tray',True))
+        from mailclient import __version__
+        self.auto_update = QCheckBox(f'Installer automatiquement les mises à jour (version actuelle : {__version__})')
+        self.auto_update.setToolTip('Vérifiées toutes les 6 heures sur GitHub ; installées à la fermeture de Smail, '
+                                    'uniquement si leur signature est valide.')
+        self.auto_update.setChecked(self.database.setting('auto_update',True))
+        from mailclient.core.updater import packaged
+        if packaged():
+            self.auto_update.setText(f'Mises à jour installées par le Microsoft Store (version actuelle : {__version__})')
+            self.auto_update.setEnabled(False)
+        for control in (self.notifications, self.tray, self.auto_update):
+            box.addWidget(control)
+        box.addStretch()
+        return widget
 
     def appearance_page(self):
         widget = QWidget()
@@ -105,22 +137,76 @@ class SettingsDialog(QDialog):
             self.custom_accent = color.name()
             self.preview()
 
+    def reception_page(self):
+        widget, box = self.page('Réception', 'Arrivée des messages et copie disponible hors ligne.')
+        self.conversations = QCheckBox('Regrouper les messages par conversation')
+        self.conversations.setChecked(bool(self.database.setting('conversation_view', True)))
+        self.idle = QCheckBox('Réception instantanée (IMAP IDLE) quand le serveur la propose')
+        self.idle.setChecked(self.database.setting('idle',True))
+        box.addWidget(self.conversations)
+        box.addWidget(self.idle)
+        self.minutes = QSpinBox()
+        self.minutes.setRange(1,120)
+        self.minutes.setSuffix(' min')
+        self.minutes.setValue(self.database.setting('sync_minutes',5))
+        self.limit = QSpinBox()
+        self.limit.setRange(50,5000)
+        self.limit.setSingleStep(50)
+        self.limit.setValue(self.database.setting('cache_limit',100))
+        form = QFormLayout()
+        form.addRow('Synchroniser toutes les',self.minutes)
+        form.addRow('Messages disponibles hors ligne, par dossier',self.limit)
+        box.addLayout(form)
+        box.addStretch()
+        return widget
+
+    def writing_page(self):
+        widget, box = self.page('Rédaction', 'Envoi des messages.')
+        self.undo_send = QSpinBox()
+        self.undo_send.setRange(0,30)
+        self.undo_send.setSuffix(' s')
+        self.undo_send.setSpecialValueText('Désactivé')
+        self.undo_send.setValue(self.database.setting('undo_send_seconds',10))
+        self.undo_send.setToolTip('Délai pendant lequel « Annuler l’envoi » reste possible après avoir cliqué sur Envoyer.')
+        form = QFormLayout()
+        form.addRow('Délai d’annulation d’envoi',self.undo_send)
+        box.addLayout(form)
+        box.addWidget(label('La signature se règle pour chaque compte : page Comptes › Paramètres.','Small',True))
+        box.addStretch()
+        return widget
+
     def accounts_page(self):
-        widget = QWidget()
-        box = QVBoxLayout(widget)
-        box.addWidget(label('Vos comptes','Title'))
-        for account in self.database.accounts():
+        widget, box = self.page('Vos comptes', 'Les comptes configurés sur ce PC : paramètres, signature, suppression.')
+        add = Button('Ajouter un compte',self.appearance_theme,'plus','Secondary')
+        add.setEnabled(self.parent() is not None and hasattr(self.parent(),'secrets'))
+        add.clicked.connect(self.add_account)
+        box.addWidget(add, 0, Qt.AlignLeft)
+        self.accounts_list = QVBoxLayout()
+        box.addLayout(self.accounts_list)
+        box.addStretch()
+        self.refresh_accounts()
+        return widget
+
+    def refresh_accounts(self):
+        while self.accounts_list.count():
+            item = self.accounts_list.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        accounts = self.database.accounts()
+        methods = {'password': 'Mot de passe', 'google': 'Connexion Google', 'microsoft': 'Connexion Microsoft'}
+        for account in accounts:
             card = Card('Attachment',12)
             row = QHBoxLayout()
             text = QVBoxLayout()
-            text.addWidget(label(account.name,'Bold'))
-            text.addWidget(label(account.email,'Subtitle'))
+            text.addWidget(label(account.name or account.email,'Bold'))
+            text.addWidget(label(f'{account.email} · {methods.get(account.auth_method, account.auth_method)}','Subtitle'))
+            text.addWidget(label(f'Réception {account.imap.host}:{account.imap.port} · Envoi {account.smtp.host}:{account.smtp.port}','Small'))
             row.addLayout(text,1)
-            edit = Button('',self.appearance_theme,'settings-2',tooltip='Paramètres et signature du compte '+account.name)
+            edit = Button('Paramètres',self.appearance_theme,'settings-2','Secondary','Paramètres, mot de passe et signature du compte '+account.name)
             edit.setEnabled(self.parent() is not None and hasattr(self.parent(),'secrets'))
             edit.clicked.connect(lambda checked=False,a=account:self.edit_account(a))
             row.addWidget(edit)
-            remove = Button('',self.appearance_theme,'trash-2','QuietDanger','Supprimer le compte '+account.name+' de ce PC')
+            remove = Button('Supprimer',self.appearance_theme,'trash-2','QuietDanger','Supprimer le compte '+account.name+' de ce PC')
             remove.setAccessibleName('Supprimer le compte '+account.name)
             remove.setEnabled(edit.isEnabled())
             remove.clicked.connect(lambda checked=False,a=account,c=card:self.delete_account(a,c))
@@ -130,11 +216,15 @@ class SettingsDialog(QDialog):
             card.box.addWidget(Banner('Connexion chiffrée' if secure else 'Attention · connexion en clair',
                 f'IMAP : {account.imap.mode} · SMTP : {account.smtp.mode}',self.appearance_theme,
                 'Info' if secure else 'Warning','lock-keyhole' if secure else 'lock-keyhole-open'))
-            box.addWidget(card)
-        if not self.database.accounts():
-            box.addWidget(label('Aucun compte configuré. Utilisez Ajouter un compte dans la fenêtre principale.','Subtitle',True))
-        box.addStretch()
-        return widget
+            self.accounts_list.addWidget(card)
+        if not accounts:
+            self.accounts_list.addWidget(label('Aucun compte configuré : cliquez sur « Ajouter un compte ».','Subtitle',True))
+
+    def add_account(self):
+        owner = self.parent()
+        if owner is not None and hasattr(owner, 'add_account'):
+            owner.add_account()
+            self.refresh_accounts()
 
     def edit_account(self, account):
         from mailclient.ui.account_dialog import AccountDialog
@@ -142,11 +232,13 @@ class SettingsDialog(QDialog):
         if owner and AccountDialog(self.database,owner.secrets,owner.runner.tls,self,account=account).exec():
             owner.reload_accounts()
             owner.restart_idle()
+            self.refresh_accounts()
 
     def delete_account(self, account, card):
         owner = self.parent()
         if owner and owner.delete_account(account):
             card.hide()
+            QTimer.singleShot(0, self.refresh_accounts)
 
     def certificates_box(self):
         """Exceptions de certificat permanentes, retirables une à une."""
@@ -188,50 +280,15 @@ class SettingsDialog(QDialog):
         card.hide()
 
     def security_page(self):
-        widget = QWidget()
-        box = QVBoxLayout(widget)
-        box.addWidget(label('La sécurité reste visible','Title',True))
+        widget, box = self.page('Sécurité et confidentialité')
         box.addWidget(Banner('Certificats vérifiés · images bloquées par défaut',
             'Toute exception de certificat et tout affichage d’images distantes demandent une décision explicite.',self.appearance_theme))
-        self.encrypt = QCheckBox('Chiffrer les messages, pièces jointes et brouillons du cache')
+        self.encrypt = QCheckBox('Chiffrer les messages, pièces jointes et brouillons enregistrés sur ce PC')
         self.encrypt.setChecked(self.database.setting('cache_encrypted',False))
-        self.idle = QCheckBox('Utiliser IMAP IDLE si disponible')
-        self.idle.setChecked(self.database.setting('idle',True))
-        self.notifications = QCheckBox('Notifications de nouveaux messages')
-        self.notifications.setChecked(self.database.setting('notifications',True))
-        self.tray = QCheckBox('Réduire dans la zone de notification à la fermeture')
-        self.tray.setChecked(self.database.setting('close_to_tray',True))
-        from mailclient import __version__
-        self.auto_update = QCheckBox(f'Installer automatiquement les mises à jour (version actuelle : {__version__})')
-        self.auto_update.setToolTip('Vérifiées toutes les 6 heures sur GitHub ; installées à la fermeture de Smail, '
-                                    'uniquement si leur signature est valide.')
-        self.auto_update.setChecked(self.database.setting('auto_update',True))
-        from mailclient.core.updater import packaged
-        if packaged():
-            self.auto_update.setText(f'Mises à jour installées par le Microsoft Store (version actuelle : {__version__})')
-            self.auto_update.setEnabled(False)
-        for control in (self.encrypt,self.idle,self.notifications,self.tray,self.auto_update):
-            box.addWidget(control)
-        self.minutes = QSpinBox()
-        self.minutes.setRange(1,120)
-        self.minutes.setValue(self.database.setting('sync_minutes',5))
-        self.limit = QSpinBox()
-        self.limit.setRange(50,5000)
-        self.limit.setSingleStep(50)
-        self.limit.setValue(self.database.setting('cache_limit',100))
-        form = QFormLayout()
-        form.addRow('Synchroniser toutes les (minutes)',self.minutes)
-        form.addRow('Messages hors ligne par dossier',self.limit)
-        self.undo_send = QSpinBox()
-        self.undo_send.setRange(0,30)
-        self.undo_send.setSuffix(' s')
-        self.undo_send.setSpecialValueText('Désactivé')
-        self.undo_send.setValue(self.database.setting('undo_send_seconds',10))
-        self.undo_send.setToolTip('Délai pendant lequel « Annuler l’envoi » reste possible après avoir cliqué sur Envoyer.')
-        form.addRow('Délai d’annulation d’envoi',self.undo_send)
-        box.addLayout(form)
+        box.addWidget(self.encrypt)
+        box.addWidget(label('Le chiffrement protège la copie locale de vos mails avec une clé du coffre Windows. Les paramètres '
+                            'des comptes restent lisibles. Sans cette option, la copie locale est en clair sur ce PC.','Small',True))
         box.addWidget(self.certificates_box())
-        box.addWidget(label('Le chiffrement protège les contenus du cache avec une clé du coffre Windows. Les paramètres de comptes et le schéma SQLite restent lisibles. Sans cette option, le cache contient vos mails en clair sur ce PC.','Small',True))
         box.addStretch()
         return widget
 
