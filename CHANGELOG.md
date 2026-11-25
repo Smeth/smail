@@ -2,6 +2,8 @@
 
 ## Non publié
 
+Correcteur d’orthographe, Smail comme messagerie par défaut, menus réorganisés et nombreuses retouches d’interface. Les mises à jour vous sont désormais proposées : rien n’est téléchargé sans votre accord (réglable dans Préférences › Général).
+
 - Correcteur d’orthographe en français dans la rédaction : fautes soulignées, suggestions et « Ajouter au dictionnaire » au clic droit (dictionnaire local, aucune connexion).
 - Smail comme messagerie par défaut : un lien « mailto: » ouvre un nouveau message prérempli (Préférences › Général › Définir Smail comme messagerie par défaut…). Un second lancement de Smail est transmis à la copie déjà ouverte.
 - Message › Afficher l’original : en-têtes complets et verdict SPF / DKIM / DMARC, pour comprendre un classement en spam.
