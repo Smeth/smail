@@ -62,6 +62,16 @@ class SettingsDialog(QDialog):
         self.tray.setChecked(self.database.setting('close_to_tray',True))
         for control in (self.notifications, self.tray):
             box.addWidget(control)
+        # Liens « mailto: » : Windows exige que l’utilisateur choisisse lui-même l’application par défaut.
+        from mailclient.core.updater import installed_copy, packaged
+        self.default_app = Button('Définir Smail comme messagerie par défaut…',self.appearance_theme,'mail','Secondary',
+                                  'Ouvre les paramètres de Windows : choisissez Smail pour « MAILTO ».')
+        self.default_app.clicked.connect(self.open_default_apps)
+        self.default_app.setEnabled(installed_copy() or packaged())
+        box.addWidget(self.default_app, 0, Qt.AlignLeft)
+        box.addWidget(label('Un clic sur une adresse e-mail dans le navigateur ouvrira alors un nouveau message dans Smail.'
+                            if self.default_app.isEnabled() else
+                            'Disponible pour Smail installé (installateur ou Microsoft Store).','Small',True))
         from mailclient import __version__
         from mailclient.core.updater import packaged
         from mailclient.ui.updates import MODE_LABELS, update_mode
@@ -79,6 +89,13 @@ class SettingsDialog(QDialog):
             box.addWidget(label('Cette copie vient du Microsoft Store : ses mises à jour sont installées par le Store.','Small',True))
         box.addStretch()
         return widget
+
+    @staticmethod
+    def open_default_apps():
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        # Page « Applications par défaut › Smail » (Windows 11) ; Windows 10 ouvre la page générale.
+        QDesktopServices.openUrl(QUrl('ms-settings:defaultapps?registeredAppUser=Smail'))
 
     def appearance_page(self):
         widget = QWidget()
@@ -302,11 +319,15 @@ class SettingsDialog(QDialog):
         widget = QWidget()
         box = QVBoxLayout(widget)
         box.addWidget(label('Vos mains restent au clavier','Title',True))
-        for title,key in [('Palette de commandes','Ctrl + K'),('Rédiger','Ctrl + N'),('Rechercher','Ctrl + F'),
+        for title,key in [('Nouveau message','Ctrl + N'),('Rechercher','Ctrl + F'),('Palette de commandes','Ctrl + K'),
                           ('Répondre','Ctrl + R'),('Répondre à tous','Ctrl + Maj + R'),('Transférer','Ctrl + L'),
-                          ('Synchroniser','F5'),('Changer de thème','Ctrl + Maj + L'),('Changer la densité','Ctrl + Maj + D'),
-                          ('Message suivant / précédent (style 3)','J / K'),('Archiver / étoiler (style 3)','E / S'),
-                          ('Corbeille (focus dans la liste)','Suppr'),('Regrouper par conversation','Ctrl + Maj + T'),('Message suivant / précédent de la conversation','Alt + Bas / Haut'),('Signaler comme spam','Ctrl + Maj + J'),('Mise en forme : gras, italique, souligné','Ctrl + B, I, U'),('Insérer un lien (rédaction)','Ctrl + Maj + K'),('Envoyer en rédaction','Ctrl + Entrée')]:
+                          ('Marquer comme lu / non lu','Ctrl + U'),('Suivre / ne plus suivre','Ctrl + Maj + G'),
+                          ('Déplacer vers un dossier','Ctrl + Maj + V'),('Supprimer (liste des messages)','Suppr'),
+                          ('Tout marquer comme lu (dossier)','Ctrl + Maj + U'),('Signaler comme spam','Ctrl + Maj + J'),
+                          ('Message suivant / précédent (liste des messages)','J / K'),('Archiver / suivre (liste des messages)','E / S'),
+                          ('Message suivant / précédent de la conversation','Alt + Bas / Haut'),('Regrouper par conversation','Ctrl + Maj + T'),
+                          ('Actualiser','F5'),('Passer au thème clair / sombre','Ctrl + Maj + L'),('Changer la densité','Ctrl + Maj + D'),
+                          ('Mise en forme : gras, italique, souligné','Ctrl + B, I, U'),('Insérer un lien (rédaction)','Ctrl + Maj + K'),('Envoyer (rédaction)','Ctrl + Entrée')]:
             row = QHBoxLayout()
             row.addWidget(label(title))
             row.addStretch()

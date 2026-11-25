@@ -180,7 +180,7 @@ def test_main_window_multi_selection(tmp_path, monkeypatch):
     APP.processEvents()
     assert len(window.selected_rows()) == 3 and window.selected_row() is None
     assert not window.single_actions[0].isEnabled()  # Répondre exige un seul message.
-    assert next(a for a in window.message_actions if a.text() == 'Étoiler').isEnabled()
+    assert next(a for a in window.message_actions if a.text() == 'Suivre / ne plus suivre').isEnabled()
     window.toggle_star()
     assert process_until(lambda: not window.busy and calls)
     assert calls[-1] == ('INBOX', '3,4,9', 'star', '')

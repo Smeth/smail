@@ -121,7 +121,7 @@ class MailView(QWidget):
         self.action_buttons = []
         self.more_menu = QMenu(self)
         for name,title,signal in [('archive','Archiver',self.archiveRequested),('trash-2','Supprimer',self.deleteRequested),
-                                  ('star','Étoiler',self.starRequested),('mail','Lu / non lu',self.readRequested)]:
+                                  ('star','Suivre / ne plus suivre',self.starRequested),('mail','Marquer comme lu / non lu',self.readRequested)]:
             button = Button('',self.theme,name,tooltip=title,parent=self)
             button.hide()
             button.clicked.connect(lambda checked=False,s=signal:s.emit())
@@ -299,10 +299,14 @@ class MailView(QWidget):
         self.save_button.clicked.connect(self.save_attachment)
         self.preview_button = Button('Aperçu',self.theme,'file-text','Secondary',tooltip='Aperçu de la pièce jointe sélectionnée (double-clic)')
         self.preview_button.clicked.connect(self.preview_attachment)
+        self.save_all_button = Button('Tout enregistrer…',self.theme,'download','Secondary',
+                                      tooltip='Enregistrer toutes les pièces jointes dans un dossier')
+        self.save_all_button.clicked.connect(self.save_all_attachments)
         attachment_header.addWidget(self.preview_button)
         attachment_header.addWidget(self.save_button)
+        attachment_header.addWidget(self.save_all_button)
         attachment_layout.addLayout(attachment_header)
-        self.attachments = AttachmentGrid()
+        self.attachments = AttachmentGrid(removable=False)
         self.attachments.setAcceptDrops(False)
         self.attachments.viewport().setAcceptDrops(False)
         self.attachment_title.toggled.connect(self.attachments.setVisible)
@@ -418,6 +422,7 @@ class MailView(QWidget):
         self.attachment_section.hide()
         self.attachments.hide()
         self.save_button.hide()
+        self.save_all_button.hide()
         self.preview_button.hide()
         self.text.clear()
         self.attachments.clear()
@@ -460,6 +465,7 @@ class MailView(QWidget):
         self.attachment_title.setVisible(bool(mail.attachments))
         self.attachments.hide()
         self.save_button.setVisible(bool(mail.attachments))
+        self.save_all_button.setVisible(len(mail.attachments) > 1)
         self.preview_button.setVisible(bool(mail.attachments))
         self.update_preview_button(self.attachments.currentRow())
         self.attachment_section.setVisible(bool(mail.attachments))
@@ -578,6 +584,42 @@ class MailView(QWidget):
         dialog.setWindowTitle('Imprimer le message')
         if dialog.exec():
             print_document(self.mail).print_(printer)
+
+    def save_all_attachments(self, folder=None):
+        """Toutes les pièces jointes dans un dossier : noms assainis, rien d’écrasé, fichiers dangereux sur accord."""
+        from mailclient.core.parser import safe_filename
+        if self.mail is None or not self.mail.attachments:
+            return
+        folder = folder or QFileDialog.getExistingDirectory(self, 'Enregistrer toutes les pièces jointes dans…')
+        if not folder:
+            return
+        attachments = list(self.mail.attachments)
+        risky = [a.name for a in attachments if dangerous_filename(a.name)]
+        if risky and QMessageBox.warning(
+                self, 'Fichiers potentiellement dangereux',
+                'Ces fichiers peuvent exécuter du code : ' + ', '.join(risky) + '.\n\nLes enregistrer aussi ? '
+                '(Ils ne seront pas ouverts par Smail.) « Non » enregistre seulement les autres.',
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+            attachments = [a for a in attachments if not dangerous_filename(a.name)]
+        saved, failed = 0, []
+        for attachment in attachments:
+            name = safe_filename(attachment.name) or 'piece-jointe'
+            target, number = Path(folder) / name, 2
+            while target.exists():  # Jamais d’écrasement : « rapport (2).pdf ».
+                target = Path(folder) / f'{Path(name).stem} ({number}){Path(name).suffix}'
+                number += 1
+            destination = QSaveFile(str(target))
+            if destination.open(QIODevice.WriteOnly) and destination.write(attachment.data) == len(attachment.data) \
+                    and destination.commit():
+                saved += 1
+            else:
+                destination.cancelWriting()
+                failed.append(attachment.name)
+        message = f'{saved} pièce{"s" if saved > 1 else ""} jointe{"s" if saved > 1 else ""} enregistrée{"s" if saved > 1 else ""} dans {folder}.'
+        if failed:
+            message += '\n\nÉchec pour : ' + ', '.join(failed)
+        QMessageBox.information(self, 'Pièces jointes', message)
+        return saved
 
     def save_attachment(self):
         row = self.attachments.currentRow()

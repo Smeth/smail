@@ -17,7 +17,7 @@ from mailclient.ui.presentation import install_theme
 from mailclient.ui.components import Button, Card, label, MailDelegate, Skeleton, Banner, IconLabel, fade
 from mailclient.ui.icons import icon
 from mailclient.ui.theme import VARIANTS, ACCENTS
-from mailclient.ui.view_models import MessageRow, MessageList, DRAG_MIME, date_group
+from mailclient.ui.view_models import MessageRow, MessageList, DRAG_MIME, date_group, count
 from mailclient.core.threads import timestamp
 
 GROUP_ROLE = Qt.UserRole + 3  # Groupe de dates de la ligne (« Hier »…).
@@ -135,7 +135,7 @@ class MainWindow(QMainWindow):
         self.compose_button = Button('Nouveau message',self.appearance,'plus','Primary')
         self.compose_button.clicked.connect(lambda:self.compose())
         self.sidebar.box.addWidget(self.compose_button)
-        self.sidebar.box.addWidget(label('VOS ESPACES','Eyebrow'))
+        self.sidebar.box.addWidget(label('COMPTE','Eyebrow'))
         self.sidebar.box.addWidget(self.account_box)
         self.account_cards = QWidget()
         self.account_cards_box = QVBoxLayout(self.account_cards)
@@ -157,7 +157,7 @@ class MainWindow(QMainWindow):
         self.folders.setItemDelegate(self.folder_delegate)
         self.folders.setAccessibleName('Dossiers du compte')
         self.sidebar.box.addWidget(self.folders,1)
-        self.shortcut_hint = label('J / K  parcourir\nE  archiver   S  étoiler','Small')
+        self.shortcut_hint = label('J / K  parcourir\nE  archiver   S  suivre','Small')
         self.sidebar.box.addWidget(self.shortcut_hint)
         self.sidebar.box.addWidget(self.add)
         self.list_panel = Card('ListPanel',8)
@@ -196,6 +196,11 @@ class MainWindow(QMainWindow):
             widget.currentIndexChanged.connect(lambda index:self.user_filter(self.page_filter))
             search_filters.addWidget(widget,1)
         self.list_panel.box.addWidget(self.search_filters)
+        # Dossier Brouillons : les brouillons enregistrés sur ce PC (pas encore sur le serveur) y sont signalés.
+        self.local_drafts_button = Button('',self.appearance,'file-pen-line','Secondary','Brouillons enregistrés sur ce PC')
+        self.local_drafts_button.clicked.connect(self.open_draft)
+        self.local_drafts_button.hide()
+        self.list_panel.box.addWidget(self.local_drafts_button)
         self.search_filters.hide()
         self.search.textChanged.connect(lambda text:self.search_filters.setVisible(bool(text.strip())))
         self.table = MessageList()
@@ -230,7 +235,8 @@ class MainWindow(QMainWindow):
         self.toast = Toast(root, lambda: self.appearance.colors)
         self.menuBar().setNativeMenuBar(False)
         file_menu = self.menuBar().addMenu('Fichier')
-        actions = self.menuBar().addMenu('Message')
+        actions = self.message_menu = self.menuBar().addMenu('Message')
+        folder_menu = self.menuBar().addMenu('Dossier')
         view_menu = self.menuBar().addMenu('Affichage')
         accounts_menu = self.menuBar().addMenu('Comptes')
         tools_menu = self.menuBar().addMenu('Outils')
@@ -245,6 +251,8 @@ class MainWindow(QMainWindow):
                     key = QShortcut(QKeySequence(shortcut),self.table)
                     key.setContext(Qt.WidgetShortcut)
                     key.activated.connect(lambda:item.trigger() if item.isEnabled() else None)
+                    item.setShortcut(QKeySequence(shortcut))  # Affiché dans le menu ; actif depuis la liste.
+                    item.setShortcutContext(Qt.WidgetShortcut)
                 else:
                     item.setShortcut(shortcut)
             (menu or actions).addAction(item)
@@ -254,9 +262,17 @@ class MainWindow(QMainWindow):
             if needs_message:
                 self.message_actions.append(item)
             return item
-        action('Rédiger', self.compose, 'Ctrl+N', menu=file_menu, icon_name='plus')
+        # Fichier : créer, retrouver ce qui est enregistré sur ce PC, quitter.
+        action('Nouveau message', self.compose, 'Ctrl+N', menu=file_menu, icon_name='plus')
         file_menu.addSeparator()
-        # Répondre et transférer exigent un seul message ; les autres actions acceptent une sélection multiple.
+        action('Brouillons enregistrés sur ce PC…', self.open_draft, menu=file_menu, icon_name='file-pen-line')
+        action('Copies envoyées sur ce PC…', self.open_sent_copy, menu=file_menu, icon_name='send')
+        action('Enregistrer le message (.eml)…', self.export_sent_copy, menu=file_menu, icon_name='download')
+        action('Boîte d’envoi…', self.open_outbox, menu=file_menu, icon_name='clock')
+        file_menu.addSeparator()
+        action('Quitter', self.request_quit, 'Ctrl+Q', menu=file_menu)
+        # Message : répondre, état, rangement, indésirables. Le menu clic droit reprend exactement ce menu.
+        # Répondre, transférer et l’original exigent un seul message ; les autres actions acceptent une sélection.
         self.single_actions = [
             action('Répondre', lambda: self.compose('reply'), 'Ctrl+R', True, icon_name='reply'),
             action('Répondre à tous', lambda: self.compose('reply_all'), 'Ctrl+Shift+R', True, icon_name='reply-all'),
@@ -264,43 +280,39 @@ class MainWindow(QMainWindow):
             action('Ouvrir dans une fenêtre', self.open_in_window, 'Ctrl+O', True, icon_name='layout-panel-left'),
             action('Imprimer…', self.reader.print_message, 'Ctrl+P', True, icon_name='file-text')]
         actions.addSeparator()
-        action('Lu / non lu', self.toggle_read, needs_message=True, icon_name='mail')
-        action('Étoiler', self.toggle_star, needs_message=True, icon_name='star')
+        action('Marquer comme lu / non lu', self.toggle_read, 'Ctrl+U', True, icon_name='mail')
+        action('Suivre / ne plus suivre', self.toggle_star, 'Ctrl+Shift+G', True, icon_name='star')
         actions.addSeparator()
-        action('Déplacer', lambda: self.move('move'), needs_message=True, icon_name='folder')
+        action('Déplacer…', lambda: self.move('move'), 'Ctrl+Shift+V', True, icon_name='folder')
         action('Archiver', lambda: self.move('archive'), needs_message=True, icon_name='archive')
         action('Reporter…', self.snooze, 'Ctrl+Shift+Z', True, icon_name='alarm-clock')
         action('Supprimer', lambda: self.move('trash'), 'Delete', True, icon_name='trash-2')
         actions.addSeparator()
-        self.mark_all_action = action('Tout marquer comme lu', self.mark_all_read, 'Ctrl+Shift+U', icon_name='check')
         junk_menu = actions.addMenu('Courrier indésirable')
         action('Signaler comme spam', lambda: self.report_junk(), 'Ctrl+Shift+J', True, menu=junk_menu, icon_name='shield-alert')
         action('Bloquer l’expéditeur', lambda: self.report_junk(block=True), needs_message=True, menu=junk_menu, icon_name='ban')
         action('Ce n’est pas un spam', lambda: self.report_junk(trust=True), needs_message=True, menu=junk_menu, icon_name='shield-check')
         action('Créer une règle à partir du message…', self.create_rule_from_message, needs_message=True, icon_name='filter')
-        folder_menu = accounts_menu.addMenu('Dossier')
+        self.single_actions.append(action('Afficher l’original (en-têtes)…', self.show_original, needs_message=True, icon_name='file-text'))
+        # Dossier : tout ce qui concerne le dossier affiché.
         self.folder_actions = {
             'create': action('Nouveau dossier…', lambda: self.manage_folder('create'), menu=folder_menu, icon_name='folder'),
             'rename': action('Renommer le dossier…', lambda: self.manage_folder('rename'), menu=folder_menu, icon_name='file-pen-line'),
             'delete': action('Supprimer le dossier…', lambda: self.manage_folder('delete'), menu=folder_menu, icon_name='trash-2'),
             'empty': action('Vider le dossier…', self.empty_folder, menu=folder_menu, icon_name='trash-2')}
-        action('Brouillons locaux', self.open_draft, menu=file_menu, icon_name='file-pen-line')
-        action('Envoyés locaux', self.open_sent_copy, menu=file_menu, icon_name='send')
-        action('Exporter .eml', self.export_sent_copy, menu=file_menu, icon_name='download')
-        action('Envois programmés…', self.open_outbox, menu=file_menu, icon_name='clock')
-        file_menu.addSeparator()
-        action('Quitter', self.request_quit, 'Ctrl+Q', menu=file_menu)
-        action('Ajouter un compte', self.add_account, menu=accounts_menu, icon_name='plus')
-        action('Compte', self.edit_account, menu=accounts_menu, icon_name='settings-2')
+        folder_menu.addSeparator()
+        self.mark_all_action = action('Tout marquer comme lu', self.mark_all_read, 'Ctrl+Shift+U', menu=folder_menu, icon_name='check')
+        # Comptes : ajouter, et une seule page pour les paramètres et la suppression.
+        action('Ajouter un compte…', self.add_account, menu=accounts_menu, icon_name='plus')
         action('Gérer les comptes…', lambda: self.preferences('Comptes'), menu=accounts_menu, icon_name='settings-2')
-        self.delete_account_action = action('Supprimer le compte…', self.delete_account, menu=accounts_menu, icon_name='trash-2')
-        self.offline_action = action('Hors ligne',self.offline.click,menu=accounts_menu)
+        # Outils : actualiser, mode hors ligne, réglages.
+        action('Actualiser', self.refresh_all, 'F5', menu=tools_menu, icon_name='refresh-cw')
+        self.offline_action = action('Travailler hors ligne', self.offline.click, menu=tools_menu)
         self.offline_action.setCheckable(True)
         self.offline.toggled.connect(self.offline_action.setChecked)
-        action('Synchroniser', self.sync_now, 'F5', menu=tools_menu, icon_name='refresh-cw')
         tools_menu.addSeparator()
-        action('Préférences', self.preferences, 'Ctrl+,', menu=tools_menu, icon_name='settings-2')
-        action('Rechercher des mises à jour', lambda: self.updates.check(manual=True), menu=tools_menu, icon_name='download')
+        action('Préférences…', self.preferences, 'Ctrl+,', menu=tools_menu, icon_name='settings-2')
+        action('Rechercher des mises à jour…', lambda: self.updates.check(manual=True), menu=tools_menu, icon_name='download')
         action('À propos de Smail', self.about, menu=tools_menu, icon_name='circle-help')
         action('Rechercher', self.search.setFocus, 'Ctrl+F', menu=view_menu, icon_name='search')
         action('Palette de commandes', self.open_palette, 'Ctrl+K', menu=view_menu, icon_name='command')
@@ -340,7 +352,7 @@ class MainWindow(QMainWindow):
         self.folders.viewport().installEventFilter(self)
         self.folders.customContextMenuRequested.connect(self.show_folder_menu)
         self.add.clicked.connect(self.add_account)
-        self.refresh.clicked.connect(self.load_folders)
+        self.refresh.clicked.connect(self.refresh_all)
         self.account_box.currentIndexChanged.connect(self.load_folders)
         self.folders.currentRowChanged.connect(self.folder_changed)
         self.table.verticalScrollBar().valueChanged.connect(lambda value: self.maybe_load_more())
@@ -364,8 +376,8 @@ class MainWindow(QMainWindow):
         self.reader.forwardRequested.connect(lambda:self.trigger_command('Transférer'))
         self.reader.archiveRequested.connect(lambda:self.trigger_command('Archiver'))
         self.reader.deleteRequested.connect(lambda:self.trigger_command('Supprimer'))
-        self.reader.starRequested.connect(lambda:self.trigger_command('Étoiler'))
-        self.reader.readRequested.connect(lambda:self.trigger_command('Lu / non lu'))
+        self.reader.starRequested.connect(lambda:self.trigger_command('Suivre / ne plus suivre'))
+        self.reader.readRequested.connect(lambda:self.trigger_command('Marquer comme lu / non lu'))
         self.reader.threadMessageRequested.connect(self.open_thread_message)
         self.reader.unsubscribeRequested.connect(self.unsubscribe)
         self.reader.inviteAnswered.connect(self.answer_invite)
@@ -392,7 +404,7 @@ class MainWindow(QMainWindow):
             self.tray.setToolTip('Smail')
             menu = QMenu(self)
             menu.addAction('Ouvrir Smail', self.show_normal)
-            menu.addAction('Synchroniser', self.sync_now)
+            menu.addAction('Actualiser', self.refresh_all)
             menu.addAction('Quitter', self.request_quit)
             self.tray.setContextMenu(menu)
             self.tray.activated.connect(lambda reason: self.show_normal() if reason == QSystemTrayIcon.DoubleClick else None)
@@ -422,6 +434,29 @@ class MainWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
 
+    def external_request(self, payload):
+        """Demande d’un second lancement de Smail (raccourci, lien mailto:) : Smail revient au premier plan."""
+        self.show_normal()
+        if isinstance(payload.get('mailto'), str):
+            self.open_mailto(payload['mailto'])
+
+    def open_mailto(self, url):
+        """Lien mailto: (navigateur, document) : nouveau message prérempli, jamais envoyé sans vous."""
+        from mailclient.core.mailto import parse
+        try:
+            fields = parse(url)
+        except ValueError:
+            self.notify('Lien de messagerie invalide.', kind='error')
+            return
+        if not self.accounts:
+            self.notify('Ajoutez d’abord un compte pour écrire ce message.', kind='error')
+            return
+        account = self.account() or self.accounts[0]
+        window = ComposeWindow(self.service, self.accounts, account, fields, parent=self, offline=self.offline.isChecked)
+        self.composers.add(window)
+        window.show()
+        window.raise_()
+
     def show_message_menu(self, position):
         item = self.table.itemAt(position)
         if item is None or self.busy:
@@ -430,10 +465,7 @@ class MainWindow(QMainWindow):
             self.table.setCurrentItem(item)
         self.update_actions()
         menu = QMenu(self.table)
-        for index,action in enumerate(self.message_actions):
-            if index in (3,5,7,11,14):  # Réponse · fenêtre et impression · états · rangement · indésirables · règles
-                menu.addSeparator()
-            menu.addAction(action)
+        menu.addActions(self.message_menu.actions())  # Même contenu et mêmes groupes que le menu Message.
         menu.exec(self.table.viewport().mapToGlobal(position))
         menu.deleteLater()
 
@@ -537,7 +569,7 @@ class MainWindow(QMainWindow):
             return
         accounts = list(self.accounts)
         self.run_and_reload(lambda: sum(self.service.apply_filters_now(account) for account in accounts),
-                            lambda count: f'Règles appliquées : {count} message(s) traité(s).')
+                            lambda n: f'Règles appliquées : {count(n, "message traité", "messages traités")}.')
 
     def answer_invite(self, partstat):
         """Réponse à une invitation : e-mail iTIP (METHOD:REPLY) à l’organisateur, après confirmation."""
@@ -643,7 +675,7 @@ class MainWindow(QMainWindow):
             return
         def operation():
             return sum(self.service.mark_all_read(account, folder) for account,folder in targets)
-        self.run_and_reload(operation, lambda count: f'{count} message(s) marqué(s) comme lu(s).')
+        self.run_and_reload(operation, lambda n: f'{count(n, "message marqué", "messages marqués")} comme lu{"s" if n > 1 else ""}.')
 
     def empty_folder(self):
         current = self.current_folder()
@@ -660,7 +692,7 @@ class MainWindow(QMainWindow):
                                QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel) != QMessageBox.Yes:
             return
         account = self.account()
-        self.run_and_reload(lambda: self.service.empty_folder(account, name), lambda count: f'{count} message(s) supprimé(s) définitivement.')
+        self.run_and_reload(lambda: self.service.empty_folder(account, name), lambda n: f'{count(n, "message supprimé", "messages supprimés")} définitivement.')
 
     def manage_folder(self, operation):
         account = self.account()
@@ -722,11 +754,13 @@ class MainWindow(QMainWindow):
         self.account_box.blockSignals(True)
         self.account_box.clear()
         if self.accounts:
-            self.account_box.addItem('Tous les comptes — Réception unifiée', 'unified')
+            self.account_box.addItem('Tous les comptes', 'unified')
+            self.account_box.setItemData(0, 'Réception unifiée de tous les comptes', Qt.ToolTipRole)
         for account in self.accounts:
             secure = account.imap.mode != 'Aucun' and account.smtp.mode != 'Aucun'
             self.account_box.addItem(icon('lock-keyhole' if secure else 'lock-keyhole-open',self.appearance.colors['muted' if secure else 'warning']),
-                                     f'{account.name} — {account.email}',account.id)
+                                     account.name or account.email,account.id)
+            self.account_box.setItemData(self.account_box.count()-1, account.email, Qt.ToolTipRole)
         index = self.account_box.findData(previous)
         self.account_box.setCurrentIndex(index if index >= 0 else 1 if self.accounts else -1)
         self.account_box.blockSignals(False)
@@ -823,7 +857,6 @@ class MainWindow(QMainWindow):
 
     def update_actions(self):
         self.offline_action.setEnabled(self.offline.isEnabled())
-        self.delete_account_action.setEnabled(not self.busy and bool(self.accounts))
         selected, single = bool(self.selected_rows()), self.selected_row() is not None
         for action in self.message_actions:
             action.setEnabled(not self.busy and (single if action in self.single_actions else selected))
@@ -845,6 +878,24 @@ class MainWindow(QMainWindow):
             self.search.setText(dialog.query())
             self.new_search()
 
+    def show_original(self):
+        """Message › Afficher l’original : en-têtes et verdict SPF / DKIM / DMARC (copie locale du message lu)."""
+        import base64
+        row = self.selected_row()
+        if row is None:
+            return
+        payload = self.database.cache_get('body', self.service.body_key(row))
+        if not payload:
+            self.notify('Ouvrez d’abord le message (il n’est pas encore téléchargé).', kind='error')
+            return
+        from mailclient.ui.original_dialog import OriginalDialog
+        OriginalDialog(base64.b64decode(payload), row.get('subject', ''), self).exec()
+
+    def refresh_all(self):
+        """« Actualiser » (bouton et F5) : dossiers et liste rechargés, puis synchronisation hors ligne."""
+        self.load_folders()
+        self.sync_now()
+
     def set_cache_status(self, text):
         """Ligne d’information sous l’en-tête : masquée quand elle est vide (sinon un grand espace vide)."""
         self.cache_status.setText(text)
@@ -861,8 +912,9 @@ class MainWindow(QMainWindow):
             self.connection.setToolTip('Smail se connecte à vos serveurs. Pour travailler sans connexion : Comptes › Hors ligne.')
 
     def notify(self, text, action=None, callback=None, kind='info'):
-        """Message important : notification flottante (avec action éventuelle) et barre d’état."""
-        self.statusBar().showMessage(text, 15_000)
+        """Message important : notification flottante (avec action éventuelle). La barre d’état n’en garde pas de
+        doublon ; elle sert aux informations d’état (synchronisation, filtres)."""
+        self.statusBar().clearMessage()
         self.toast.show_message(text, action, callback, kind)
 
     def failure(self, message):
@@ -964,6 +1016,18 @@ class MainWindow(QMainWindow):
         self.filter_buttons['Non lus'].setVisible(not own)
         self.page_filter = 'Tous'
         self.filter_buttons['Tous'].setChecked(True)
+        self.update_local_drafts()
+
+    def update_local_drafts(self):
+        """Bouton « N brouillons enregistrés sur ce PC » affiché dans le dossier Brouillons."""
+        from mailclient.ui.folder_list import kind
+        current = self.current_folder()
+        drafts = 0
+        if current is not None and kind(*current)[1] == 'file-pen-line':
+            account = self.account()
+            drafts = sum(1 for draft in self.database.cache_list('draft') if draft.get('account') == account.id)
+        self.local_drafts_button.setText(f'{count(drafts, "brouillon enregistré", "brouillons enregistrés")} sur ce PC — ouvrir')
+        self.local_drafts_button.setVisible(bool(drafts))
 
     def new_search(self):
         self.page = 0
@@ -997,17 +1061,17 @@ class MainWindow(QMainWindow):
         if self.list_all_folders:
             return
         loaded, conversations = len(self.rows), self.table.count()
-        grouped = f' · {conversations} conversation(s)' if conversations != loaded else ''
+        grouped = f' · {count(conversations, "conversation")}' if conversations != loaded else ''
         if self.loading_more:
             text = 'Chargement des messages plus anciens…'
         elif not self.total:
             text = 'Aucun message'
         elif loaded < self.total and not self.list_exhausted:
-            text = f'{loaded} sur {self.total} message(s) — faites défiler pour la suite{grouped}'
+            text = f'{loaded} sur {count(self.total, "message")} — faites défiler pour la suite{grouped}'
         elif loaded < self.total:
-            text = f'{loaded} sur {self.total} message(s) — la suite n’est pas en cache{grouped}'
+            text = f'{loaded} sur {count(self.total, "message")} — la suite n’est pas en cache{grouped}'
         else:
-            text = f'{self.total} message(s){grouped}'
+            text = f'{count(self.total, "message")}{grouped}'
         self.page_label.setText(text)
 
     def can_load_more(self):
@@ -1088,7 +1152,7 @@ class MainWindow(QMainWindow):
                 for row in self.rows:  # Dossier d’origine visible dans la liste.
                     row['preview'] = f'[{labels.get(row["folder"], row["folder"])}] ' + (row.get('preview') or '')
                 self.render_rows()
-                self.page_label.setText(f'{len(self.rows)} résultat(s) dans tous les dossiers' +
+                self.page_label.setText(f'{count(len(self.rows), "résultat")} dans tous les dossiers' +
                                         (' — les 100 plus récents' if result.get('truncated') else ''))
             # Ligne d’information affichée seulement quand elle apprend quelque chose : recherche ou copie locale.
             if query:
@@ -1369,7 +1433,7 @@ class MainWindow(QMainWindow):
             if restored == expected:
                 self.notify('Déplacement annulé : messages remis à leur place.')
             else:
-                self.notify(f'Déplacement annulé pour {restored} message(s) sur {expected} ; les autres sont restés '
+                self.notify(f'Déplacement annulé pour {restored} message{"s" if restored > 1 else ""} sur {expected} ; les autres sont restés '
                             'dans le dossier de destination.', kind='error')
         def failed(message):
             self.failure('Annulation impossible : ' + message)
@@ -1464,7 +1528,7 @@ class MainWindow(QMainWindow):
             return
         label = next((label for name, label in self.folder_data if name == target), target)
         self.mutate(None, plan=[(account, rows, 'move', target)])
-        self.statusBar().showMessage(f'{len(rows)} message(s) déplacé(s) vers « {label} ».')
+        self.statusBar().showMessage(f'{count(len(rows), "message déplacé", "messages déplacés")} vers « {label} ».')
 
     def displayed_account(self):
         if self.thread_rows and self.thread_account:
@@ -1605,7 +1669,7 @@ class MainWindow(QMainWindow):
         if self.quitting:
             return
         if count and self.tray and self.database.setting('notifications', True):
-            self.tray.showMessage('Smail', f'{count} nouveau(x) message(s)', QSystemTrayIcon.Information, 6000)
+            self.tray.showMessage('Smail', 'Nouveau message' if count == 1 else f'{count} nouveaux messages', QSystemTrayIcon.Information, 6000)
         self.statusBar().showMessage('Synchronisation terminée. Les derniers messages sont disponibles hors ligne.')
         from datetime import datetime
         self.last_sync = datetime.now()
@@ -1632,7 +1696,7 @@ class MainWindow(QMainWindow):
         def operation():
             events = scheduler.process_snoozes(self.service, accounts)
             copied = scheduler.retry_sent_copies(self.service, accounts) if retry_copies else 0
-            return events + ([('copied', f'{copied} message(s) envoyé(s)', '')] if copied else [])
+            return events + ([('copied', count(copied, 'message envoyé', 'messages envoyés'), '')] if copied else [])
         def done(events):
             self.due_running = False
             if not events:
@@ -1791,8 +1855,6 @@ class MainWindow(QMainWindow):
         self.account_cards.setVisible(self.appearance.variant == 2)
         self.account_chips.setVisible(self.appearance.variant == 3)
         self.shortcut_hint.setVisible(self.appearance.variant == 3)
-        for shortcut in self.quick_keys:
-            shortcut.setEnabled(self.appearance.variant == 3)
         self.splitter.setSizes({1:[230,430,740],2:[270,420,710],3:[210,475,715]}[self.appearance.variant])
         self.reader.set_dark(self.appearance.dark)
         self.table.doItemsLayout()
@@ -1880,7 +1942,7 @@ class MainWindow(QMainWindow):
         if not self.busy:
             self.list_stack.setCurrentIndex(0 if visible else 2)
         if value != 'Tous':
-            self.statusBar().showMessage(f'{visible} message(s) visible(s) — filtre limité aux messages chargés.')
+            self.statusBar().showMessage(f'{count(visible, "message visible", "messages visibles")} — filtre limité aux messages chargés.')
         self.refresh_headers()
         self.update_actions()
 

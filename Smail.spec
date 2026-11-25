@@ -21,11 +21,12 @@ version_info = VSVersionInfo(
 from PyInstaller.utils.hooks import collect_data_files
 # Base des fuseaux horaires (invitations de calendrier) : Windows n’en fournit pas à Python.
 tz_datas = collect_data_files('tzdata')
+spell_datas = collect_data_files('spellchecker', includes=['resources/fr.json.gz'])  # Dictionnaire français seul.
 a = Analysis([str(root / 'mailclient' / 'main.py')], pathex=[str(root)],
              binaries=[], datas=[
                  (str(root / 'mailclient' / 'ui' / 'styles'), 'mailclient/ui/styles'),
                  (str(root / 'mailclient' / 'ui' / 'assets'), 'mailclient/ui/assets'),
-             ] + tz_datas, hiddenimports=['keyring.backends.Windows', 'tzdata'],
+             ] + tz_datas + spell_datas, hiddenimports=['keyring.backends.Windows', 'tzdata', 'spellchecker'],
              hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=[])
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='Smail',

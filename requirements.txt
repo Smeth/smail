@@ -3,3 +3,4 @@ keyring>=25,<26
 cryptography>=43
 bleach>=6.2,<7
 tzdata>=2024.1
+pyspellchecker>=0.8,<1

@@ -2,6 +2,12 @@
 
 ## Non publié
 
+- Correcteur d’orthographe en français dans la rédaction : fautes soulignées, suggestions et « Ajouter au dictionnaire » au clic droit (dictionnaire local, aucune connexion).
+- Smail comme messagerie par défaut : un lien « mailto: » ouvre un nouveau message prérempli (Préférences › Général › Définir Smail comme messagerie par défaut…). Un second lancement de Smail est transmis à la copie déjà ouverte.
+- Message › Afficher l’original : en-têtes complets et verdict SPF / DKIM / DMARC, pour comprendre un classement en spam.
+- Pièces jointes reçues : « Tout enregistrer… » dans un dossier (rien n’est écrasé, fichiers dangereux sur accord).
+- Menus réorganisés : nouveau menu Dossier ; Comptes › Ajouter / Gérer ; Outils › Actualiser (F5, recharge et synchronise) et Travailler hors ligne ; « Suivre » remplace « Étoiler » partout ; raccourcis Ctrl+U (lu / non lu), Ctrl+Maj+G (suivre), Ctrl+Maj+V (déplacer) ; J, K, E, S dans tous les styles ; le menu clic droit reprend le menu Message.
+- Textes accordés (« 1 message », « 5 messages ») ; colonne de gauche « Compte » avec le nom seul ; dossier Brouillons : bouton vers les brouillons enregistrés sur ce PC ; plus de doublon entre notification et barre d’état.
 - Filtres de la liste : retour à « Tous » à chaque changement de dossier (un filtre conservé faisait paraître le dossier vide) ; « Non lus » masqué dans Envoyés et Brouillons.
 - Liste des messages : un message non lu se distingue d’un coup d’œil (expéditeur et objet en gras, point bleu plus grand) ; les messages lus sont estompés.
 - En-tête : bouton thème clair / sombre après les paramètres ; bouton « Commandes » retiré (Ctrl+K ou menu Affichage) ; plus d’espace vide sous l’en-tête. Menu Affichage : « Passer au thème clair / sombre » selon le thème actuel.

@@ -33,6 +33,16 @@ def main():
     app.setApplicationVersion(__version__)
     app.setWindowIcon(QIcon(str(Path(__file__).parent / 'ui' / 'assets' / 'smail.ico')))
     directory = data_directory()
+    from mailclient.core.mailto import is_mailto
+    arguments = sys.argv[1:]
+    mailto = next((value for value in arguments if is_mailto(value)), None)  # « Smail.exe --mailto mailto:… » ou « mailto:… ».
+    instance = None
+    if '--smoke-test' not in arguments:
+        from mailclient.ui.single_instance import SingleInstance
+        instance = SingleInstance(str(directory))
+        if instance.forward({'mailto': mailto} if mailto else {'show': True}):
+            return 0  # Smail est déjà ouvert : la demande lui est transmise.
+        instance.listen()
     logger = configure(directory)
     install_excepthook(logger)
     try:
@@ -44,6 +54,11 @@ def main():
         return 1
     logger.info('Démarrage de l’application %s', __version__)
     window.show()
+    if instance is not None:
+        instance.received.connect(window.external_request)
+    if mailto:
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, lambda: window.open_mailto(mailto))
     if '--smoke-test' in sys.argv:
         from PySide6.QtCore import QTimer
         # Vérifie aussi les imports dynamiques du coffre dans le build gelé.
@@ -52,6 +67,10 @@ def main():
         except Exception:
             window.close()
             return 2
+        from mailclient.ui.spelling import Speller
+        if not Speller().available:  # Dictionnaire du correcteur absent du build.
+            window.close()
+            return 3
         from mailclient.core.parser import Mail
         window.reader.display(Mail('', '', 'Diagnostic', '', text='Test de lecture', html='<p>Test de lecture</p>'))
         QTimer.singleShot(500, app.quit)

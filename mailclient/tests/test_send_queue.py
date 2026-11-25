@@ -91,7 +91,7 @@ def test_send_closes_composer_and_shows_progress(window):
     window.state.release.set()
     assert process_until(lambda: not queue.busy())
     assert window.state.sent == ['Rapport'] and scheduler.outbox(window.database) == []
-    assert window.statusBar().currentMessage() == 'Message « Rapport » envoyé.'
+    assert window.toast.text.text() == 'Message « Rapport » envoyé.' and not window.toast.isHidden()
     assert queue.widget.isHidden() and ('append', 'Sent', False) in window.imap.calls  # Copie dans Envoyés.
     assert window.database.cache_get('draft', composer.id) is None
 

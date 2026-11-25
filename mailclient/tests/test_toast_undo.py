@@ -52,7 +52,7 @@ def test_toast_shows_action_and_runs_it_once(window):
     toast = window.toast
     assert not toast.isHidden() and toast.text.text() == '3 messages déplacés dans « Corbeille ».'
     assert toast.action.text() == 'Annuler' and not toast.action.isHidden()
-    assert window.statusBar().currentMessage() == '3 messages déplacés dans « Corbeille ».'
+    assert window.statusBar().currentMessage() == ''  # Pas de doublon dans la barre d’état.
     assert toast.y() + toast.height() <= toast.host.height()  # Dans la fenêtre, en bas.
     toast.action.click()
     toast.action.click()
@@ -74,4 +74,4 @@ def test_undo_move_restores_and_reports(window, monkeypatch):
     monkeypatch.setattr(window.service, 'restore', lambda account, group, target: 1)
     window.undo_move(moves)
     assert process_until(lambda: not window.busy)
-    assert window.toast.text.text().startswith('Déplacement annulé pour 1 message(s) sur 2')
+    assert window.toast.text.text().startswith('Déplacement annulé pour 1 message sur 2')

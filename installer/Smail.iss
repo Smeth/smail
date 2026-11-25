@@ -44,6 +44,19 @@ Source: "..\dist\Smail\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 Name: "{autoprograms}\Smail"; Filename: "{app}\Smail.exe"
 Name: "{autodesktop}\Smail"; Filename: "{app}\Smail.exe"; Tasks: desktopicon
 
+[Registry]
+; Liens « mailto: » : Smail est proposé comme messagerie dans Paramètres › Applications par défaut
+; (le choix reste à l’utilisateur, Windows l’exige). Clés de l’utilisateur, retirées à la désinstallation.
+Root: HKCU; Subkey: "Software\Classes\Smail.mailto"; ValueType: string; ValueName: ""; ValueData: "Lien de messagerie (Smail)"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Smail.mailto"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Smail.mailto\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\Smail.exe,0"
+Root: HKCU; Subkey: "Software\Classes\Smail.mailto\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\Smail.exe"" --mailto ""%1"""
+Root: HKCU; Subkey: "Software\Clients\Mail\Smail"; ValueType: string; ValueName: ""; ValueData: "Smail"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Clients\Mail\Smail\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "Smail"
+Root: HKCU; Subkey: "Software\Clients\Mail\Smail\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "Client mail de bureau Windows (IMAP/SMTP)"
+Root: HKCU; Subkey: "Software\Clients\Mail\Smail\Capabilities\URLAssociations"; ValueType: string; ValueName: "mailto"; ValueData: "Smail.mailto"
+Root: HKCU; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "Smail"; ValueData: "Software\Clients\Mail\Smail\Capabilities"; Flags: uninsdeletevalue
+
 [Run]
 Filename: "{app}\Smail.exe"; Description: "{cm:LaunchProgram,Smail}"; Flags: nowait postinstall skipifsilent
 ; Mise à jour automatique (installation silencieuse lancée par Smail avec /RELAUNCH=1) : Smail redémarre.

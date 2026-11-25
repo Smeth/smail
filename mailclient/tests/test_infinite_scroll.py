@@ -60,7 +60,7 @@ def test_older_messages_load_when_scrolling_to_the_bottom(tmp_path, monkeypatch)
         assert '99 sur 130' in window.page_label.text()
         bar.setValue(bar.maximum())
         assert process_until(lambda: len(window.rows) == 130 and not window.loading_more)
-        assert window.page_label.text() == '130 message(s)'
+        assert window.page_label.text() == '130 messages'
         bar.setValue(bar.maximum())
         process_until(lambda: False, 0.2)
         assert requested == [0, 1, 2]  # Tout est chargé : plus aucune requête.

@@ -57,7 +57,7 @@ def test_style_switch_persists_without_changing_models(window):
         assert window.appearance.variant == variant
         assert window.database.setting('ui_style',1) == variant
         assert window.rows is original
-        assert all(key.isEnabled() == (variant == 3) for key in window.quick_keys)
+        assert all(key.isEnabled() for key in window.quick_keys)  # J, K, E, S dans tous les styles.
     window.toggle_theme()
     assert window.database.setting('theme') == 1
     window.density_box.setCurrentText('Aérée')

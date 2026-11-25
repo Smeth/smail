@@ -120,6 +120,8 @@ class ComposeWindow(QDialog):
         self.body.setMinimumHeight(100)
         self.body.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Expanding)
         self.body.setPlaceholderText('Écrivez votre message…')
+        from mailclient.ui.spelling import install as install_spelling
+        install_spelling(self.body, getattr(service, 'db', None))  # Fautes soulignées, suggestions au clic droit.
         self.body.setAccessibleName('Corps du message')
         self.body.setTabChangesFocus(True)
         self.format_bar = FormatBar(self.body, self.appearance)

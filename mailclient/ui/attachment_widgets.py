@@ -100,8 +100,9 @@ class AttachmentDelegate(QStyledItemDelegate):
         painter.setFont(font)
         painter.setPen(QColor(colors['muted']))
         painter.drawText(text_rect.translated(0, 18), Qt.AlignLeft | Qt.AlignVCenter, parts[1] if len(parts)>1 else '')
-        close = remove_area(option.rect)
-        icon('x', colors['muted'], 14).paint(painter, close.adjusted(4, 4, -4, -4), Qt.AlignCenter)
+        if getattr(self.parent(), 'removable', True):  # Rédaction seulement : pas de × dans un message reçu.
+            close = remove_area(option.rect)
+            icon('x', colors['muted'], 14).paint(painter, close.adjusted(4, 4, -4, -4), Qt.AlignCenter)
         if option.state & QStyle.State_HasFocus:
             painter.setPen(QPen(QColor(colors['accent']), 2, Qt.DotLine))
             painter.setBrush(Qt.NoBrush)
@@ -117,8 +118,9 @@ class AttachmentGrid(QListWidget):
     imageAdded = Signal(QImage)
     removeRequested = Signal(int)  # × d’une étiquette, ou touche Suppr.
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, removable=True):
         super().__init__(parent)
+        self.removable = removable
         self.setViewMode(QListView.IconMode)
         self.setMovement(QListView.Static)
         self.setResizeMode(QListView.Adjust)
@@ -150,7 +152,7 @@ class AttachmentGrid(QListWidget):
 
     def mouseReleaseEvent(self, event):
         index = self.indexAt(event.position().toPoint())
-        if index.isValid() and remove_area(self.visualRect(index)).contains(event.position().toPoint()):
+        if self.removable and index.isValid() and remove_area(self.visualRect(index)).contains(event.position().toPoint()):
             self.removeRequested.emit(index.row())
             event.accept()
             return
@@ -188,7 +190,7 @@ class AttachmentGrid(QListWidget):
                 if not image.isNull():
                     self.imageAdded.emit(image)
             event.accept()
-        elif event.key() in (Qt.Key_Delete, Qt.Key_Backspace) and self.currentRow() >= 0:
+        elif self.removable and event.key() in (Qt.Key_Delete, Qt.Key_Backspace) and self.currentRow() >= 0:
             self.removeRequested.emit(self.currentRow())
             event.accept()
         else:

@@ -19,10 +19,10 @@ def test_filters_write_operators_the_parser_understands():
 def test_dialog_round_trip_and_clear():
     from mailclient.tests.test_ui import APP  # noqa: F401
     from mailclient.ui.search_dialog import SearchDialog
-    dialog = SearchDialog('de:léa objet:"point projet" a:pj est:étoilé après:2026-11-01')
+    dialog = SearchDialog('de:léa objet:"point projet" a:pj est:étoilé après:2026-11-01')  # Ancien mot compris.
     assert dialog.sender.text() == 'léa' and dialog.subject.text() == 'point projet'
     assert dialog.attachment.isChecked() and dialog.starred.isChecked() and dialog.since_on.isChecked()
-    assert dialog.query() == 'de:léa objet:"point projet" a:pj est:étoilé après:2026-11-01'
+    assert dialog.query() == 'de:léa objet:"point projet" a:pj est:suivi après:2026-11-01'
     dialog.clear()
     assert dialog.query() == ''
     for text in ('', 'budget', 'est:nonlu', 'de:léa'):  # Recherche vide ou sans « a:pj » : plantait en 1.2.0.

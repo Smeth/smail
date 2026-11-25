@@ -34,6 +34,14 @@
         Square44x44Logo="Assets\Square44x44Logo.png">
         <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
       </uap:VisualElements>
+      <Extensions>
+        <!-- Liens « mailto: » : Smail proposé comme messagerie par défaut (choix de l’utilisateur). -->
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="mailto">
+            <uap:DisplayName>Smail</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+      </Extensions>
     </Application>
   </Applications>
 

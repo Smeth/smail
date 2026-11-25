@@ -80,7 +80,7 @@ class MessageList(QListWidget):
                 for item in items if isinstance(item.data(Qt.UserRole), MessageRow) for row in item.data(Qt.UserRole).rows]
         data = QMimeData()
         data.setData(DRAG_MIME, json.dumps(keys).encode('utf-8'))
-        data.setText(f'{len(keys)} message(s)')
+        data.setText(count(len(keys), 'message'))
         return data
     def selectRow(self, index):
         self.setCurrentRow(index)
@@ -110,3 +110,8 @@ def date_group(stamp: float, now=None) -> str:
     if (day.year, day.month) == (today.year, today.month):
         return 'Plus tôt ce mois-ci'
     return f'{MONTHS[day.month - 1]} {day.year}'
+
+
+def count(number: int, singular: str, plural: str | None = None) -> str:
+    """« 1 message », « 5 messages » : accord en nombre au lieu de « message(s) »."""
+    return f'{number} {singular if abs(number) < 2 else (plural or singular + "s")}'

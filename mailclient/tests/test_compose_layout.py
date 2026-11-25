@@ -66,7 +66,12 @@ def test_reader_has_one_empty_prompt_and_menus_are_connected(tmp_path):
     reader = window.reader
     assert reader.headers.text() == '' and reader.headers.isHidden()
     assert reader.empty_message.isVisible()
-    assert [action.text() for action in window.menuBar().actions()] == ['Fichier','Message','Affichage','Comptes','Outils']
+    assert [action.text() for action in window.menuBar().actions()] == ['Fichier','Message','Dossier','Affichage','Comptes','Outils']
+    # Vocabulaire et points de suspension cohérents ; « … » quand une fenêtre s’ouvre.
+    texts = {action.text() for action in window.command_actions}
+    assert {'Nouveau message', 'Suivre / ne plus suivre', 'Marquer comme lu / non lu', 'Déplacer…', 'Actualiser',
+            'Travailler hors ligne', 'Ajouter un compte…', 'Gérer les comptes…', 'Afficher l’original (en-têtes)…'} <= texts
+    assert not texts & {'Rédiger', 'Étoiler', 'Synchroniser', 'Compte', 'Brouillons locaux', 'Envoyés locaux'}
     assert window.table.contextMenuPolicy() == Qt.CustomContextMenu
     assert all(not action.isEnabled() for action in window.message_actions)
     window.set_busy(True)

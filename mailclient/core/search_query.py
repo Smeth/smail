@@ -13,7 +13,7 @@ from email.utils import parsedate_to_datetime
 MONTHS = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
 FIELD_ALIASES = {'de': 'sender', 'from': 'sender', 'à': 'to', 'a': 'to', 'to': 'to', 'pour': 'to',
                  'objet': 'subject', 'subject': 'subject', 'sujet': 'subject'}
-HELP = ('Opérateurs : de:nom · à:nom · objet:mot · a:pj · est:nonlu / est:étoilé · après:2026-11-01 · avant:01/12/2026 · '
+HELP = ('Opérateurs : de:nom · à:nom · objet:mot · a:pj · est:nonlu / est:suivi · après:2026-11-01 · avant:01/12/2026 · '
         '"expression exacte"')
 
 

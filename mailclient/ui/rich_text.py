@@ -121,6 +121,14 @@ class RichTextEdit(QTextEdit):
         self.document().setDocumentMargin(6)
         self.apply_link_color()
 
+    def contextMenuEvent(self, event):
+        """Clic droit : suggestions du correcteur d’orthographe en tête du menu habituel, s’il est activé."""
+        if getattr(self, 'speller', None) is not None:
+            from mailclient.ui.spelling import context_menu
+            context_menu(self, event)
+        else:
+            super().contextMenuEvent(event)
+
     def apply_link_color(self):
         """Liens dans la couleur d’accent du thème (la palette Qt par défaut est peu lisible sur nos fonds)."""
         palette = QApplication.palette()

@@ -21,7 +21,7 @@ def build_query(words='', sender='', recipient='', subject='', attachment=False,
     if unread:
         parts.append('est:nonlu')
     if starred:
-        parts.append('est:étoilé')
+        parts.append('est:suivi')
     if since:
         parts.append(f'après:{since.isoformat()}')
     if before:
@@ -45,7 +45,7 @@ class SearchDialog(QDialog):
         self.recipient.setPlaceholderText('Nom ou adresse')
         self.attachment = QCheckBox('Avec pièce jointe')
         self.unread = QCheckBox('Non lus seulement')
-        self.starred = QCheckBox('Suivis (étoilés) seulement')
+        self.starred = QCheckBox('Suivis seulement')
         self.attachment.setChecked(bool(query.attachment))  # None (aucun filtre) refusé par Qt : plantage de la 1.2.0.
         self.unread.setChecked(query.unread is True)
         self.starred.setChecked(bool(query.starred))
