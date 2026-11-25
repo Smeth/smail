@@ -1,5 +1,5 @@
 """Rédaction, réponses et brouillons locaux sauvegardés en arrière-plan."""
-from mailclient.i18n import tr
+from mailclient.i18n import tr, N_
 import base64
 import re
 from uuid import uuid4
@@ -114,7 +114,8 @@ class ComposeWindow(QDialog):
         recipient.setContentsMargins(0,0,0,0)
         recipient.addWidget(self.to,1)
         self.recipient_toggles = []
-        for title,field in [('Cc',self.cc),('Cci',self.bcc)]:
+        for title,field in [(N_('Cc'),self.cc),(N_('Cci'),self.bcc)]:
+            title = tr(title)
             toggle = Button(title,self.appearance)
             toggle.setCheckable(True)
             toggle.setToolTip(tr('Afficher ou masquer {title}').format(title=title))
@@ -122,8 +123,8 @@ class ComposeWindow(QDialog):
             recipient.addWidget(toggle)
             self.recipient_toggles.append(toggle)
         form.addRow(tr('À'), recipient)
-        for title, widget in [('Cc',self.cc),('Cci',self.bcc),('Objet',self.subject)]:
-            form.addRow(title,widget)
+        for title, widget in [(N_('Cc'),self.cc),(N_('Cci'),self.bcc),(N_('Objet'),self.subject)]:
+            form.addRow(tr(title),widget)
         form.setRowVisible(self.cc,False)
         form.setRowVisible(self.bcc,False)
         layout.addLayout(form)
@@ -328,7 +329,7 @@ class ComposeWindow(QDialog):
 
     def update_title(self, *_):
         """Titre de la fenêtre : l’objet du message, pour distinguer plusieurs rédactions ouvertes."""
-        self.setWindowTitle((self.subject.text().strip() or 'Nouveau message') + tr(' — Smail'))
+        self.setWindowTitle((self.subject.text().strip() or tr('Nouveau message')) + tr(' — Smail'))
 
     def update_attachment_total(self):
         """« Pièces jointes · 4 · 7,4 Mo », en orange quand le message dépassera 25 Mo une fois encodé."""

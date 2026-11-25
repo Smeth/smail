@@ -1,5 +1,5 @@
 """Visionneuse isolée ; aucun lien ni téléchargement WebEngine autorisé."""
-from mailclient.i18n import tr
+from mailclient.i18n import tr, N_
 from pathlib import Path
 from html.parser import HTMLParser
 from email.utils import parseaddr, parsedate_to_datetime
@@ -84,12 +84,12 @@ def print_document(mail):
     from PySide6.QtGui import QTextDocument
     safe = safe_document(mail, remote_images=False, dark=False)
     body = safe.split('<body>', 1)[-1].rsplit('</body>', 1)[0]
-    rows = [('De', mail.sender), ('À', mail.recipients), ('Cc', mail.cc), ('Date', mail.date)]
+    rows = [(tr('De'), mail.sender), (tr('À'), mail.recipients), (tr('Cc'), mail.cc), (tr('Date'), mail.date)]
     header = ''.join(f'<tr><td style="color:#56657a;padding-right:12px">{name}</td><td>{html_module.escape(value)}</td></tr>'
                      for name, value in rows if value)
     document = QTextDocument()
     document.setDefaultStyleSheet('body{font-family:"Segoe UI",Arial,sans-serif;font-size:11pt}')
-    document.setHtml(f'<h2>{html_module.escape(mail.subject or "(Sans objet)")}</h2><table>{header}</table><hr>{body}'
+    document.setHtml(f'<h2>{html_module.escape(mail.subject or tr("(Sans objet)"))}</h2><table>{header}</table><hr>{body}'
                      + (f'<p style="color:#56657a">{tr("Pièces jointes :")} {html_module.escape(", ".join(a.name for a in mail.attachments))}</p>'
                         if mail.attachments else ''))
     return document
@@ -121,8 +121,9 @@ class MailView(QWidget):
         layout.setSpacing(10)
         self.action_buttons = []
         self.more_menu = QMenu(self)
-        for name,title,signal in [('archive','Archiver',self.archiveRequested),('trash-2','Supprimer',self.deleteRequested),
-                                  ('star','Suivre / ne plus suivre',self.starRequested),('mail','Marquer comme lu / non lu',self.readRequested)]:
+        for name,title,signal in [('archive',N_('Archiver'),self.archiveRequested),('trash-2',N_('Supprimer'),self.deleteRequested),
+                                  ('star',N_('Suivre / ne plus suivre'),self.starRequested),('mail',N_('Marquer comme lu / non lu'),self.readRequested)]:
+            title = tr(title)
             button = Button('',self.theme,name,tooltip=title,parent=self)
             button.hide()
             button.clicked.connect(lambda checked=False,s=signal:s.emit())
@@ -239,8 +240,8 @@ class MailView(QWidget):
         self.invite_card.box.addLayout(invite_row)
         invite_buttons = QHBoxLayout()
         self.invite_buttons = {}
-        for partstat,text,role in (('ACCEPTED','Accepter','Primary'),('TENTATIVE','Provisoire','Secondary'),('DECLINED','Refuser','Secondary')):
-            button = Button(text,self.theme,role=role,tooltip=tr('Envoie votre réponse à l’organisateur'))
+        for partstat,text,role in (('ACCEPTED',N_('Accepter'),'Primary'),('TENTATIVE',N_('Provisoire'),'Secondary'),('DECLINED',N_('Refuser'),'Secondary')):
+            button = Button(tr(text),self.theme,role=role,tooltip=tr('Envoie votre réponse à l’organisateur'))
             button.clicked.connect(lambda checked=False,value=partstat:self.inviteAnswered.emit(value))
             invite_buttons.addWidget(button)
             self.invite_buttons[partstat] = button
@@ -541,13 +542,13 @@ class MailView(QWidget):
             self.invite_card.hide()
             return
         invite = self.invite
-        title = invite.summary or 'Invitation'
+        title = invite.summary or tr('Invitation')
         self.invite_title.setText((tr('Événement annulé : ') if invite.cancelled else tr('Invitation : ')) + title)
         details = [invites.when(invite)]
         if invite.location:
-            details.append('Lieu : ' + invite.location)
+            details.append(tr('Lieu : ') + invite.location)
         if invite.organizer:
-            details.append('Organisateur : ' + (f'{invite.organizer_name} <{invite.organizer}>' if invite.organizer_name else invite.organizer))
+            details.append(tr('Organisateur : ') + (f'{invite.organizer_name} <{invite.organizer}>' if invite.organizer_name else invite.organizer))
         self.invite_details.setText('\n'.join(details))
         for button in self.invite_buttons.values():
             button.setVisible(invite.answerable)
@@ -584,7 +585,7 @@ class MailView(QWidget):
             return
         from PySide6.QtPrintSupport import QPrintDialog, QPrinter
         printer = QPrinter(QPrinter.HighResolution)
-        printer.setDocName(self.mail.subject or 'Message')
+        printer.setDocName(self.mail.subject or tr('Message'))
         dialog = QPrintDialog(printer, self)
         dialog.setWindowTitle(tr('Imprimer le message'))
         if dialog.exec():

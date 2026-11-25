@@ -1699,7 +1699,7 @@ class MainWindow(QMainWindow):
         if self.busy or not self.local_copy:
             self.statusBar().showMessage(tr('Ouvrez d’abord une copie dans Envoyés locaux.'))
             return
-        path, _ = QFileDialog.getSaveFileName(self, tr('Exporter le message déjà envoyé'), 'message.eml', 'Message e-mail (*.eml)')
+        path, _ = QFileDialog.getSaveFileName(self, tr('Exporter le message déjà envoyé'), 'message.eml', tr('Message e-mail (*.eml)'))
         if not path:
             return
         import base64

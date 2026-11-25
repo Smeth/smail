@@ -1,5 +1,5 @@
 """Règles de tri, expéditeurs bloqués ou approuvés : éditeur de règle et page des préférences."""
-from mailclient.i18n import tr
+from mailclient.i18n import tr, N_
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QVBoxLayout, QWidget)
@@ -126,9 +126,9 @@ class FiltersPage(QWidget):
         self.rules.itemDoubleClicked.connect(lambda item: self.edit_rule())
         box.addWidget(self.rules)
         row = QHBoxLayout()
-        for text, icon_name, slot in (('Ajouter…', 'plus', self.add_rule), ('Modifier…', 'file-pen-line', self.edit_rule),
-                                      ('Supprimer', 'trash-2', self.delete_rule), ('Appliquer maintenant', 'filter', self.run_now)):
-            button = Button(text, self.theme, icon_name, 'Secondary')
+        for text, icon_name, slot in ((N_('Ajouter…'), 'plus', self.add_rule), (N_('Modifier…'), 'file-pen-line', self.edit_rule),
+                                      (N_('Supprimer'), 'trash-2', self.delete_rule), (N_('Appliquer maintenant'), 'filter', self.run_now)):
+            button = Button(tr(text), self.theme, icon_name, 'Secondary')
             button.clicked.connect(slot)
             row.addWidget(button)
             if text == 'Appliquer maintenant':

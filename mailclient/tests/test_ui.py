@@ -4,7 +4,7 @@ os.environ.setdefault('QTWEBENGINE_CHROMIUM_FLAGS', '--disable-gpu')
 import time
 import pytest
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QThread
+from PySide6.QtCore import QThread, QThreadPool
 from mailclient.storage.database import Database
 from mailclient.core.tls_policy import TLSPolicy
 from mailclient.core.sync import Runner
@@ -20,6 +20,17 @@ def close_webengine_readers():
     for widget in APP.allWidgets():
         if isinstance(widget, MailView):
             widget.shutdown()
+    APP.processEvents()
+
+def dispose(*widgets):
+    """Détruit les fenêtres d’un test (sinon leurs minuteries et threads survivent : plantage aléatoire en CI)."""
+    from shiboken6 import delete, isValid
+    for widget in widgets:
+        if isValid(widget):
+            if hasattr(widget, 'reader'):
+                widget.reader.shutdown()
+            widget.close()
+            delete(widget)
     APP.processEvents()
 
 class FakeSecrets:
@@ -44,15 +55,15 @@ def test_ui_cleartext_confirmation_and_ports(tmp_path):
     assert dialog.values()[0].imap.mode == 'Aucun'
     dialog.servers['imap'][2].setValue(1143)
     assert dialog.values()[0].imap.port == 1143
-    window = MainWindow(db, FakeSecrets(), TLSPolicy(db))
+    window = MainWindow(db, FakeSecrets(), TLSPolicy(db), auto_load=False)  # Ni réseau ni synchronisation.
     window.show()
     APP.processEvents()
     assert window.isVisible()
-    window.close()
+    dispose(window, dialog)
 
 def test_network_task_runs_off_main_and_callback_on_main(tmp_path):
     db = Database(tmp_path / 'settings.db')
-    window = MainWindow(db, FakeSecrets(), TLSPolicy(db))
+    window = MainWindow(db, FakeSecrets(), TLSPolicy(db), auto_load=False)
     runner = Runner(window, TLSPolicy(db))
     results = []
     runner.run(lambda: QThread.currentThread() == APP.thread(),
@@ -63,6 +74,11 @@ def test_network_task_runs_off_main_and_callback_on_main(tmp_path):
         APP.processEvents()
         time.sleep(0.01)
     assert results == [(False, True)]
+    deadline = time.monotonic() + 5
+    while QThreadPool.globalInstance().activeThreadCount() and time.monotonic() < deadline:
+        APP.processEvents()  # Tâche terminée avant de détruire la fenêtre.
+        time.sleep(0.01)
+    dispose(window)
 
 def test_certificate_dialog_defaults_to_cancel():
     from mailclient.core.tls_policy import CertificateAlert

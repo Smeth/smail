@@ -102,7 +102,13 @@ db = Database(Path(sys.argv[1]) / 'settings.db')
 db.save(ME)
 window = MainWindow(db, None, TLSPolicy(db), auto_load=False)
 dialog = SettingsDialog(db, window)
+from mailclient.ui.compose_window import ComposeWindow
+from PySide6.QtWidgets import QLabel, QAbstractButton
+composer = ComposeWindow(window.service, [ME], ME, parent=window)
+compose = [w.text() for w in composer.findChildren(QLabel) + composer.findChildren(QAbstractButton) if w.text()]
 print(json.dumps(dict(
+    compose=compose,
+    reader=[a.text() for a in window.reader.more_menu.actions()],
     menus=[a.text() for a in window.menuBar().actions()],
     filters=[b.text() for b in window.filter_buttons.values()],
     pages=[dialog.nav.item(i).text() for i in range(dialog.nav.count())],
@@ -122,3 +128,6 @@ def test_the_interface_is_in_english(tmp_path):
         assert text.replace('&', '') in english or not any(ch in text for ch in 'éèàùçÉ'), text
     assert shown['filters'] == ['All', 'Unread', 'Attachments']
     assert shown['pages'][0] == 'General' and 'Accounts' in shown['pages']
+    # Libellés venant de listes (« Objet », « Cci ») : longtemps oubliés par la conversion.
+    assert {'Subject', 'Bcc', 'Send'} <= set(shown['compose']) and not {'Objet', 'Cci', 'Envoyer'} & set(shown['compose'])
+    assert 'Archive' in shown['reader'] and 'Archiver' not in shown['reader']
