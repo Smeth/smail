@@ -2,6 +2,9 @@
 
 ## Non publié
 
+## 1.3.1 — 2026-11-25
+
+
 Correction importante : un message ouvert est maintenant marqué comme lu, dans Smail et sur le serveur. Initiales colorées des expéditeurs et groupes de dates repliables.
 
 - Initiales colorées des expéditeurs dans la liste (tous les styles) et dans la lecture : une couleur stable par adresse, sans aucune photo cherchée en ligne.
