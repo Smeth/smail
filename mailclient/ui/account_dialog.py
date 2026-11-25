@@ -28,7 +28,7 @@ class AccountDialog(QDialog):
         self.oauth_cancelled = threading.Event()
         self.busy = False
         self.setWindowTitle(tr('Ajouter un compte'))
-        self.appearance, outer, layout = dialog_layout(self,tr('Paramètres du compte') if account else tr('Ajouter un compte'),tr('Vos accès et la sécurité de chaque serveur.'),(960,800))
+        self.appearance, outer, layout = dialog_layout(self,tr('Paramètres du compte') if account else tr('Ajouter un compte'),tr('Vos accès et la sécurité de chaque serveur.'),(760,640))
         form = QFormLayout()
         form.setSpacing(10)
         self.name, self.address, self.password = QLineEdit(), QLineEdit(), QLineEdit()

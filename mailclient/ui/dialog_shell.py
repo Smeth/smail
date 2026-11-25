@@ -19,8 +19,12 @@ def appearance():
 def dialog_layout(dialog: QDialog, title: str, subtitle: str, size=(900,760)):
     """Structure visuelle du Dialog de mockups/dialogs.py, sans données fictives."""
     theme = appearance()
-    dialog.resize(*size)
     dialog.setMinimumSize(620,480)
+    screen = (dialog.parentWidget() or dialog).screen() or QApplication.primaryScreen()
+    if screen is not None:  # Jamais plus grand que l’écran (portables 1366 × 768 notamment).
+        area = screen.availableGeometry()
+        size = (min(size[0], int(area.width() * .9)), min(size[1], int(area.height() * .85)))
+    dialog.resize(max(size[0], 620), max(size[1], 480))
     outer = QVBoxLayout(dialog)
     margin = {1:20,2:28,3:18}[theme.variant]
     outer.setContentsMargins(margin,margin,margin,margin)

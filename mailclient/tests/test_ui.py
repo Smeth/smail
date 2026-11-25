@@ -327,3 +327,19 @@ def test_main_window_load_read_star_move_and_offline(tmp_path, monkeypatch):
     assert process_until(lambda: not window.busy)
     assert window.offline.isChecked()
     window.close()
+
+
+def test_forward_copies_the_message_without_quote_marks():
+    """Transférer recopie le message tel quel sous « Message transféré », sans « > » ni « … a écrit : »."""
+    from types import SimpleNamespace
+    from mailclient.ui.compose_window import reply_fields
+    mail = SimpleNamespace(text='Bonjour,\nVoici le devis.', html='', subject='Devis', sender='Léa <lea@x.fr>',
+                           date='25/11/2026 09:00', recipients='moi@y.fr', cc='', reply_to='', message_id='<1@x.fr>',
+                           references='', attachments=[])
+    account = SimpleNamespace(email='moi@y.fr', signature='')
+    fields = reply_fields(mail, account, 'forward')
+    assert fields['subject'] == 'Tr: Devis' and fields['to'] == ''
+    assert '>' not in fields['body'].replace('<lea@x.fr>', '') and 'a écrit' not in fields['body']
+    assert '---------- Message transféré ----------\nDe : Léa <lea@x.fr>' in fields['body']
+    assert fields['body'].endswith('Objet : Devis\nÀ : moi@y.fr\n\nBonjour,\nVoici le devis.')
+    assert '> Bonjour,' in reply_fields(mail, account, 'reply')['body']  # La réponse cite toujours.

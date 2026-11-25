@@ -25,6 +25,16 @@ from shiboken6 import isValid
 
 SIZE_WARNING = 25_000_000  # Limite courante des messageries (Gmail, Outlook), encodage compris.
 
+def forwarded(mail, text):
+    """Message transféré recopié tel quel (sans « > ») sous un en-tête, comme Outlook et Gmail."""
+    lines = [tr('---------- Message transféré ----------'), tr('De : {value}').format(value=mail.sender),
+             tr('Date : {value}').format(value=mail.date), tr('Objet : {value}').format(value=mail.subject),
+             tr('À : {value}').format(value=mail.recipients)]
+    if mail.cc:
+        lines.append(tr('Cc : {value}').format(value=mail.cc))
+    return '\n'.join(lines) + '\n\n' + text
+
+
 def reply_fields(mail, account, mode):
     text = mail.text or bleach.clean(mail.html, tags=set(), strip=True)
     quoted = '\n'.join('> ' + line for line in text.splitlines())
@@ -47,7 +57,8 @@ def reply_fields(mail, account, mode):
     ids = re.findall(r'<[^<>\s]+>', mail.message_id)
     refs = re.findall(r'<[^<>\s]+>', mail.references)
     return dict(to=to, cc=cc, bcc='', subject=subject,
-                body=f'\n\n{account.signature}\n\n' + tr('Le {date}, {sender} a écrit :').format(date=mail.date, sender=mail.sender) + f'\n{quoted}',
+                body=f'\n\n{account.signature}\n\n' + (forwarded(mail, text) if mode == 'forward' else
+                     tr('Le {date}, {sender} a écrit :').format(date=mail.date, sender=mail.sender) + f'\n{quoted}'),
                 reply_id=ids[0] if ids and mode != 'forward' else '',
                 references=' '.join((refs + ids)[-20:]) if mode != 'forward' else '',
                 attachments=mail.attachments if mode == 'forward' else [])

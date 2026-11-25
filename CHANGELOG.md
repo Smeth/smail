@@ -2,6 +2,11 @@
 
 ## Non publié
 
+Smail parle maintenant anglais : la langue suit celle de Windows, ou se choisit dans Préférences › Général. Lancement possible à l’ouverture de session Windows, et un message transféré est désormais recopié tel quel.
+
+- Version anglaise de toute l’interface (menus, fenêtres, messages, boutons standard de Windows) ; langue Automatique / Français / English dans Préférences › Général, appliquée au redémarrage. Le correcteur d’orthographe et l’installateur suivent la langue. Vos réglages et dossiers ne changent pas.
+- Transférer : le message est recopié tel quel sous un en-tête « Message transféré » (De, Date, Objet, À), sans « > » devant chaque ligne.
+- Fenêtre « Ajouter un compte » plus compacte ; les fenêtres de Smail ne dépassent plus la taille de l’écran (portables).
 - Lancement de Smail à l’ouverture de session Windows, réduit dans la zone de notification (Préférences › Général) ; retiré à la désinstallation. Version Store : tâche de démarrage gérée dans les paramètres de Windows.
 
 ## 1.3.1 — 2026-11-25
