@@ -2,6 +2,9 @@
 
 ## Non publié
 
+## 1.4.0 — 2026-11-25
+
+
 Smail parle maintenant anglais : la langue suit celle de Windows, ou se choisit dans Préférences › Général. Lancement possible à l’ouverture de session Windows, et un message transféré est désormais recopié tel quel.
 
 - Version anglaise de toute l’interface (menus, fenêtres, messages, boutons standard de Windows) ; langue Automatique / Français / English dans Préférences › Général, appliquée au redémarrage. Le correcteur d’orthographe et l’installateur suivent la langue. Vos réglages et dossiers ne changent pas.
