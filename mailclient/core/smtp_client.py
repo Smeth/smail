@@ -60,6 +60,14 @@ def build_message(account, to: str, cc: str, bcc: str, subject: str, body: str, 
         message.add_alternative(calendar, subtype='calendar', params={'method': 'REPLY'})
     for attachment in attachments:
         content_type = mimetypes.guess_type(attachment.name)[0] or 'application/octet-stream'
+        if content_type == 'message/rfc822':
+            # Message transféré en pièce jointe : partie message/rfc822 (jamais en base64, interdit par la RFC 2046).
+            from email import message_from_bytes, policy as email_policy
+            try:
+                message.add_attachment(message_from_bytes(attachment.data, policy=email_policy.default), filename=attachment.name)
+                continue
+            except Exception:
+                content_type = 'application/octet-stream'  # Message illisible : joint comme simple fichier.
         major, minor = content_type.split('/', 1)
         message.add_attachment(attachment.data, maintype=major, subtype=minor, filename=attachment.name)
     return message, recipients

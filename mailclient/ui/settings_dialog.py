@@ -73,7 +73,9 @@ class SettingsDialog(QDialog):
         self.notifications.setChecked(self.database.setting('notifications',True))
         self.tray = QCheckBox(tr('Réduire dans la zone de notification à la fermeture (Smail continue de recevoir vos messages)'))
         self.tray.setChecked(self.database.setting('close_to_tray',True))
-        for control in (self.notifications, self.tray):
+        self.backup_reminder = QCheckBox(tr('Me rappeler chaque mois de sauvegarder mes comptes et réglages (Fichier › Sauvegarder)'))
+        self.backup_reminder.setChecked(bool(self.database.setting('backup_reminder', True)))
+        for control in (self.notifications, self.tray, self.backup_reminder):
             box.addWidget(control)
         from mailclient.core import autostart
         from mailclient.core.updater import packaged as store_copy
@@ -85,6 +87,7 @@ class SettingsDialog(QDialog):
             self.autostart.setEnabled(False)
         box.addWidget(self.autostart)
         if store_copy():
+            self.autostart.hide()  # Géré par Windows pour la version Store : seul le bouton reste.
             startup = Button(tr('Gérer le démarrage dans les paramètres de Windows…'),self.appearance_theme,'settings-2','Secondary')
             startup.clicked.connect(lambda: __import__('PySide6.QtGui', fromlist=['QDesktopServices']).QDesktopServices.openUrl(
                 __import__('PySide6.QtCore', fromlist=['QUrl']).QUrl('ms-settings:startupapps')))
@@ -143,8 +146,9 @@ class SettingsDialog(QDialog):
             box.addWidget(button)
         self.style_combo.setCurrentIndex(self.appearance_theme.variant-1)
         self.theme = QComboBox()
-        self.theme.addItems([tr('Clair'),tr('Sombre')])
-        self.theme.setCurrentIndex(int(self.appearance_theme.dark))
+        self.theme.addItems([tr('Clair'),tr('Sombre'),tr('Comme Windows')])
+        self.theme.setCurrentIndex(self.database.setting('theme', 2) if self.database.setting('theme', 2) in (0, 1, 2) else 2)
+        self.theme.setToolTip(tr('« Comme Windows » suit le mode clair ou sombre de Windows ; le contraste élevé de Windows est toujours respecté.'))
         self.density = QComboBox()
         for density in ('Compacte','Normale','Aérée'):  # Valeur enregistrée en français, libellé traduit.
             self.density.addItem(tr(density), density)
@@ -361,7 +365,10 @@ class SettingsDialog(QDialog):
                           (N_('Message suivant / précédent (liste des messages)'),N_('J / K')),(N_('Archiver / suivre (liste des messages)'),N_('E / S')),
                           (N_('Message suivant / précédent de la conversation'),N_('Alt + Bas / Haut')),(N_('Regrouper par conversation'),N_('Ctrl + Maj + T')),
                           (N_('Actualiser'),N_('F5')),(N_('Passer au thème clair / sombre'),N_('Ctrl + Maj + L')),(N_('Changer la densité'),N_('Ctrl + Maj + D')),
-                          (N_('Mise en forme : gras, italique, souligné'),N_('Ctrl + B, I, U')),(N_('Insérer un lien (rédaction)'),N_('Ctrl + Maj + K')),(N_('Envoyer (rédaction)'),N_('Ctrl + Entrée'))]:
+                          (N_('Mise en forme : gras, italique, souligné'),N_('Ctrl + B, I, U')),(N_('Insérer un lien (rédaction)'),N_('Ctrl + Maj + K')),(N_('Envoyer (rédaction)'),N_('Ctrl + Entrée')),
+                          (N_('Tout sélectionner (liste des messages)'),N_('Ctrl + A')),(N_('Ouvrir dans une fenêtre'),N_('Ctrl + O')),
+                          (N_('Imprimer'),N_('Ctrl + P')),(N_('Reporter'),N_('Ctrl + Maj + Z')),(N_('Préférences'),N_('Ctrl + ,')),
+                          (N_('Quitter'),N_('Ctrl + Q'))]:
             row = QHBoxLayout()
             row.addWidget(label(tr(title)))
             row.addStretch()

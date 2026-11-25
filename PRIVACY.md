@@ -33,6 +33,7 @@ Smail se connecte uniquement aux services nécessaires à ce que vous lui demand
 Toutes vos données sont sur votre ordinateur : vous en gardez le contrôle complet.
 
 - **Supprimer un compte** (menu Comptes › Supprimer le compte) efface de ce PC sa configuration, sa copie locale des messages, ses brouillons, ses certificats approuvés et ses mots de passe du Gestionnaire d’identifiants. Vos messages restent sur le serveur de votre fournisseur de messagerie.
+- **Sauvegarder** (Fichier › Sauvegarder les comptes et réglages) crée un fichier chiffré avec le mot de passe que vous choisissez, enregistré là où vous le décidez ; Smail ne l’envoie nulle part. Il ne contient jamais les mots de passe de vos comptes.
 - **Désinstaller Smail** retire le programme. Pour tout effacer, supprimez d’abord vos comptes dans Smail, ou supprimez ensuite le dossier `%LOCALAPPDATA%\SmailDesktop\Smail`.
 
 Les données détenues par votre fournisseur de messagerie (Gmail, Outlook, votre hébergeur…) relèvent de sa propre politique de confidentialité.
@@ -84,6 +85,7 @@ Smail only connects to the services needed for what you ask it to do:
 All your data is on your computer: you keep full control of it.
 
 - **Removing an account** (Accounts › Delete account) deletes from this PC its configuration, its local copy of messages, its drafts, its trusted certificates and its passwords in Credential Manager. Your messages remain on your email provider’s server.
+- **Backing up** (File › Back up accounts and settings) creates a file encrypted with the password you choose, saved where you decide; Smail never sends it anywhere. It never contains your account passwords.
 - **Uninstalling Smail** removes the program. To erase everything, remove your accounts in Smail first, or delete the `%LOCALAPPDATA%\SmailDesktop\Smail` folder afterwards.
 
 Data held by your email provider (Gmail, Outlook, your hosting provider…) is covered by that provider’s own privacy policy.

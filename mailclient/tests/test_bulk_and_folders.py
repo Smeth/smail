@@ -259,3 +259,116 @@ def test_translation_never_creates_two_identical_folder_names():
     assert client_with(TwoSpamFolders()).folders() == [
         ('INBOX', 'Boîte de réception'), ('INBOX.Junk', 'Spam'), ('INBOX.spam', 'spam'),  # Désigné par le serveur.
         ('INBOX.Trash', 'Trash'), ('INBOX.Deleted Items', 'Deleted Items')]  # Aucun désigné : vrais noms.
+
+
+def test_check_boxes_and_bulk_bar(tmp_path, monkeypatch):
+    """Sélection multiple visible : clic sur les initiales = case à cocher ; barre d’actions dès deux messages."""
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QStyleOptionViewItem
+    from mailclient.tests.test_ui import APP, process_until
+    from mailclient.ui.components import MailDelegate
+    from mailclient.ui.main_window import MainWindow
+    db = Database(tmp_path / 'settings.db')
+    account = Account('T', 't@example.com', Server('imap.example.com', 993), Server('smtp.example.com', 465))
+    db.save(account)
+    db.cache_put('folders', account.id, [['INBOX', 'Boîte de réception'], ['Trash', 'Corbeille']], account.id)
+    rows = [dict(uid=uid, uidvalidity='7', sender='x@example.com', subject=f'Sujet {uid}', date='', unread=True,
+                 starred=False, attachment=False) for uid in ('3', '4', '9')]
+    calls = []
+
+    class Client:
+        uidvalidity = '7'
+
+        def folders(self):
+            return [('INBOX', 'Boîte de réception'), ('Trash', 'Corbeille')]
+
+        def messages(self, folder, page, query=''):
+            return [dict(row) for row in rows], len(rows)
+
+        def action(self, folder, uids, validity, action, target=''):
+            calls.append((folder, uids, action))
+    monkeypatch.setattr(MailService, 'client', lambda *args: Client())
+    monkeypatch.setattr(MainWindow, 'read_selected', lambda self: None)  # Pas de lecture : seule la sélection compte.
+    window = MainWindow(db, None, TLSPolicy(db), auto_load=False)
+    window.resize(1200, 800)
+    window.show()
+    window.reload_accounts()
+    assert process_until(lambda: not window.busy and window.table.count() == 3)
+
+    def click_box(row):
+        index = window.table.model().index(row, 0)
+        option = QStyleOptionViewItem()
+        option.rect = window.table.visualRect(index)
+        area = MailDelegate.check_rect(MailDelegate.message_rect(option, index))
+        QTest.mouseClick(window.table.viewport(), Qt.LeftButton, Qt.NoModifier, area.center().toPoint())
+        APP.processEvents()
+
+    window.table.setCurrentRow(0)
+    assert not window.selection_bar.isVisible() and window.filter_bar.isVisible()
+    click_box(2)  # Ajoute le troisième message sans perdre le premier.
+    assert len(window.selected_rows()) == 2 and window.selection_bar.isVisible() and not window.filter_bar.isVisible()
+    assert window.table.itemDelegate().check_all and window.selection_count.text() == '2 sélectionnés'
+    click_box(2)  # Décocher.
+    assert len(window.selected_rows()) == 1 and not window.selection_bar.isVisible()
+    click_box(1)
+    window.select_all_messages()
+    assert len(window.selected_rows()) == 3
+    from PySide6.QtWidgets import QMessageBox
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.Yes)
+    window.selection_buttons[4].click()  # Supprimer : les trois messages vont à la corbeille.
+    assert process_until(lambda: not window.busy and calls)
+    assert calls[0][1] == '3,4,9' and calls[0][2] == 'move'
+    QTest.mouseClick(window.table.viewport(), Qt.LeftButton, Qt.NoModifier, QPoint(5, 5))
+    window.reader.shutdown()
+    window.close()
+    from shiboken6 import delete
+    delete(window)
+    APP.processEvents()
+
+
+def test_marking_read_keeps_the_selection_and_the_list(tmp_path, monkeypatch):
+    """Lu / non lu et suivi : appliqués sur place, sans recharger la liste ni vider la sélection."""
+    from mailclient.tests.test_ui import APP, process_until
+    from mailclient.ui.main_window import MainWindow
+    db = Database(tmp_path / 'settings.db')
+    account = Account('T', 't@example.com', Server('imap.example.com', 993), Server('smtp.example.com', 465))
+    db.save(account)
+    db.cache_put('folders', account.id, [['INBOX', 'Boîte de réception'], ['Junk', 'Spam']], account.id)
+    rows = [dict(uid=uid, uidvalidity='7', sender='x@example.com', subject=f'Sujet {uid}', date='', unread=True,
+                 starred=False, attachment=False) for uid in ('3', '4')]
+    calls = []
+
+    class Client:
+        uidvalidity = '7'
+
+        def folders(self):
+            return [('INBOX', 'Boîte de réception'), ('Junk', 'Spam')]
+
+        def messages(self, folder, page, query=''):
+            return [dict(row) for row in rows], len(rows)
+
+        def action(self, folder, uids, validity, action, target=''):
+            calls.append((uids, action))
+    monkeypatch.setattr(MailService, 'client', lambda *args: Client())
+    monkeypatch.setattr(MainWindow, 'read_selected', lambda self: None)
+    window = MainWindow(db, None, TLSPolicy(db), auto_load=False)
+    window.reload_accounts()
+    assert process_until(lambda: not window.busy and window.table.count() == 2)
+    loads = []
+    monkeypatch.setattr(window, 'load_messages', lambda *args, **kwargs: loads.append(1))
+    window.table.selectAll()
+    APP.processEvents()
+    window.toggle_read()
+    assert process_until(lambda: calls)
+    assert calls == [('3,4', 'read')] and not loads and len(window.selected_rows()) == 2
+    assert not any(row['unread'] for row in window.rows) and not window.busy
+    window.toggle_star()
+    assert process_until(lambda: len(calls) == 2) and calls[-1] == ('3,4', 'star') and len(window.selected_rows()) == 2
+    # « Ce n’est pas un spam » : seulement dans le dossier des indésirables.
+    assert not window.not_junk_action.isEnabled()
+    window.reader.shutdown()
+    window.close()
+    from shiboken6 import delete
+    delete(window)
+    APP.processEvents()

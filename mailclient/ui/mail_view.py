@@ -1,5 +1,7 @@
 """Visionneuse isolée ; aucun lien ni téléchargement WebEngine autorisé."""
+from mailclient.ui.view_models import human_size
 from mailclient.i18n import tr, N_
+from mailclient.ui.components import safe_rich
 from pathlib import Path
 from html.parser import HTMLParser
 from email.utils import parseaddr, parsedate_to_datetime
@@ -11,7 +13,7 @@ from PySide6.QtWebEngineCore import (QWebEnginePage, QWebEngineProfile, QWebEngi
                                     QWebEngineUrlScheme, QWebEngineUrlSchemeHandler, QWebEngineUrlRequestJob)
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from mailclient.core.parser import Mail
-from mailclient.core.html_security import safe_document, dangerous_filename
+from mailclient.core.html_security import safe_document, dangerous_filename, mark_from_internet
 from mailclient.core.unsubscribe import options as unsubscribe_options
 from mailclient.ui.components import label, Button, Banner, Card, IconLabel
 from mailclient.ui.dialog_shell import appearance
@@ -371,7 +373,7 @@ class MailView(QWidget):
         widget.clear()
         for title,extract,unread,tooltip in entries:
             item = QListWidgetItem(('● ' if unread else '') + title + ('\n' + extract if extract else ''))
-            item.setToolTip(tooltip)
+            item.setToolTip(safe_rich(tooltip))
             font = item.font()
             font.setBold(unread)
             item.setFont(font)
@@ -441,26 +443,26 @@ class MailView(QWidget):
         self.metadata.show()
         self.subject.show()
         self.subject.setText(mail.subject or '(Sans objet)')
-        self.subject.setToolTip(mail.subject)
+        self.subject.setToolTip(safe_rich(mail.subject))
         self.fit_subject()
         name,address = parseaddr(mail.sender)
         self.sender_name.setText(name or address or mail.sender)
-        self.sender_name.setToolTip(mail.sender)
+        self.sender_name.setToolTip(safe_rich(mail.sender))
         self.sender_address.setText(address if name else '')
-        self.sender_address.setToolTip(address)
+        self.sender_address.setToolTip(safe_rich(address))
         self.sender_address.setVisible(bool(name and address))
         from mailclient.ui.components import avatar
         initials, color = avatar(mail.sender)
         self.avatar.setText(initials)
         self.avatar.setStyleSheet(f'background: {color}; color: #FFFFFF;')  # Même couleur que dans la liste.
         self.recipient_summary.setText(tr('À : ')+mail.recipients)
-        self.recipient_summary.setToolTip(tr('À : ')+mail.recipients+(tr('\nCc : ')+mail.cc if mail.cc else ''))
+        self.recipient_summary.setToolTip(safe_rich(tr('À : ')+mail.recipients+(tr('\nCc : ')+mail.cc if mail.cc else '')))
         try:
             date = parsedate_to_datetime(mail.date).astimezone().strftime('%d/%m/%Y %H:%M')
         except (TypeError,ValueError,OverflowError):
             date = mail.date
         self.date_label.setText(date)
-        self.date_label.setToolTip(mail.date)
+        self.date_label.setToolTip(safe_rich(mail.date))
         self.empty_message.hide()
         self.tabs.show()
         self.has_remote_images = RemoteImages(safe_document(mail,True,self.dark)).found if mail.html else False
@@ -484,9 +486,8 @@ class MailView(QWidget):
         self.images.setEnabled(self.has_remote_images)
         self.render_html()
         for attachment in mail.attachments:
-            size = f'{len(attachment.data)/1048576:.1f} Mo' if len(attachment.data)>=1048576 else f'{len(attachment.data)/1024:.1f} Ko'
-            item = QListWidgetItem(f'{attachment.name}\n{size.replace(".",",")}')
-            item.setToolTip(attachment.name)
+            item = QListWidgetItem(f'{attachment.name}\n{human_size(len(attachment.data))}')
+            item.setToolTip(safe_rich(attachment.name))
             item.setIcon(icon('shield-alert' if dangerous_filename(attachment.name) else 'file-text',self.theme.colors['muted'],48))
             self.attachments.addItem(item)
         if mail.attachments:
@@ -501,7 +502,7 @@ class MailView(QWidget):
                         item.setIcon(QIcon(QPixmap.fromImage(image)))
                         item.setData(Qt.UserRole,True)
                     if description:
-                        item.setToolTip(item.toolTip()+'\n'+description)
+                        item.setToolTip(safe_rich(mail.attachments[index].name + '\n' + description))
             self.preview_runner.run(lambda:[(i,*thumbnail(a)) for i,a in enumerate(mail.attachments)],done,lambda error:None)
 
     def show_images(self):
@@ -617,6 +618,7 @@ class MailView(QWidget):
             destination = QSaveFile(str(target))
             if destination.open(QIODevice.WriteOnly) and destination.write(attachment.data) == len(attachment.data) \
                     and destination.commit():
+                mark_from_internet(target)
                 saved += 1
             else:
                 destination.cancelWriting()
@@ -624,7 +626,7 @@ class MailView(QWidget):
         message = tr('{saved} pièce{valeur} jointe{valeur} enregistrée{valeur} dans {folder}.').format(saved=saved, valeur="s" if saved > 1 else "", folder=folder)
         if failed:
             message += '\n\n' + tr('Échec pour : ') + ', '.join(failed)
-        QMessageBox.information(self, tr('Pièces jointes'), message)
+        QMessageBox.information(self, tr('Pièces jointes'), safe_rich(message))  # Noms choisis par l’expéditeur.
         return saved
 
     def save_attachment(self):
@@ -648,3 +650,5 @@ class MailView(QWidget):
         if destination.write(attachment.data) != len(attachment.data) or not destination.commit():
             destination.cancelWriting()
             QMessageBox.critical(self, tr('Enregistrement impossible'), tr('Le fichier n’a pas pu être enregistré intégralement.'))
+            return
+        mark_from_internet(path)

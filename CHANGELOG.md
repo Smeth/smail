@@ -2,6 +2,20 @@
 
 ## Non publié
 
+Correctif de sécurité important, sauvegarde et restauration, sélection de plusieurs messages, réponses qui gardent la mise en forme, transfert en pièce jointe, brouillons du serveur et thème qui suit Windows (contraste élevé et taille du texte compris).
+
+- Sécurité : un expéditeur ne peut plus faire interpréter du HTML dans une infobulle ou une boîte de dialogue (au survol d’un message, une « image » sur un partage réseau pouvait transmettre l’empreinte du mot de passe Windows). Les pièces jointes enregistrées portent la marque Internet de Windows (mode protégé d’Office, SmartScreen) ; une soixantaine de types de fichiers dangereux en plus (.iso, .vhd, .one, .xll…). Sur un PC partagé, un autre compte ne peut plus empêcher Smail de démarrer.
+- Sauvegarde et restauration (Fichier) : comptes, préférences, signatures, règles, contacts, brouillons et copies gardés sur ce PC, envois programmés, dans un fichier chiffré par mot de passe. Les mots de passe des comptes n’y figurent jamais. Rappel mensuel (Préférences › Général).
+- Sélection de plusieurs messages : case à cocher au survol des initiales, barre d’actions (tout sélectionner, lu / non lu, archiver, déplacer, supprimer) ; « Tout sélectionner » dans le menu Message.
+- Réponses et transferts qui gardent la mise en forme du message d’origine (tableaux, gras, liens), cité sous votre réponse ; images distantes jamais reprises.
+- Transférer en pièce jointe (message d’origine joint intact, .eml).
+- « Répondu » et « transféré » marqués sur le serveur (visibles aussi dans le webmail et sur le téléphone) et signalés par une flèche dans la liste.
+- Brouillons du serveur : un brouillon commencé ailleurs (webmail, téléphone) se reprend dans Smail ; l’enregistrer remplace l’ancienne version, l’envoyer le retire des Brouillons.
+- Thème « Comme Windows » (par défaut) : suit le mode clair ou sombre de Windows. Contraste élevé et taille du texte de Windows respectés.
+- Marquer lu / non lu et suivre : instantané, sans perdre la sélection ni le message affiché.
+- Enregistrer n’importe quel message en .eml ; menu Aide (raccourcis, confidentialité, assistance) ; premier lancement : l’assistant d’ajout de compte s’ouvre seul ; changer de compte expéditeur change la signature ; plus de confirmation pour mettre à la corbeille (annulable) ; version Store : lancement à l’ouverture de session réduit dans la zone de notification.
+- Corrections de l’interface anglaise (thème, tailles, dossiers, « Fwd: ») et de chemins de menu erronés dans les messages.
+
 ## 1.4.0 — 2026-11-25
 
 

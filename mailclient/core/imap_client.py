@@ -374,6 +374,7 @@ class IMAPClient:
                 attributes, header = items[uid]
                 row = metadata(header)
                 row.update(uid=uid, uidvalidity=self.uidvalidity, starred=b'\\Flagged' in attributes, unread=b'\\Seen' not in attributes,
+                           answered=b'\\Answered' in attributes, forwarded=b'$forwarded' in attributes.lower(),
                            attachment=row['attachment'] or bool(re.search(rb'"(?:ATTACHMENT|FILENAME|NAME)"', attributes, re.I)))
                 rows.append(row)
             return rows, len(ids)
@@ -393,6 +394,9 @@ class IMAPClient:
                 flag = '\\Seen' if action in {'read', 'unread'} else '\\Flagged'
                 operation = '+FLAGS.SILENT' if action in {'read', 'star'} else '-FLAGS.SILENT'
                 status, _ = client.uid('store', uid, operation, f'({flag})')
+            elif action in {'answered', 'forwarded'}:
+                # Répondu / transféré : visible aussi dans le webmail et sur le téléphone ($Forwarded : mot-clé usuel).
+                status, _ = client.uid('store', uid, '+FLAGS.SILENT', '(\\Answered)' if action == 'answered' else '($Forwarded)')
             elif action == 'move':
                 if not target or target == folder:
                     raise ValueError(tr('Choisissez un autre dossier de destination.'))
@@ -494,7 +498,7 @@ class IMAPClient:
             if sock is not None:
                 sock.settimeout(self.APPEND_TIMEOUT)
             try:
-                status, _ = client.append(quote_folder(folder), '(\\Draft)' if draft else '(\\Seen)', None, raw)
+                status, data = client.append(quote_folder(folder), '(\\Draft)' if draft else '(\\Seen)', None, raw)
             finally:
                 if sock is not None:
                     try:
@@ -503,6 +507,9 @@ class IMAPClient:
                         pass  # Session coupée : elle sera fermée et non réutilisée.
             if status != 'OK':
                 raise RuntimeError(tr('Le serveur a refusé l’enregistrement de la copie.'))
+            # UIDPLUS : emplacement de la copie (« [APPENDUID 38505 3955] »), pour la remplacer plus tard.
+            found = re.search(rb'\[APPENDUID (\d+) (\d+)\]', b' '.join(part for part in data or [] if isinstance(part, bytes)))
+            return dict(uidvalidity=found[1].decode(), uid=found[2].decode()) if found else None
 
     def snapshot(self, folder: str, limit: int, cancelled, known=None):
         """Capture du dossier et téléchargement borné des derniers messages."""
@@ -534,7 +541,8 @@ class IMAPClient:
                 if not isinstance(raw, bytes):
                     continue
                 row = metadata(raw)
-                row.update(uid=uid, uidvalidity=self.uidvalidity, unread=b'\\Seen' not in attributes, starred=b'\\Flagged' in attributes)
+                row.update(uid=uid, uidvalidity=self.uidvalidity, unread=b'\\Seen' not in attributes, starred=b'\\Flagged' in attributes,
+                           answered=b'\\Answered' in attributes, forwarded=b'$forwarded' in attributes.lower())
                 rows.append(row)
                 bodies[uid] = raw
             return rows, len(ids), bodies, self.uidvalidity

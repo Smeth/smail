@@ -200,7 +200,7 @@ class MailService:
         else:
             target = filters.special_folder(folders, filters.JUNK_WORDS, source)
             if not target:
-                raise RuntimeError(tr('Dossier des indésirables introuvable sur le serveur. Créez-le (Comptes › Dossier) puis actualisez.'))
+                raise RuntimeError(tr('Dossier des indésirables introuvable sur le serveur. Créez-le (Dossier › Nouveau dossier) puis actualisez.'))
         if rows and source != target:
             self.action(account, rows, 'move', target)
         return target
@@ -422,6 +422,8 @@ class MailService:
                 if uids is None or item['uid'] in uids:
                     if action in {'read', 'unread'}:
                         item['unread'] = action == 'unread'
+                    elif action in {'answered', 'forwarded'}:
+                        item[action] = True
                     else:
                         item['starred'] = action == 'star'
         if action in {'move', 'delete'}:

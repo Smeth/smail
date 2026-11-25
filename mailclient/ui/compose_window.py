@@ -1,25 +1,27 @@
 """Rédaction, réponses et brouillons locaux sauvegardés en arrière-plan."""
+from mailclient.ui.view_models import human_size
 from mailclient.i18n import tr, N_
+from mailclient.ui.components import safe_rich
 import base64
 import re
 from uuid import uuid4
 from email.utils import getaddresses
 import bleach
 from PySide6.QtCore import QTimer, Qt, QSize
-from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
+from PySide6.QtWidgets import (QTextBrowser, QCheckBox, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
     QComboBox, QListWidgetItem, QFileDialog, QLabel, QMessageBox, QWidget, QMenu, QSizePolicy)
 from mailclient.core.parser import Attachment
 from mailclient.core.smtp_client import build_message, send_message, addresses, display_address
 from mailclient.core.sync import Runner
 from mailclient.ui.dialog_shell import appearance
 from mailclient.ui.components import Button, Card, label
-from PySide6.QtGui import QShortcut, QKeySequence, QIcon, QPixmap
+from PySide6.QtGui import QTextCursor, QShortcut, QKeySequence, QIcon, QPixmap
 from mailclient.ui.icons import icon
 from mailclient.ui.attachment_widgets import (AttachmentGrid, ComposeEditor, IMAGE_FILTER,
     read_attachments, thumbnail, clipboard_attachment, local_paths, clipboard_image, CHIP)
 from mailclient.core.html_security import dangerous_filename
 from mailclient.ui.address_completer import AddressCompleter
-from mailclient.ui.rich_text import FormatBar
+from mailclient.ui.rich_text import FormatBar, render
 from PySide6.QtGui import QTextCharFormat
 from shiboken6 import isValid
 
@@ -38,8 +40,9 @@ def forwarded(mail, text):
 def reply_fields(mail, account, mode):
     text = mail.text or bleach.clean(mail.html, tags=set(), strip=True)
     quoted = '\n'.join('> ' + line for line in text.splitlines())
-    prefix = 'Tr: ' if mode == 'forward' else 'Re: '
-    subject = mail.subject if mail.subject.lower().startswith(prefix.lower()) else prefix + mail.subject
+    prefix = tr('Tr: ') if mode == 'forward' else 'Re: '
+    known = ('tr:', 'fwd:', 'fw:', 'trans:') if mode == 'forward' else ('re:', 'réf:', 'ref:')
+    subject = mail.subject if mail.subject.lower().startswith(known) else prefix + mail.subject
     to, cc = '', ''
     if mode != 'forward':
         pairs = getaddresses([mail.reply_to or mail.sender])
@@ -56,12 +59,32 @@ def reply_fields(mail, account, mode):
             cc = ', '.join(extra)
     ids = re.findall(r'<[^<>\s]+>', mail.message_id)
     refs = re.findall(r'<[^<>\s]+>', mail.references)
-    return dict(to=to, cc=cc, bcc='', subject=subject,
+    if (mail.html or '').strip():
+        from mailclient.core.quote import reply_quote
+        quote_html, quote_text = reply_quote(mail, 'forward' if mode == 'forward' else 'reply', text)
+        return dict(mode=mode, to=to, cc=cc, bcc='', subject=subject, body=f'\n\n{account.signature}',
+                    quote_html=quote_html, quote_text=quote_text,
+                    reply_id=ids[0] if ids and mode != 'forward' else '',
+                    references=' '.join((refs + ids)[-20:]) if mode != 'forward' else '',
+                    attachments=mail.attachments if mode == 'forward' else [])
+    return dict(mode=mode, to=to, cc=cc, bcc='', subject=subject,
                 body=f'\n\n{account.signature}\n\n' + (forwarded(mail, text) if mode == 'forward' else
                      tr('Le {date}, {sender} a écrit :').format(date=mail.date, sender=mail.sender) + f'\n{quoted}'),
                 reply_id=ids[0] if ids and mode != 'forward' else '',
                 references=' '.join((refs + ids)[-20:]) if mode != 'forward' else '',
                 attachments=mail.attachments if mode == 'forward' else [])
+
+class QuotePreview(QTextBrowser):
+    """Aperçu en lecture seule du message cité : aucun lien suivi, aucune ressource chargée hors images intégrées."""
+    def __init__(self):
+        super().__init__()
+        self.setOpenLinks(False)
+        self.setOpenExternalLinks(False)
+        self.setFocusPolicy(Qt.ClickFocus)
+
+    def loadResource(self, kind, url):
+        return None  # Ni fichier local, ni partage réseau, ni Internet (le HTML est déjà nettoyé).
+
 
 class ComposeWindow(QDialog):
     def __init__(self, service, accounts, selected=None, fields=None, draft=None, parent=None, offline=None):
@@ -80,6 +103,7 @@ class ComposeWindow(QDialog):
         self._preview_generation = 0
         self._preview_cache = {}
         self.reply_id = self.references = ''
+        self.origin = None
         self.setWindowTitle(tr('Rédiger un message'))
         self.appearance = appearance()
         self.setMinimumSize(580, 500)
@@ -88,7 +112,9 @@ class ComposeWindow(QDialog):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16,16,16,12)
         outer.setSpacing(10)
-        outer.addWidget(label(tr('Nouveau message'), 'MessageTitle'))
+        heading = {'reply': tr('Répondre'), 'reply_all': tr('Répondre à tous'), 'forward': tr('Transférer')}.get(
+            (fields or {}).get('mode'), tr('Brouillon') if draft else tr('Nouveau message'))
+        outer.addWidget(label(heading, 'MessageTitle'))
         content = Card('ComposeCard', 14)
         layout = content.box
         layout.setSpacing(8)
@@ -140,6 +166,16 @@ class ComposeWindow(QDialog):
         self.format_bar = FormatBar(self.body, self.appearance)
         layout.addWidget(self.format_bar)
         layout.addWidget(self.body, 1)
+        # Message d’origine mis en forme (réponse, transfert) : affiché sous la réponse, envoyé tel quel en citation.
+        self.quote_box = QCheckBox(tr('Inclure le message d’origine, avec sa mise en forme'))
+        self.quote_box.setChecked(True)
+        self.quote_view = QuotePreview()
+        self.quote_view.setAccessibleName(tr('Message d’origine cité'))
+        self.quote_view.setMaximumHeight(180)
+        self.quote_box.toggled.connect(self.quote_view.setVisible)
+        self.quote_box.toggled.connect(lambda *_: self.changed())
+        layout.addWidget(self.quote_box)
+        layout.addWidget(self.quote_view)
         self.attachment_panel = QWidget()
         attachment_layout = QVBoxLayout(self.attachment_panel)
         attachment_layout.setContentsMargins(0,0,0,0)
@@ -206,12 +242,21 @@ class ComposeWindow(QDialog):
         self.countdown_timer.setInterval(1000)
         self.countdown_timer.timeout.connect(self.tick_countdown)
         values = draft or fields or dict(body='\n\n' + (self.current_account().signature if self.accounts else ''))
+        self.signature_account = self.current_account().id if self.accounts else None
         for key, widget in [('to', self.to), ('cc', self.cc), ('bcc', self.bcc), ('subject', self.subject)]:
             widget.setText(values.get(key, ''))
         for toggle,field in zip(self.recipient_toggles,(self.cc,self.bcc)):
             toggle.setChecked(bool(field.text()))
         self.fill_body(values, restoring=bool(draft))
         self.reply_id, self.references = values.get('reply_id', ''), values.get('references', '')
+        self.origin = values.get('origin')  # Message auquel on répond / qu’on transfère (drapeau posé après l’envoi).
+        self.server_draft = values.get('server_draft')  # Brouillon du serveur modifié : remplacé, puis retiré à l’envoi.
+        self.quote_html, self.quote_text = values.get('quote_html', ''), values.get('quote_text', '')
+        self.quote_box.setChecked(values.get('quote_included', True))
+        self.quote_box.setVisible(bool(self.quote_html))
+        self.quote_view.setVisible(bool(self.quote_html) and self.quote_box.isChecked())
+        if self.quote_html:
+            self.quote_view.setHtml(self.quote_html)
         if draft:
             self.files = [Attachment(item['name'], item['type'], base64.b64decode(item['data'])) for item in values.get('attachments', [])]
         else:
@@ -241,7 +286,7 @@ class ComposeWindow(QDialog):
     def fill_body(self, values, restoring):
         """Brouillon : restitué avec sa mise en forme. Nouveau message ou réponse : signature du compte,
         mise en forme si elle a été définie ainsi, insérée à sa place habituelle (avant la citation)."""
-        if restoring and values.get('qt_html'):
+        if values.get('qt_html') and (restoring or values.get('server_draft')):
             self.body.setHtml(values['qt_html'])
             return
         body = values.get('body', '')
@@ -269,7 +314,26 @@ class ComposeWindow(QDialog):
         return self.accounts[self.account_box.currentIndex()]
 
     def account_changed(self):
-        self.status.setText(tr('Compte expéditeur changé. Vérifiez la signature avant l’envoi.'))
+        """Autre compte expéditeur : sa signature remplace celle de l’ancien compte, si elle est restée intacte."""
+        previous = next((a for a in self.accounts if a.id == getattr(self, 'signature_account', None)), None)
+        account = self.current_account()
+        self.signature_account = account.id
+        old = (previous.signature or '').strip() if previous else ''
+        text = self.body.toPlainText()
+        position = text.find(old) if old else -1
+        if position >= 0 and text.count(old) == 1:
+            cursor = self.body.textCursor()
+            cursor.setPosition(position)
+            cursor.setPosition(position + len(old), QTextCursor.KeepAnchor)
+            cursor.removeSelectedText()
+            stored = self.service.signature(account) if hasattr(self.service, 'signature') else None
+            if stored and stored.get('qt_html'):
+                self.body.insert_html(cursor, stored['qt_html'])
+            else:
+                cursor.insertText((account.signature or '').strip())
+            self.status.setText(tr('Signature de « {name} » insérée.').format(name=account.name or account.email))
+        else:
+            self.status.setText(tr('Compte expéditeur changé. Vérifiez la signature avant l’envoi.'))
         self.changed()
 
     def changed(self, *_):
@@ -282,7 +346,9 @@ class ComposeWindow(QDialog):
         return dict(id=self.id, account=self.current_account().id, to=self.to.text(), cc=self.cc.text(),
                     bcc=self.bcc.text(), subject=self.subject.text(), body=text, mail_html=mail_html,
                     qt_html=self.body.toHtml() if mail_html else '',
-                    reply_id=self.reply_id, references=self.references)
+                    reply_id=self.reply_id, references=self.references, origin=self.origin, server_draft=self.server_draft,
+                    mail_fragment=render(self.body.document())[0] if self.quote_html else '',
+                    quote_html=self.quote_html, quote_text=self.quote_text, quote_included=self.quote_box.isChecked())
 
     def set_busy(self, busy):
         busy = busy or self._adding_files
@@ -359,10 +425,10 @@ class ComposeWindow(QDialog):
         keep = {id(attachment) for attachment in self.files}
         self._preview_cache = {key:value for key,value in self._preview_cache.items() if key in keep}
         for index,attachment in enumerate(self.files):
-            size = f'{len(attachment.data)/1048576:.1f} Mo' if len(attachment.data) >= 1048576 else f'{len(attachment.data)/1024:.1f} Ko'
-            item = QListWidgetItem(f'{attachment.name}\n{size.replace(".",",")}')
+            item = QListWidgetItem(f'{attachment.name}\n{human_size(len(attachment.data))}')
             item.setSizeHint(CHIP)
-            item.setToolTip(tr('{name}\n{valeur:,} octets').format(name=attachment.name, valeur=len(attachment.data)))
+            item.setData(Qt.UserRole + 1, tr('{name}\n{valeur:,} octets').format(name=attachment.name, valeur=len(attachment.data)))
+            item.setToolTip(safe_rich(item.data(Qt.UserRole + 1)))
             item.setIcon(icon('shield-alert' if dangerous_filename(attachment.name) else 'file-text',self.appearance.colors['muted'],48))
             item.setData(Qt.UserRole,False)
             self.attachments.addItem(item)
@@ -395,7 +461,7 @@ class ComposeWindow(QDialog):
             item.setIcon(QIcon(QPixmap.fromImage(image)))
             item.setData(Qt.UserRole,True)
         if description:
-            item.setToolTip(item.toolTip()+'\n'+description)
+            item.setToolTip(safe_rich((item.data(Qt.UserRole + 1) or '') + '\n' + description))
 
     def choose_files(self, checked=False, images_only=False):
         if self.busy or self.delivered:
@@ -479,9 +545,10 @@ class ComposeWindow(QDialog):
 
     def message(self, state, files, allow_empty=False):
         account = next(a for a in self.accounts if a.id == state['account'])
+        from mailclient.core.quote import merged
+        body, document = merged(state)
         return build_message(account, state['to'], state['cc'], state['bcc'], state['subject'],
-                             state['body'], files, state['reply_id'], state['references'], allow_empty,
-                             html=state.get('mail_html', ''))
+                             body, files, state['reply_id'], state['references'], allow_empty, html=document)
 
     def failure(self, message):
         self.set_busy(False)
@@ -507,7 +574,7 @@ class ComposeWindow(QDialog):
         size = len(message.as_bytes())
         if size > SIZE_WARNING and QMessageBox.warning(
                 self, tr('Message volumineux'),
-                f'Ce message fait {size / 1_000_000:.1f} Mo une fois encodé'.replace('.', ',') + tr(' (les pièces jointes grossissent d’environ un tiers).\n\n'
+                tr('Ce message fait {size} une fois encodé').format(size=human_size(size)) + tr(' (les pièces jointes grossissent d’environ un tiers).\n\n'
                 'Beaucoup de messageries (Outlook, Microsoft 365, messageries d’entreprise) refusent les messages de plus de '
                 '20 à 35 Mo ; Gmail accepte jusqu’à 50 Mo. Selon le destinataire, il risque de ne jamais arriver, et le refus '
                 'n’apparaît que plus tard, par un message d’erreur dans votre boîte de réception.\n\n'
@@ -606,7 +673,7 @@ class ComposeWindow(QDialog):
         self.periodic.stop()
         owner = self.parent()
         if owner is not None and hasattr(owner, 'statusBar'):
-            owner.statusBar().showMessage(tr('Envoi programmé le {moment:%d/%m à %H:%M} (Fichier › Envois programmés).').format(moment=dialog.moment))
+            owner.statusBar().showMessage(tr('Envoi programmé le {moment:%d/%m à %H:%M} (Fichier › Boîte d’envoi).').format(moment=dialog.moment))
         self.close()
 
     def deliver(self, state, files, account):
@@ -665,6 +732,7 @@ class ComposeWindow(QDialog):
             return
         self.set_busy(True)
         offline = self.offline()
+        previous = self.server_draft if draft else None
         def operation():
             if offline:
                 raise RuntimeError(tr('Smail est passé hors ligne. La copie serveur n’a pas été effectuée.'))
@@ -673,15 +741,23 @@ class ComposeWindow(QDialog):
             folder = next((name for name, label in folders if any(word in (name + ' ' + label).casefold() for word in words)), None)
             if not folder:
                 raise RuntimeError(tr('Dossier Brouillons/Envoyés introuvable. La copie locale est conservée.'))
-            self.service.client(account).append(folder, raw, draft)
+            location = self.service.client(account).append(folder, raw, draft)
+            if draft:
+                from mailclient.core.scheduler import remove_server_draft
+                remove_server_draft(self.service, previous)  # Remplace l’ancienne version : pas de doublon.
+                server = f'{account.imap.host}:{account.imap.port}:{account.imap.mode}'
+                return dict(location, account=account.id, folder=folder, server=server) if location else None
             if not draft and self.last_copy_id:
                 copy = self.service.db.cache_get('sent-copy', self.last_copy_id)
                 if copy:
                     copy['server_saved'] = True
                     self.service.db.cache_put('sent-copy', self.last_copy_id, copy)
-        def done(_):
+        def done(location):
             self.set_busy(False)
-            self.status.setText(tr('Copie enregistrée sur le serveur.') if draft else tr('Message envoyé et copie enregistrée.'))
+            if draft:
+                self.server_draft = location  # La prochaine copie remplacera celle-ci.
+            self.status.setText(tr('Brouillon enregistré sur le serveur (il remplace la version précédente).') if draft and previous else
+                                tr('Copie enregistrée sur le serveur.') if draft else tr('Message envoyé et copie enregistrée.'))
             if close_after:
                 self.close()
             elif self.saved_revision != self.revision:

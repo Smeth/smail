@@ -8,7 +8,7 @@ class Dialog(QDialog):
     def __init__(self, theme, title, subtitle, parent=None, size=(800,700)):
         super().__init__(parent)
         self.theme = theme
-        self.setWindowTitle(title + tr(' · Maquette Smail'))
+        self.setWindowTitle(title + tr(' — Smail'))
         self.resize(*size)
         self.setMinimumSize(min(size[0],660), min(size[1],480))
         self.outer = QVBoxLayout(self)

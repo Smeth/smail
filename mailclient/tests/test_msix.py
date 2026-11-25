@@ -64,3 +64,15 @@ def test_store_copy_leaves_updates_to_the_store(tmp_path, monkeypatch):
     assert not manager.enabled()
     manager.check(manual=True)
     assert not manager.checking and 'Microsoft Store' in informed[0]
+
+
+def test_startup_task_launches_smail_minimized():
+    """Ouverture de session (version Store) : entrée dédiée, invisible, qui passe --minimized à Smail."""
+    identity = dict(name='Editeur.Smail', publisher='CN=ABCD-1234', publisher_display_name='Smeth', display_name='Smail')
+    document = xml.dom.minidom.parseString(build_msix.manifest(identity, '1.2.3').encode('utf-8'))
+    startup = next(app for app in document.getElementsByTagName('Application') if app.getAttribute('Id') == 'SmailStartup')
+    assert startup.getAttribute('uap10:Parameters') == '--minimized'
+    assert startup.getElementsByTagName('uap:VisualElements')[0].getAttribute('AppListEntry') == 'none'
+    assert startup.getElementsByTagName('desktop:StartupTask')[0].getAttribute('Enabled') == 'false'
+    main = next(app for app in document.getElementsByTagName('Application') if app.getAttribute('Id') == 'Smail')
+    assert not main.getElementsByTagName('desktop:StartupTask') and main.getElementsByTagName('uap:Protocol')

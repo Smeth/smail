@@ -42,8 +42,10 @@ def decode_files(items) -> list:
 
 def send_and_record(service, account, state, files, progress=None):
     """Envoi SMTP puis copie locale et carnet d’adresses ; renvoie (brut, refusés, id de copie locale)."""
-    message, recipients = build_message(account, state['to'], state['cc'], state['bcc'], state['subject'], state['body'], files,
-                                        state.get('reply_id', ''), state.get('references', ''), html=state.get('mail_html', ''),
+    from mailclient.core.quote import merged
+    body, document = merged(state)  # Réponse puis citation mise en forme de l’original, s’il y en a une.
+    message, recipients = build_message(account, state['to'], state['cc'], state['bcc'], state['subject'], body, files,
+                                        state.get('reply_id', ''), state.get('references', ''), html=document,
                                         calendar=state.get('calendar', ''))
     extra = dict(progress=progress) if progress else {}
     refused = send_message(account, service.oauth.credential(account, 'smtp'), service.tls, message, recipients, **extra)
@@ -154,7 +156,7 @@ def deliver_item(service, account, item, progress=None) -> tuple:
     """Envoie un message de la boîte d’envoi ; renvoie (événement, sujet, détail).
 
     L’état « sending » est enregistré avant SMTP : un arrêt brutal le rend « incertain », jamais renvoyé."""
-    subject = item['state'].get('subject') or '(Sans objet)'
+    subject = item['state'].get('subject') or tr('(Sans objet)')
     item['status'] = 'sending'
     service.db.cache_put('outbox', item['id'], item, account.id)
     try:
@@ -174,6 +176,8 @@ def deliver_item(service, account, item, progress=None) -> tuple:
     else:
         service.db.cache_delete('outbox', item['id'])
         event = ('sent', subject, '')
+    mark_origin(service, item['state'].get('origin'))
+    remove_server_draft(service, item['state'].get('server_draft'))
     if progress:
         progress('copy', 0, 0)
     try:
@@ -183,6 +187,35 @@ def deliver_item(service, account, item, progress=None) -> tuple:
         if event[0] == 'sent':
             event = ('sent', subject, tr('Copie dans Envoyés non effectuée ; une copie locale est conservée.'))
     return event
+
+
+def mark_origin(service, origin) -> None:
+    """Message d’origine d’une réponse ou d’un transfert marqué « répondu » / « transféré » sur le serveur.
+    Au mieux : un refus (serveur sans mots-clés, message déplacé entre-temps) n’affecte jamais l’envoi."""
+    if not origin or origin.get('flag') not in ('answered', 'forwarded'):
+        return
+    account = next((a for a in service.db.accounts() if a.id == origin.get('account')), None)
+    if account is None:
+        return
+    try:
+        service.action(account, [dict(origin)], origin['flag'])
+    except Exception as error:
+        log.info('Drapeau « %s » non posé (%s)', origin['flag'], type(error).__name__)
+
+
+def remove_server_draft(service, draft) -> bool:
+    """Brouillon du serveur envoyé ou remplacé : retiré du dossier Brouillons (au mieux, jamais bloquant)."""
+    if not draft or not draft.get('uid') or not draft.get('uidvalidity'):
+        return False
+    account = next((a for a in service.db.accounts() if a.id == draft.get('account')), None)
+    if account is None:
+        return False
+    try:
+        service.action(account, [dict(draft)], 'delete')
+        return True
+    except Exception as error:
+        log.info('Ancien brouillon du serveur non retiré (%s)', type(error).__name__)
+        return False
 
 
 def outbox(db) -> list:

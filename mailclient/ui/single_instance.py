@@ -10,12 +10,35 @@ from PySide6.QtNetwork import QLocalServer, QLocalSocket
 MAX_MESSAGE = 64 * 1024
 
 
+def instance_secret(directory: str) -> str:
+    """Secret aléatoire propre à ce dossier de données, créé au premier lancement."""
+    import secrets
+    from pathlib import Path
+    path = Path(directory) / 'instance.id'
+    try:
+        value = path.read_text(encoding='ascii').strip()
+        if len(value) == 32:
+            return value
+    except (OSError, UnicodeDecodeError):
+        pass
+    value = secrets.token_hex(16)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(value, encoding='ascii')
+    except OSError:
+        return ''  # Dossier en lecture seule : nom fondé sur le seul chemin, comme avant.
+    return value
+
+
 class SingleInstance(QObject):
     received = Signal(dict)
 
     def __init__(self, key: str, parent=None):
         super().__init__(parent)
-        self.name = 'SmailDesktop-' + hashlib.sha256(key.encode('utf-8')).hexdigest()[:20]
+        # Nom imprévisible pour les autres comptes Windows : il dépend d’un secret rangé dans le dossier de données
+        # (privé à l’utilisateur). Sinon, sur un PC partagé, un autre compte pourrait occuper ce canal le premier
+        # et empêcher Smail de démarrer.
+        self.name = 'SmailDesktop-' + hashlib.sha256((key + '|' + instance_secret(key)).encode('utf-8')).hexdigest()[:20]
         self.server = None
         self.buffers = {}  # Connexion -> octets reçus (une demande arrive parfois en plusieurs morceaux).
 

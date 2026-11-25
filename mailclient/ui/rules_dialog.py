@@ -1,5 +1,6 @@
 """Règles de tri, expéditeurs bloqués ou approuvés : éditeur de règle et page des préférences."""
 from mailclient.i18n import tr, N_
+from mailclient.ui.components import safe_rich
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QVBoxLayout, QWidget)
@@ -85,7 +86,7 @@ class RuleDialog(QDialog):
             for name, folder_label in self.database.cache_get('folders', account.id, []) or []:
                 if name.upper() != 'INBOX' and name not in seen:
                     seen.add(name)
-                    self.target.addItem(folder_label if folder_label == name else f'{folder_label} — {name}', name)
+                    self.target.addItem(tr(folder_label) if tr(folder_label) == name else f'{tr(folder_label)} — {name}', name)
 
     def update_target(self, *_):
         self.target.setEnabled(self.action.currentData() == 'move')
@@ -183,7 +184,7 @@ class FiltersPage(QWidget):
         for rule in self.data['rules']:
             scope = names.get(rule.get('account'), tr('tous les comptes')) if rule.get('account') else tr('tous les comptes')
             item = QListWidgetItem(f'{rule["name"]}  ·  {scope}')
-            item.setToolTip(filters.describe(rule))
+            item.setToolTip(safe_rich(filters.describe(rule)))
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Checked if rule.get('enabled', True) else Qt.Unchecked)
             self.rules.addItem(item)

@@ -72,6 +72,7 @@ class MessageList(QListWidget):
         self.setDragDropMode(QListWidget.DragOnly)
         self.setDefaultDropAction(Qt.MoveAction)
         self.header_clicked = None  # Rappel (groupe) : clic sur un titre de groupe de dates.
+        self.checking = False  # Clic en cours sur une case à cocher (le relâchement ne doit rien sélectionner).
 
     def mousePressEvent(self, event):
         """Clic sur le titre d’un groupe (« HIER », « OCTOBRE 2026 »…) : repli ou dépli, sans sélectionner."""
@@ -83,7 +84,42 @@ class MessageList(QListWidget):
                 self.header_clicked(index.data(GROUP_ROLE))
                 event.accept()
                 return
+        if event.button() == Qt.LeftButton and self.on_check_box(index, event.position()):
+            from PySide6.QtCore import QItemSelectionModel
+            self.checking = True
+            self.selectionModel().setCurrentIndex(index, QItemSelectionModel.NoUpdate)
+            self.selectionModel().select(index, QItemSelectionModel.Toggle)
+            event.accept()
+            return
         super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if self.checking:
+            self.checking = False
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self.checking:  # Pas de glisser-déposer depuis une case à cocher.
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def on_check_box(self, index, position) -> bool:
+        """Le clic tombe-t-il sur les initiales (case à cocher) d’un message ?"""
+        from mailclient.ui.components import MailDelegate
+        if not index.isValid() or not isinstance(index.data(Qt.UserRole), MessageRow) or index.data(__import__('mailclient.ui.components', fromlist=['COLLAPSED_ROLE']).COLLAPSED_ROLE):
+            return False
+        option_rect = self.visualRect(index)
+        from PySide6.QtWidgets import QStyleOptionViewItem
+        option = QStyleOptionViewItem()
+        option.rect = option_rect
+        delegate = self.itemDelegate()
+        if isinstance(delegate, MailDelegate):
+            option, position = delegate.virtual(option, position)  # Taille du texte de Windows.
+        area = MailDelegate.check_rect(MailDelegate.message_rect(option, index))
+        return area.adjusted(-6, -6, 6, 6).contains(position)
 
     def mimeTypes(self):
         return [DRAG_MIME]
@@ -102,6 +138,14 @@ class MessageList(QListWidget):
     def setRowCount(self, count):
         if count == 0:
             self.clear()
+
+
+def human_size(size: int) -> str:
+    """Taille lisible dans la langue de l’interface : « 1,4 Mo » / « 1.4 MB »."""
+    from mailclient.i18n import current, tr
+    text = tr('{valeur:.1f} Mo').format(valeur=size / 1048576) if size >= 1048576 else \
+        tr('{valeur:.1f} Ko').format(valeur=max(size, 1) / 1024)
+    return text.replace('.', ',') if current() == 'fr' else text
 
 
 MONTHS = (N_('Janvier'), N_('Février'), N_('Mars'), N_('Avril'), N_('Mai'), N_('Juin'), N_('Juillet'), N_('Août'),

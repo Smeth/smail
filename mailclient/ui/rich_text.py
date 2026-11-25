@@ -16,8 +16,7 @@ from mailclient.ui.components import Button
 SAFE_LINK = re.compile(r'^(?:https?://[^\s<>"]+|mailto:[^\s<>"]+)$', re.IGNORECASE)
 ORDERED = {QTextListFormat.Style.ListDecimal, QTextListFormat.Style.ListLowerAlpha, QTextListFormat.Style.ListUpperAlpha,
            QTextListFormat.Style.ListLowerRoman, QTextListFormat.Style.ListUpperRoman}
-EMAIL_BODY = ('<!DOCTYPE html><html><head><meta charset="utf-8"></head>'
-              '<body style="font-family: \'Segoe UI\', Arial, sans-serif; font-size: 14px; line-height: 1.45;">{}</body></html>')
+from mailclient.core.quote import EMAIL_BODY  # noqa: E402  (même enveloppe pour la réponse et la citation)
 
 
 def _inline(block):

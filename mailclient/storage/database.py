@@ -146,6 +146,27 @@ class Database:
         with self.lock, self.connect() as db:
             return [self._decode(bytes(row[0])) for row in db.execute('SELECT data FROM cache WHERE kind=?', (kind,))]
 
+    def cache_rows(self, kinds) -> list[tuple]:
+        """(type, clé hachée, compte, valeur) des entrées de ces types : pour la sauvegarde (les clés restent hachées)."""
+        marks = ','.join('?' * len(kinds))
+        with self.lock, self.connect() as db:
+            rows = list(db.execute(f'SELECT c.kind, c.key, o.account, c.data FROM cache c LEFT JOIN cache_owner o '
+                                   f'ON o.kind=c.kind AND o.key=c.key WHERE c.kind IN ({marks})', tuple(kinds)))
+        return [(kind, key, account, self._decode(bytes(data))) for kind, key, account, data in rows]
+
+    def cache_put_hashed(self, kind: str, hashed: str, value, account: str | None = None) -> None:
+        """Comme cache_put, avec une clé déjà hachée (restauration d’une sauvegarde) ; chiffrée selon le réglage actuel."""
+        payload = json.dumps(value, ensure_ascii=False).encode('utf-8')
+        payload = b'E' + self._fernet().encrypt(payload) if self._cache_encrypted() else b'P' + payload
+        with self.lock, self.connect() as db:
+            db.execute('INSERT OR REPLACE INTO cache VALUES (?,?,?)', (kind, hashed, payload))
+            if account:
+                db.execute('INSERT OR REPLACE INTO cache_owner VALUES (?,?,?)', (kind, hashed, account))
+
+    def settings_items(self) -> dict:
+        with self.connect() as db:
+            return {key: json.loads(value) for key, value in db.execute('SELECT key, value FROM settings')}
+
     def cache_delete(self, kind: str, key: str) -> None:
         with self.lock, self.connect() as db:
             db.execute('DELETE FROM cache WHERE kind=? AND key=?', (kind, self._cache_key(key)))

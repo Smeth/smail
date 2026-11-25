@@ -2,13 +2,13 @@
 
 Chaque message passe par la boîte d’envoi locale (scheduler) : délai d’annulation, puis envoi un par un.
 Les règles de sûreté restent celles de la boîte d’envoi : état « sending » enregistré avant SMTP, jamais de
-renvoi automatique, échec et envoi incertain conservés dans Fichier › Envois programmés."""
+renvoi automatique, échec et envoi incertain conservés dans Fichier › Boîte d’envoi."""
 from mailclient.i18n import tr
 import logging
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QSystemTrayIcon, QWidget
 from mailclient.core import scheduler
-from mailclient.ui.components import Button
+from mailclient.ui.components import Button, safe_rich
 
 log = logging.getLogger('smail')
 
@@ -57,7 +57,7 @@ class SendQueue(QObject):
         self.bar.setTextVisible(False)
         self.bar.setMaximumHeight(8)
         self.cancel_button = Button(tr('Annuler'), window.appearance, 'x', 'Secondary', tr('Annuler l’envoi et rouvrir le message'))
-        self.show_button = Button(tr('Voir'), window.appearance, 'clock', 'Secondary', tr('Ouvrir Fichier › Envois programmés'))
+        self.show_button = Button(tr('Voir'), window.appearance, 'clock', 'Secondary', tr('Ouvrir Fichier › Boîte d’envoi'))
         self.dismiss_button = Button('', window.appearance, 'x', 'Secondary', tr('Masquer'))
         for button in (self.cancel_button, self.show_button, self.dismiss_button):
             button.setMinimumHeight(26)
@@ -103,8 +103,9 @@ class SendQueue(QObject):
         item = next((item for item in scheduler.due(self.database) if item['account'] in accounts), None)
         if item is None:
             return
-        subject = item['state'].get('subject') or '(Sans objet)'
+        subject = item['state'].get('subject') or tr('(Sans objet)')
         self.task, self.stage = (item['id'], subject), ('connect', 0, 0)
+        self.origin = item['state'].get('origin')
         task = SendTask(self.service, accounts[item['account']], item)
         task.signals.progress.connect(self.progress)
         task.signals.done.connect(self.finished)
@@ -129,6 +130,8 @@ class SendQueue(QObject):
     def finished(self, event):
         kind, subject, detail = event
         self.task = self.stage = None
+        if kind in ('sent', 'partial'):
+            self.window.mark_origin_locally(getattr(self, 'origin', None))
         if kind == 'sent':
             self.window.notify(tr('Message « {subject} » envoyé.').format(subject=subject) + (f' {detail}' if detail else ''))
             if not self.window.isActiveWindow():
@@ -137,7 +140,7 @@ class SendQueue(QObject):
             texts = {'failed': tr('Échec de l’envoi'), 'uncertain': tr('Envoi incertain'), 'partial': tr('Envoi partiel')}
             self.alert = (tr('{what} de « {subject} »').format(what=texts.get(kind, tr('Envoi')), subject=subject), detail)
             self.window.notify(tr('{valeur} de « {subject} ». {detail}').format(valeur=texts.get(kind, tr("Envoi")), subject=subject, detail=detail), tr('Voir'), self.show_outbox, 'error')
-            self.notify(tr('{valeur} de « {subject} » : voir Fichier › Envois programmés.').format(valeur=texts.get(kind, tr("Envoi")), subject=subject))
+            self.notify(tr('{valeur} de « {subject} » : voir Fichier › Boîte d’envoi.').format(valeur=texts.get(kind, tr("Envoi")), subject=subject))
         self.tick()
 
     def crashed(self, _):
@@ -166,11 +169,11 @@ class SendQueue(QObject):
                 text = tr('Envoi de « {subject} » — {valeur}').format(subject=subject, valeur=steps.get(stage, "…"))
                 self.bar.setRange(0, 0)  # Animation d’attente : la durée dépend du serveur.
             if waiting:
-                text += f' (+{len(waiting)} en attente)'
+                text += tr(' (+{count} en attente)').format(count=len(waiting))
             self.text.setToolTip(tr('Le message part en arrière-plan ; vous pouvez continuer à travailler.'))
         elif self.alert:
             text = self.alert[0]
-            self.text.setToolTip(self.alert[1])
+            self.text.setToolTip(safe_rich(self.alert[1]))  # Message d’erreur du serveur.
             show = dismiss = True
         elif waiting:
             item = waiting[0]

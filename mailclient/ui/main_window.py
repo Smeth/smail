@@ -1,5 +1,6 @@
 """Client multi-comptes : navigation, actions, cache et synchronisation Qt."""
 from mailclient.i18n import tr, N_
+from mailclient.ui.components import safe_rich
 from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
     QComboBox, QListWidget, QTableWidget, QTableWidgetItem, QSplitter, QHeaderView, QLabel,
     QLineEdit, QCheckBox, QToolBar, QInputDialog, QMessageBox, QSystemTrayIcon, QMenu,
@@ -19,6 +20,9 @@ from mailclient.ui.components import Button, Card, label, MailDelegate, Skeleton
 from mailclient.ui.icons import icon
 from mailclient.ui.theme import VARIANTS, ACCENTS
 from mailclient.ui.view_models import MessageRow, MessageList, DRAG_MIME, date_group, count
+count_words = count  # Nom sans ambiguïté là où « count » est une variable locale.
+PRIVACY_URL = 'https://github.com/Smeth/smail/blob/main/PRIVACY.md'
+SUPPORT_URL = 'https://github.com/Smeth/smail/issues'
 from mailclient.core.threads import timestamp
 
 from mailclient.ui.components import GROUP_ROLE, COLLAPSED_ROLE, GROUP_COUNT_ROLE, FILTERED_ROLE, ALWAYS_OPEN  # noqa: E402
@@ -104,7 +108,7 @@ class MainWindow(QMainWindow):
         self.offline = QCheckBox(tr('Hors ligne'))
         self.offline.setFocusPolicy(Qt.TabFocus)
         self.offline.setToolTip(tr('Travailler sur le cache local, sans aucune connexion au serveur'))
-        self.offline.hide()  # Réglage rare : menu Comptes › Hors ligne ; l’état reste affiché par l’indicateur.
+        self.offline.hide()  # Réglage rare : menu Outils › Travailler hors ligne ; l’état reste affiché par l’indicateur.
         self.connection = label('', 'Small')
         self.connection.setAccessibleName(tr('État de la connexion'))
         self.last_sync = None
@@ -132,8 +136,9 @@ class MainWindow(QMainWindow):
         split = self.splitter = QSplitter()
         split.setChildrenCollapsible(False)
         self.sidebar = Card('Sidebar',14)
-        self.sidebar.setMinimumWidth(190)
-        self.sidebar.setMaximumWidth(285)
+        zoom = getattr(self.appearance, 'text_scale', 1.0)  # Taille du texte de Windows : colonnes élargies d’autant.
+        self.sidebar.setMinimumWidth(round(190 * zoom))
+        self.sidebar.setMaximumWidth(round(285 * zoom))
         self.compose_button = Button(tr('Nouveau message'),self.appearance,'plus','Primary')
         self.compose_button.clicked.connect(lambda:self.compose())
         self.sidebar.box.addWidget(self.compose_button)
@@ -163,7 +168,7 @@ class MainWindow(QMainWindow):
         self.sidebar.box.addWidget(self.shortcut_hint)
         self.sidebar.box.addWidget(self.add)
         self.list_panel = Card('ListPanel',8)
-        self.list_panel.setMinimumWidth(290)
+        self.list_panel.setMinimumWidth(round(290 * getattr(self.appearance, 'text_scale', 1.0)))
         self.filter_group = QButtonGroup(self)
         self.filter_group.setExclusive(True)
         self.page_filter = 'Tous'
@@ -177,7 +182,32 @@ class MainWindow(QMainWindow):
             self.filter_group.addButton(button)
             filter_row.addWidget(button)
             self.filter_buttons[title] = button
-        self.list_panel.box.addLayout(filter_row)
+        self.filter_bar = QWidget()
+        filter_row.setContentsMargins(0,0,0,0)
+        self.filter_bar.setLayout(filter_row)
+        self.list_panel.box.addWidget(self.filter_bar)
+        # Sélection multiple : nombre de messages cochés et actions groupées (remplace les filtres).
+        self.selection_bar = QWidget()
+        selection_row = QHBoxLayout(self.selection_bar)
+        selection_row.setContentsMargins(0,0,0,0)
+        selection_row.setSpacing(2)
+        self.selection_count = label('', 'Bold')
+        selection_row.addWidget(self.selection_count)
+        selection_row.addStretch()
+        self.selection_buttons = []
+        for icon_name, text, slot in (('check', N_('Tout sélectionner'), self.select_all_messages),
+                                      ('mail', N_('Marquer comme lu / non lu'), self.toggle_read),
+                                      ('archive', N_('Archiver'), lambda: self.move('archive')),
+                                      ('folder', N_('Déplacer…'), lambda: self.move('move')),
+                                      ('trash-2', N_('Supprimer'), lambda: self.move('trash')),
+                                      ('x', N_('Annuler la sélection'), self.clear_selection)):
+            button = Button('', self.appearance, icon_name, tooltip=tr(text))
+            button.setFixedSize(32, 32)
+            button.clicked.connect(lambda checked=False, s=slot: s())
+            selection_row.addWidget(button)
+            self.selection_buttons.append(button)
+        self.selection_bar.hide()
+        self.list_panel.box.addWidget(self.selection_bar)
         self.search_filters = QWidget()
         search_filters = QHBoxLayout(self.search_filters)
         search_filters.setContentsMargins(0,0,0,0)
@@ -243,6 +273,7 @@ class MainWindow(QMainWindow):
         view_menu = self.menuBar().addMenu(tr('Affichage'))
         accounts_menu = self.menuBar().addMenu(tr('Comptes'))
         tools_menu = self.menuBar().addMenu(tr('Outils'))
+        help_menu = self.menuBar().addMenu(tr('Aide'))
         self.message_actions = []
         self.command_actions = []
         self.menu_icons = []
@@ -273,6 +304,9 @@ class MainWindow(QMainWindow):
         action(tr('Enregistrer le message (.eml)…'), self.export_sent_copy, menu=file_menu, icon_name='download')
         action(tr('Boîte d’envoi…'), self.open_outbox, menu=file_menu, icon_name='clock')
         file_menu.addSeparator()
+        action(tr('Sauvegarder les comptes et réglages…'), self.backup_data, menu=file_menu, icon_name='download')
+        action(tr('Restaurer une sauvegarde…'), self.restore_data, menu=file_menu, icon_name='refresh-cw')
+        file_menu.addSeparator()
         action(tr('Quitter'), self.request_quit, 'Ctrl+Q', menu=file_menu)
         # Message : répondre, état, rangement, indésirables. Le menu clic droit reprend exactement ce menu.
         # Répondre, transférer et l’original exigent un seul message ; les autres actions acceptent une sélection.
@@ -280,9 +314,13 @@ class MainWindow(QMainWindow):
             action(tr('Répondre'), lambda: self.compose('reply'), 'Ctrl+R', True, icon_name='reply'),
             action(tr('Répondre à tous'), lambda: self.compose('reply_all'), 'Ctrl+Shift+R', True, icon_name='reply-all'),
             action(tr('Transférer'), lambda: self.compose('forward'), 'Ctrl+L', True, icon_name='forward'),
+            action(tr('Transférer en pièce jointe'), lambda: self.compose('forward_attachment'), needs_message=True, icon_name='paperclip'),
             action(tr('Ouvrir dans une fenêtre'), self.open_in_window, 'Ctrl+O', True, icon_name='layout-panel-left'),
             action(tr('Imprimer…'), self.reader.print_message, 'Ctrl+P', True, icon_name='file-text')]
+        self.edit_draft_action = action(tr('Modifier le brouillon'), self.edit_server_draft, needs_message=True, icon_name='file-pen-line')
+        self.single_actions.append(self.edit_draft_action)
         actions.addSeparator()
+        action(tr('Tout sélectionner'), self.select_all_messages, menu=actions, icon_name='check')
         action(tr('Marquer comme lu / non lu'), self.toggle_read, 'Ctrl+U', True, icon_name='mail')
         action(tr('Suivre / ne plus suivre'), self.toggle_star, 'Ctrl+Shift+G', True, icon_name='star')
         actions.addSeparator()
@@ -294,7 +332,7 @@ class MainWindow(QMainWindow):
         junk_menu = actions.addMenu(tr('Courrier indésirable'))
         action(tr('Signaler comme spam'), lambda: self.report_junk(), 'Ctrl+Shift+J', True, menu=junk_menu, icon_name='shield-alert')
         action(tr('Bloquer l’expéditeur'), lambda: self.report_junk(block=True), needs_message=True, menu=junk_menu, icon_name='ban')
-        action(tr('Ce n’est pas un spam'), lambda: self.report_junk(trust=True), needs_message=True, menu=junk_menu, icon_name='shield-check')
+        self.not_junk_action = action(tr('Ce n’est pas un spam'), lambda: self.report_junk(trust=True), needs_message=True, menu=junk_menu, icon_name='shield-check')
         action(tr('Créer une règle à partir du message…'), self.create_rule_from_message, needs_message=True, icon_name='filter')
         self.single_actions.append(action(tr('Afficher l’original (en-têtes)…'), self.show_original, needs_message=True, icon_name='file-text'))
         # Dossier : tout ce qui concerne le dossier affiché.
@@ -316,7 +354,11 @@ class MainWindow(QMainWindow):
         tools_menu.addSeparator()
         action(tr('Préférences…'), self.preferences, 'Ctrl+,', menu=tools_menu, icon_name='settings-2')
         action(tr('Rechercher des mises à jour…'), lambda: self.updates.check(manual=True), menu=tools_menu, icon_name='download')
-        action(tr('À propos de Smail'), self.about, menu=tools_menu, icon_name='circle-help')
+        action(tr('Raccourcis clavier'), lambda: self.preferences('Raccourcis'), menu=help_menu, icon_name='command')
+        action(tr('Politique de confidentialité'), lambda: self.open_link(PRIVACY_URL), menu=help_menu, icon_name='shield-check')
+        action(tr('Signaler un problème ou poser une question'), lambda: self.open_link(SUPPORT_URL), menu=help_menu, icon_name='arrow-up-right')
+        help_menu.addSeparator()
+        action(tr('À propos de Smail'), self.about, menu=help_menu, icon_name='circle-help')
         action(tr('Rechercher'), self.search.setFocus, 'Ctrl+F', menu=view_menu, icon_name='search')
         action(tr('Palette de commandes'), self.open_palette, 'Ctrl+K', menu=view_menu, icon_name='command')
         view_menu.addSeparator()
@@ -364,6 +406,7 @@ class MainWindow(QMainWindow):
         self.offline.toggled.connect(self.offline_changed)
         self.table.itemSelectionChanged.connect(self.read_selected)
         self.table.itemSelectionChanged.connect(self.update_actions)
+        self.table.itemSelectionChanged.connect(self.update_selection_bar)
         self.table.itemActivated.connect(lambda item:self.reader.tabs.setFocus())
         self.table.itemDoubleClicked.connect(lambda item:self.open_in_window())
         QShortcut(QKeySequence('Ctrl+Shift+D'),self,activated=lambda:self.density_box.setCurrentIndex((self.density_box.currentIndex()+1)%3))
@@ -427,8 +470,11 @@ class MainWindow(QMainWindow):
             self.reload_accounts()
             self.start_background()
             if uncertain:
-                self.statusBar().showMessage(tr('{uncertain} envoi(s) programmé(s) interrompu(s) : voir Fichier › Envois programmés.').format(uncertain=uncertain))
+                self.statusBar().showMessage(tr('{uncertain} envoi(s) programmé(s) interrompu(s) : voir Fichier › Boîte d’envoi.').format(uncertain=uncertain))
             QTimer.singleShot(1500, self.sync_now)
+            QTimer.singleShot(45_000, self, self.remind_backup)  # Rappel mensuel, une fois la synchronisation lancée.
+            if not self.accounts:  # Premier lancement : l’assistant d’ajout de compte s’ouvre de lui-même.
+                QTimer.singleShot(600, self, self.add_account)
         else:
             self.set_busy(False)
 
@@ -489,7 +535,7 @@ class MainWindow(QMainWindow):
 
     PROTECTED = ('Boîte de réception','Envoyés','Brouillons','Corbeille','Spam')
     SPECIAL_WORDS = {'trash': ('corbeille', 'trash', 'deleted'), 'archive': ('archive', 'all mail', 'tous les messages'),
-                     'junk': ('spam', 'junk', 'indésirable')}
+                     'junk': ('spam', 'junk', 'indésirable'), 'drafts': ('brouillon', 'draft')}
 
     def current_folder(self):
         """(nom IMAP, libellé) du dossier courant d’un compte ; None en réception unifiée."""
@@ -523,9 +569,9 @@ class MainWindow(QMainWindow):
         from email.utils import getaddresses
         senders = sorted({address for row in rows for _, address in getaddresses([row.get('sender', '')]) if address})
         if block and QMessageBox.question(
-                self, tr('Bloquer l’expéditeur'), tr('Bloquer ') + ', '.join(senders[:5]) + ('…' if len(senders) > 5 else '') +
+                self, tr('Bloquer l’expéditeur'), safe_rich(tr('Bloquer ') + ', '.join(senders[:5]) + ('…' if len(senders) > 5 else '') +
                 tr(' ?\n\nLes messages sélectionnés et les prochains de ces expéditeurs iront dans les indésirables.'
-                ' La liste se gère dans Préférences › Règles et indésirables.'),
+                ' La liste se gère dans Préférences › Règles et indésirables.')),
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
             return
         groups = {}
@@ -540,7 +586,9 @@ class MainWindow(QMainWindow):
                 folders = self.database.cache_get('folders', account.id, []) or self.service.folders(account)[0]
                 self.service.junk(account, group, folders, block=block, trust=trust)
         message = (tr('Expéditeur approuvé, message remis dans la réception.') if trust else
-                   tr('Expéditeur bloqué, messages déplacés vers les indésirables.') if block else tr('Message déplacé vers les indésirables.'))
+                   tr('Expéditeur bloqué, messages déplacés vers les indésirables.') if block else
+                   tr('Message déplacé vers les indésirables.') if len(rows) == 1 else
+                   tr('{count} messages déplacés vers les indésirables.').format(count=len(rows)))
         self.run_and_reload(operation, message)
 
     def create_rule_from_message(self):
@@ -635,7 +683,7 @@ class MainWindow(QMainWindow):
             how = tr('Smail enverra depuis {email} un e-mail de désabonnement à {valeur}.').format(email=account.email, valeur=options.mailto[0])
         else:
             how = tr('La page de désabonnement de {host} s’ouvrira dans votre navigateur.').format(host=options.host)
-        if QMessageBox.question(self, tr('Se désabonner'), tr('{how}\n\nContinuer ?').format(how=how), QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+        if QMessageBox.question(self, tr('Se désabonner'), safe_rich(tr('{how}\n\nContinuer ?').format(how=how)), QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
             return
         if not options.one_click and not options.mailto:
             from PySide6.QtGui import QDesktopServices
@@ -691,7 +739,7 @@ class MainWindow(QMainWindow):
         if self.offline.isChecked():
             self.statusBar().showMessage(tr('Reconnectez-vous pour vider ce dossier.'))
             return
-        if QMessageBox.warning(self, tr('Vider le dossier'), tr('Supprimer définitivement tous les messages de « {label} » ?\n\nCette action est irréversible.').format(label=label),
+        if QMessageBox.warning(self, tr('Vider le dossier'), safe_rich(tr('Supprimer définitivement tous les messages de « {label} » ?\n\nCette action est irréversible.').format(label=label)),
                                QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel) != QMessageBox.Yes:
             return
         account = self.account()
@@ -726,7 +774,7 @@ class MainWindow(QMainWindow):
                 return
             self.run_and_reload(lambda: self.service.manage_folder(account, 'rename', name, new_name), tr('Dossier renommé.'), True)
         elif operation == 'delete':
-            if QMessageBox.warning(self, tr('Supprimer le dossier'), tr('Supprimer le dossier « {label} » et tous les messages qu’il contient sur le serveur ?\n\nCette action est irréversible.').format(label=label),
+            if QMessageBox.warning(self, tr('Supprimer le dossier'), safe_rich(tr('Supprimer le dossier « {label} » et tous les messages qu’il contient sur le serveur ?\n\nCette action est irréversible.').format(label=label)),
                                    QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel) != QMessageBox.Yes:
                 return
             self.run_and_reload(lambda: self.service.manage_folder(account, 'delete', name), tr('Dossier « {label} » supprimé.').format(label=label), True)
@@ -763,7 +811,7 @@ class MainWindow(QMainWindow):
             secure = account.imap.mode != 'Aucun' and account.smtp.mode != 'Aucun'
             self.account_box.addItem(icon('lock-keyhole' if secure else 'lock-keyhole-open',self.appearance.colors['muted' if secure else 'warning']),
                                      account.name or account.email,account.id)
-            self.account_box.setItemData(self.account_box.count()-1, account.email, Qt.ToolTipRole)
+            self.account_box.setItemData(self.account_box.count()-1, safe_rich(account.email), Qt.ToolTipRole)
         index = self.account_box.findData(previous)
         self.account_box.setCurrentIndex(index if index >= 0 else 1 if self.accounts else -1)
         self.account_box.blockSignals(False)
@@ -855,6 +903,36 @@ class MainWindow(QMainWindow):
                 (target if target.isEnabled() else self.table).setFocus(Qt.OtherFocusReason)
         self.update_actions()
 
+    def update_selection_bar(self):
+        """Plusieurs messages cochés : cases visibles sur chaque ligne et barre d’actions groupées."""
+        count = len(self.selected_rows())
+        several = count > 1
+        self.table.itemDelegate().check_all = several
+        self.selection_count.setText(tr('{count} sélectionnés').format(count=count) if several else '')
+        self.selection_bar.setVisible(several)
+        self.filter_bar.setVisible(not several)
+        for button in self.selection_buttons[1:-1]:
+            button.setEnabled(several and not self.busy)
+        self.table.viewport().update()
+
+    def select_all_messages(self):
+        """Coche tous les messages affichés (pas ceux des groupes repliés ni ceux masqués par un filtre)."""
+        from PySide6.QtCore import QItemSelection
+        selection = QItemSelection()
+        for row in range(self.table.count()):
+            item = self.table.item(row)
+            if not item.isHidden() and not item.data(COLLAPSED_ROLE) and item.data(Qt.UserRole) is not None:
+                index = self.table.indexFromItem(item)
+                selection.select(index, index)
+        self.table.selectionModel().select(selection, QItemSelectionModel.ClearAndSelect)
+        self.table.setFocus()
+
+    def clear_selection(self):
+        current = self.table.currentItem()
+        self.table.clearSelection()
+        if current is not None and not current.isHidden():
+            current.setSelected(True)  # Retour au message courant seul.
+
     def update_actions(self):
         self.offline_action.setEnabled(self.offline.isEnabled())
         selected, single = bool(self.selected_rows()), self.selected_row() is not None
@@ -864,6 +942,9 @@ class MainWindow(QMainWindow):
         online = not self.busy and not self.offline.isChecked()
         current = self.current_folder()
         self.mark_all_action.setEnabled(online and bool(self.accounts) and (current is not None or self.account() is None))
+        # « Ce n’est pas un spam » n’a de sens que dans le dossier des indésirables.
+        self.not_junk_action.setEnabled(self.not_junk_action.isEnabled() and current is not None and self.is_special(*current, 'junk'))
+        self.edit_draft_action.setEnabled(self.edit_draft_action.isEnabled() and self.in_drafts())
         self.folder_actions['create'].setEnabled(online and self.account() is not None)
         editable = current is not None and current[0].upper() != 'INBOX' and current[1] not in self.PROTECTED
         self.folder_actions['rename'].setEnabled(online and editable)
@@ -905,11 +986,11 @@ class MainWindow(QMainWindow):
         """Indicateur discret de l’en-tête : en ligne (dernière synchronisation) ou hors ligne."""
         if self.offline.isChecked():
             self.connection.setText(tr('○ Hors ligne · cache local'))
-            self.connection.setToolTip(tr('Aucune connexion aux serveurs. Pour vous reconnecter : Comptes › Hors ligne.'))
+            self.connection.setToolTip(tr('Aucune connexion aux serveurs. Pour vous reconnecter : Outils › Travailler hors ligne.'))
         else:
             when = tr(' · synchronisé à {last_sync:%H:%M}').format(last_sync=self.last_sync) if self.last_sync else ''
             self.connection.setText(tr('● En ligne') + when)
-            self.connection.setToolTip(tr('Smail se connecte à vos serveurs. Pour travailler sans connexion : Comptes › Hors ligne.'))
+            self.connection.setToolTip(tr('Smail se connecte à vos serveurs. Pour travailler sans connexion : Outils › Travailler hors ligne.'))
 
     def notify(self, text, action=None, callback=None, kind='info'):
         """Message important : notification flottante (avec action éventuelle). La barre d’état n’en garde pas de
@@ -981,7 +1062,7 @@ class MainWindow(QMainWindow):
         from mailclient.ui.folder_list import kind
         for name, label in folders:
             item = QListWidgetItem(icon(kind(name, label)[1], self.appearance.colors['muted']), tr(label))
-            item.setToolTip(tr(label) if label == name else f'{tr(label)} ({name})')
+            item.setToolTip(safe_rich(tr(label) if label == name else f'{tr(label)} ({name})'))  # Nom fourni par le serveur.
             self.folders.addItem(item)
         self.update_folder_counts()
 
@@ -997,7 +1078,7 @@ class MainWindow(QMainWindow):
             count = counts.get(name, 0)
             item = self.folders.item(index)
             item.setData(COUNT_ROLE, count)
-            item.setData(Qt.AccessibleTextRole, f'{label}, {count} non lu{"s" if count > 1 else ""}' if count else label)
+            item.setData(Qt.AccessibleTextRole, f'{tr(label)}, {count_words(count, "non lu", "non lus")}' if count else tr(label))
 
     def folder_changed(self, index):
         if index >= 0 and not self.busy:
@@ -1243,8 +1324,8 @@ class MainWindow(QMainWindow):
                                    + (f' · {view.count} messages' if view.count > 1 else ''))
             item.setData(Qt.UserRole,view)
             item.setData(GROUP_ROLE, date_group(max(timestamp(message) for message in group)))
-            item.setToolTip(f'{row["sender"]}\n{view.subject}\n{view.account_name}\n{row["date"]}'
-                            + (tr('\nConversation de {count} messages chargés').format(count=view.count) if view.count > 1 else ''))
+            item.setToolTip(safe_rich(f'{row["sender"]}\n{view.subject}\n{view.account_name}\n{row["date"]}'
+                            + (tr('\nConversation de {count} messages chargés').format(count=view.count) if view.count > 1 else '')))
             self.table.addItem(item)
 
     def refresh_headers(self):
@@ -1351,6 +1432,8 @@ class MainWindow(QMainWindow):
         self.runner.run(lambda: self.service.message(account, row, offline), done, failed)
 
     def read_selected(self):
+        if self.table.selectedItems():
+            self.local_copy = None  # Un message de la liste remplace la copie locale ouverte.
         current = self.table.currentItem()
         if current is not None and current.data(COLLAPSED_ROLE) and len(self.table.selectedItems()) <= 1:
             group = current.data(GROUP_ROLE)  # Lu maintenant : la ligne peut disparaître avant le déclenchement.
@@ -1459,6 +1542,9 @@ class MainWindow(QMainWindow):
         if any(account is None for account,*_ in plan):
             self.statusBar().showMessage(tr('Le compte de ce message n’existe plus. Actualisez.'))
             return
+        if all(step in ('read', 'unread', 'star', 'unstar') for _, _, step, _ in plan):
+            self.change_state(plan)
+            return
         self.set_busy(True)
         def operation():
             for account, group, step, destination in plan:
@@ -1479,6 +1565,50 @@ class MainWindow(QMainWindow):
         def failed(message):
             self.failure(message + tr(' Actualisez les dossiers source et destination avant de réessayer : l’action peut avoir été acceptée avant une coupure.'))
         self.runner.run(operation, done, failed)
+
+    def mark_origin_locally(self, origin):
+        """Après l’envoi d’une réponse ou d’un transfert : flèche affichée tout de suite sur le message d’origine."""
+        if not origin or origin.get('flag') not in ('answered', 'forwarded'):
+            return
+        key = (origin.get('account'), origin.get('folder'), origin.get('uidvalidity', ''), origin.get('uid'))
+        found = [row for row in self.rows if self.row_key(row) == key]
+        for row in found:
+            row[origin['flag']] = True
+        if found:
+            self.refresh_row_views(key)
+
+    def change_state(self, plan):
+        """Lu / non lu, suivi : appliqué tout de suite dans la liste, puis sur le serveur en arrière-plan.
+
+        Sans rechargement : la sélection, le message lu et la position restent en place (un rechargement vidait
+        la sélection et le volet de lecture). Si le serveur refuse, l’état d’origine est rétabli."""
+        changed = []  # (ligne, champ, ancienne valeur, compte)
+        for account, group, step, _ in plan:
+            field, value = ('unread', step == 'unread') if step in ('read', 'unread') else ('starred', step == 'star')
+            keys = {self.row_key(row) for row in group}
+            for row in [item for item in self.rows if self.row_key(item) in keys] + list(group):
+                if bool(row.get(field)) != value:
+                    changed.append((row, field, row.get(field), account))
+                    row[field] = value
+        def refresh(restoring):
+            counted = set()
+            for row, field, old, account in changed:
+                key = self.row_key(row)
+                if field == 'unread' and key not in counted:  # Une fois par message, même présent deux fois.
+                    counted.add(key)
+                    self.adjust_unread(account, row.get('folder'), (-1 if old else 1) * (-1 if restoring else 1))
+                self.refresh_row_views(key)
+            self.update_actions()
+        refresh(False)
+        def operation():
+            for account, group, step, destination in plan:
+                self.service.action(account, group, step, destination)
+        def failed(message):
+            for row, field, old, _ in changed:
+                row[field] = old
+            refresh(True)
+            self.failure(message)
+        self.runner.run(operation, lambda _: None, failed)
 
     def folder_label(self, account, name):
         return tr(dict(self.database.cache_get('folders', account.id, []) or []).get(name, name))
@@ -1545,22 +1675,20 @@ class MainWindow(QMainWindow):
             if target is None:
                 choices = [(name, label) for name,label in folders if name != source]
                 if not choices:
-                    self.statusBar().showMessage(tr('Aucun autre dossier disponible. Créez un dossier (Comptes › Dossier) puis réessayez.'))
+                    self.statusBar().showMessage(tr('Aucun autre dossier disponible. Créez un dossier (Dossier › Nouveau dossier) puis réessayez.'))
                     return
-                labels = [label + ' — ' + name for name,label in choices]
+                labels = [tr(label) if tr(label) == name else f'{tr(label)} — {name}' for name,label in choices]
                 choice, ok = QInputDialog.getItem(self, tr('Destination'), tr('Choisissez le dossier de destination ({name})').format(name=account.name), labels, 0, False)
                 if not ok:
                     return
                 target = choices[labels.index(choice)][0]
             plan.append((account, group, 'move', target))
         count = len(rows)
-        subject = 'ce message' if count == 1 else f'ces {count} messages'
+        subject = tr('ce message') if count == 1 else tr('ces {count} messages').format(count=count)
         if any(step == 'delete' for _,_,step,_ in plan):
             if QMessageBox.warning(self, tr('Supprimer définitivement'), tr('Supprimer définitivement {subject} de la corbeille ?\n\nCette action est irréversible.').format(subject=subject),
                                    QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel) != QMessageBox.Yes:
                 return
-        elif kind == 'trash' and QMessageBox.question(self, tr('Déplacer dans la corbeille'), tr('Déplacer {subject} dans la corbeille ?').format(subject=subject), QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
-            return
         self.mutate(None, plan=plan)
 
     def eventFilter(self, watched, event):
@@ -1603,8 +1731,32 @@ class MainWindow(QMainWindow):
         row = self.selected_row()
         return self.row_account(row) if row else None
 
+    def in_drafts(self):
+        current = self.current_folder()
+        return current is not None and self.is_special(*current, 'drafts')
+
+    def edit_server_draft(self):
+        """Brouillon du serveur (webmail, téléphone…) repris dans la rédaction ; à l’envoi, il quitte les Brouillons."""
+        row = self.selected_row()
+        mail = self.reader.mail
+        if row is None or mail is None or not self.in_drafts():
+            self.statusBar().showMessage(tr('Sélectionnez et chargez d’abord le brouillon.'))
+            return
+        from mailclient.core.quote import quote_fragment
+        from mailclient.ui.rich_text import clean_qt_html
+        account = self.row_account(row)
+        fields = dict(to=mail.recipients, cc=mail.cc, bcc='', subject=mail.subject, body=mail.text or '',
+                      qt_html=clean_qt_html(quote_fragment(mail)) if (mail.html or '').strip() else '',
+                      attachments=[attachment for attachment in mail.attachments if not attachment.cid],
+                      server_draft={key: row.get(key) for key in ('account', 'folder', 'uid', 'uidvalidity', 'server')})
+        window = ComposeWindow(self.service, self.accounts, account, fields, parent=self, offline=self.offline.isChecked)
+        self.composers.add(window)
+        window.show()
+
     def open_in_window(self):
         """Message affiché dans sa propre fenêtre ; pendant un chargement, ouverture dès la fin."""
+        if self.in_drafts() and not self.busy and self.reader.mail is not None:
+            return self.edit_server_draft()  # Dans les Brouillons, ouvrir un message = le reprendre.
         if self.busy:
             self.pending_window = True
             return
@@ -1638,10 +1790,139 @@ class MainWindow(QMainWindow):
             if not self.reader.mail or not row:
                 self.statusBar().showMessage(tr('Sélectionnez et chargez d’abord le message.'))
                 return
-            fields = reply_fields(self.reader.mail, account, mode)
+            if mode == 'forward_attachment':
+                fields = self.forward_as_attachment(row, account)
+                if fields is None:
+                    return
+            else:
+                fields = reply_fields(self.reader.mail, account, mode)
+            fields['origin'] = dict({key: row.get(key) for key in ('account', 'folder', 'uid', 'uidvalidity', 'server')},
+                                    flag='forwarded' if mode in ('forward', 'forward_attachment') else 'answered')
         window = ComposeWindow(self.service, self.accounts, account, fields, parent=self, offline=self.offline.isChecked)
         self.composers.add(window)
         window.show()
+
+    def forward_as_attachment(self, row, account):
+        """Champs d’un transfert dont le message d’origine est joint intact (.eml), en-têtes et pièces jointes compris."""
+        import base64
+        from mailclient.core.parser import Attachment, safe_filename
+        payload = self.database.cache_get('body', self.service.body_key(row))
+        if not payload:
+            self.notify(tr('Ouvrez d’abord le message (il n’est pas encore téléchargé).'), kind='error')
+            return None
+        mail = self.reader.mail
+        fields = reply_fields(mail, account, 'forward')
+        name = (safe_filename(mail.subject)[:80] or 'message') + '.eml'
+        fields.update(body=f'\n\n{account.signature}' if account.signature else '',
+                      attachments=[Attachment(name, 'message/rfc822', base64.b64decode(payload))])
+        return fields
+
+    # Sauvegarde et restauration ------------------------------------------------------------------------------------
+
+    def ask_password(self, title, text):
+        from PySide6.QtWidgets import QLineEdit
+        value, ok = QInputDialog.getText(self, title, text, QLineEdit.Password)
+        return value if ok else None
+
+    def backup_data(self):
+        """Fichier .smailbackup chiffré : comptes (sans mot de passe), réglages et données gardées sur ce PC."""
+        from datetime import date
+        from mailclient.core import backup
+        if self.busy:
+            return
+        password = self.ask_password(tr('Sauvegarder'), tr('Mot de passe de la sauvegarde (au moins {count} caractères).\n'
+                                                          'Il sera demandé pour la restaurer ; il ne peut pas être retrouvé.').format(count=backup.MIN_PASSWORD))
+        if password is None:
+            return
+        if len(password) < backup.MIN_PASSWORD:
+            self.notify(tr('Choisissez un mot de passe d’au moins {count} caractères.').format(count=backup.MIN_PASSWORD), kind='error')
+            return
+        if self.ask_password(tr('Sauvegarder'), tr('Saisissez de nouveau le mot de passe.')) != password:
+            self.notify(tr('Les deux mots de passe sont différents. Aucune sauvegarde n’a été créée.'), kind='error')
+            return
+        name = tr('Smail-sauvegarde') + f'-{date.today().isoformat()}{backup.SUFFIX}'
+        path, _ = QFileDialog.getSaveFileName(self, tr('Sauvegarder les comptes et réglages'), name,
+                                              tr('Sauvegarde Smail (*.smailbackup)'))
+        if not path:
+            return
+        if not path.lower().endswith(backup.SUFFIX):
+            path += backup.SUFFIX
+        self.set_busy(True)
+        def operation():
+            data = backup.export(self.database, password)
+            output = QSaveFile(path)
+            if not output.open(QIODevice.WriteOnly) or output.write(data) != len(data) or not output.commit():
+                raise RuntimeError(tr('Impossible d’écrire la sauvegarde à cet emplacement.'))
+        def done(_):
+            from datetime import datetime, timezone
+            self.set_busy(False)
+            self.database.set_setting('last_backup', datetime.now(timezone.utc).isoformat(timespec='seconds'))
+            self.notify(tr('Sauvegarde enregistrée. Gardez-la hors de ce PC (clé USB, OneDrive…) avec son mot de passe.'))
+        self.runner.run(operation, done, self.failure)
+
+    def restore_data(self):
+        """Reprend une sauvegarde : comptes, réglages, règles, signatures, brouillons… (mots de passe à ressaisir)."""
+        from mailclient.core import backup
+        if self.busy:
+            return
+        path, _ = QFileDialog.getOpenFileName(self, tr('Restaurer une sauvegarde'), '', tr('Sauvegarde Smail (*.smailbackup)'))
+        if not path:
+            return
+        password = self.ask_password(tr('Restaurer une sauvegarde'), tr('Mot de passe de la sauvegarde :'))
+        if password is None:
+            return
+        self.set_busy(True)
+        def operation():
+            from pathlib import Path
+            data = Path(path).read_bytes()
+            if len(data) > 512 * 1024 * 1024:
+                raise RuntimeError(tr('Fichier trop volumineux pour une sauvegarde de Smail.'))
+            try:
+                return backup.read(data, password)
+            except backup.BackupError as error:
+                raise RuntimeError(str(error)) from None
+        def loaded(payload):
+            self.set_busy(False)
+            info = backup.summary(payload)
+            text = tr('Sauvegarde du {created} (Smail {version}).\n\nComptes : {accounts}\nBrouillons : {drafts} · copies envoyées : {sent} · '
+                      'envois programmés : {outbox}\n\nLes comptes de la sauvegarde seront ajoutés (ou mis à jour) et vos préférences '
+                      'remplacées. Les mots de passe ne sont pas sauvegardés : vous les saisirez ensuite.\n\nRestaurer ?').format(
+                created=info['created'][:16].replace('T', ' '), version=info['version'],
+                accounts=', '.join(info['accounts']) or tr('aucun'), drafts=info['drafts'], sent=info['sent'], outbox=info['outbox'])
+            if QMessageBox.question(self, tr('Restaurer une sauvegarde'), safe_rich(text), QMessageBox.Yes | QMessageBox.No,
+                                    QMessageBox.No) != QMessageBox.Yes:
+                return
+            self.set_busy(True)
+            self.runner.run(lambda: backup.restore(self.database, payload), restored, self.failure)
+        def restored(accounts):
+            self.set_busy(False)
+            self.apply_theme()
+            self.reload_accounts()
+            missing = []
+            for account in accounts:
+                try:
+                    present = account.auth_method != 'password' or bool(self.secrets and self.secrets.get(account.id))
+                except Exception:
+                    present = False
+                if not present:
+                    missing.append(account)
+            if missing:
+                QMessageBox.information(self, tr('Sauvegarde restaurée'), safe_rich(tr(
+                    'Comptes restaurés. Pour des raisons de sécurité, les mots de passe ne font pas partie de la sauvegarde.\n\n'
+                    'Saisissez le mot de passe de chaque compte (Préférences › Comptes › Modifier) : {accounts}').format(
+                    accounts=', '.join(account.email for account in missing))))
+                self.preferences('Comptes')
+            else:
+                self.notify(tr('Sauvegarde restaurée.'))
+        self.runner.run(operation, loaded, self.failure)
+
+    def remind_backup(self):
+        from datetime import datetime, timezone
+        from mailclient.core import backup
+        if self.quitting or not backup.reminder_due(self.database):
+            return
+        self.database.set_setting('backup_reminded', datetime.now(timezone.utc).isoformat(timespec='seconds'))
+        self.notify(tr('Pensez à sauvegarder vos comptes et réglages (une fois par mois suffit).'), tr('Sauvegarder'), self.backup_data)
 
     def open_draft(self):
         if not self.accounts or self.busy:
@@ -1652,7 +1933,7 @@ class MainWindow(QMainWindow):
             if not drafts:
                 self.statusBar().showMessage(tr('Aucun brouillon local.'))
                 return
-            labels = [f'{draft.get("subject") or "(Sans objet)"} — {draft.get("to", "")} [{i+1}]' for i,draft in enumerate(drafts)]
+            labels = [f'{draft.get("subject") or tr("(Sans objet)")} — {draft.get("to", "")} [{i+1}]' for i,draft in enumerate(drafts)]
             label, ok = QInputDialog.getItem(self, tr('Brouillons locaux'), tr('Ouvrir un brouillon'), labels, 0, False)
             if not ok:
                 return
@@ -1687,23 +1968,29 @@ class MainWindow(QMainWindow):
             label, ok = QInputDialog.getItem(self, tr('Envoyés locaux'), tr('Lire une copie déjà envoyée'), labels, 0, False)
             if not ok:
                 return
-            self.local_copy, mail = copies[labels.index(label)]
-            self.rows = []
-            self.table.setRowCount(0)
+            local_copy, mail = copies[labels.index(label)]
+            self.table.clearSelection()  # La liste du dossier reste affichée ; un clic sur un message y revient.
+            self.local_copy = local_copy
             self.reader.display(mail)
             self.update_actions()
-            self.set_cache_status(tr('Copie locale d’un message déjà envoyé — utilisez Exporter .eml pour la sauvegarder.'))
+            self.statusBar().showMessage(tr('Copie locale d’un message déjà envoyé — Fichier › Enregistrer le message (.eml) pour la sauvegarder.'))
         self.runner.run(operation, done, self.failure)
 
     def export_sent_copy(self):
-        if self.busy or not self.local_copy:
-            self.statusBar().showMessage(tr('Ouvrez d’abord une copie dans Envoyés locaux.'))
+        """Enregistre le message lu (ou la copie envoyée locale ouverte) en .eml, lisible par toute messagerie."""
+        import base64
+        from mailclient.core.parser import safe_filename
+        row = self.selected_row()
+        raw = self.local_copy['raw'] if self.local_copy else (
+            self.database.cache_get('body', self.service.body_key(row)) if row is not None else None)
+        if self.busy or not raw:
+            self.statusBar().showMessage(tr('Ouvrez d’abord le message à enregistrer.'))
             return
-        path, _ = QFileDialog.getSaveFileName(self, tr('Exporter le message déjà envoyé'), 'message.eml', tr('Message e-mail (*.eml)'))
+        subject = (self.reader.mail.subject if self.reader.mail else '') or 'message'
+        name = (safe_filename(subject)[:80] or 'message') + '.eml'
+        path, _ = QFileDialog.getSaveFileName(self, tr('Enregistrer le message (.eml)'), name, tr('Message e-mail (*.eml)'))
         if not path:
             return
-        import base64
-        raw = self.local_copy['raw']
         self.set_busy(True)
         def operation():
             data = base64.b64decode(raw)
@@ -1712,7 +1999,7 @@ class MainWindow(QMainWindow):
                 raise RuntimeError(tr('Impossible d’exporter ce message à cet emplacement.'))
         def done(_):
             self.set_busy(False)
-            self.statusBar().showMessage(tr('Copie .eml exportée.'))
+            self.statusBar().showMessage(tr('Message enregistré.'))
         self.runner.run(operation, done, self.failure)
 
     def sync_now(self):
@@ -1868,7 +2155,8 @@ class MainWindow(QMainWindow):
                       ui_accent=dialog.accent.currentData(),ui_custom_accent=dialog.custom_accent,
                       ui_reduced_motion=dialog.motion.isChecked(),undo_send_seconds=dialog.undo_send.value(),
                       update_mode=dialog.update_mode.currentData(), auto_update=dialog.update_mode.currentData() != 'off',
-                      mark_read_on_open=dialog.mark_read.isChecked(), language=dialog.language.currentData())
+                      mark_read_on_open=dialog.mark_read.isChecked(), language=dialog.language.currentData(),
+                      backup_reminder=dialog.backup_reminder.isChecked())
         if values['language'] != self.database.setting('language', 'auto'):
             self.notify(tr('La nouvelle langue sera appliquée au prochain démarrage de Smail.'))
         encrypt = dialog.encrypt.isChecked()
@@ -1916,7 +2204,7 @@ class MainWindow(QMainWindow):
         self.density_box.setCurrentIndex(max(0, self.density_box.findData(self.appearance.density)))
         self.density_box.blockSignals(False)
         # Libellé et icône indiquent l’action (vers l’autre thème), pas l’état actuel.
-        target, icon_name = ('clair', 'sun') if self.appearance.dark else ('sombre', 'moon')
+        target, icon_name = (tr(N_('clair')), 'sun') if self.appearance.dark else (tr(N_('sombre')), 'moon')
         self.dark_action.setText(tr('Passer au thème {target}').format(target=target))
         self.dark_action.setIcon(icon(icon_name, self.appearance.colors['text']))
         self.theme_button.setIcon(icon(icon_name, self.appearance.colors['text']))
@@ -1932,7 +2220,9 @@ class MainWindow(QMainWindow):
         self.account_cards.setVisible(self.appearance.variant == 2)
         self.account_chips.setVisible(self.appearance.variant == 3)
         self.shortcut_hint.setVisible(self.appearance.variant == 3)
-        self.splitter.setSizes({1:[230,430,740],2:[270,420,710],3:[210,475,715]}[self.appearance.variant])
+        zoom = getattr(self.appearance, 'text_scale', 1.0)
+        sizes = {1:[230,430,740],2:[270,420,710],3:[210,475,715]}[self.appearance.variant]
+        self.splitter.setSizes([round(sizes[0] * zoom), round(sizes[1] * zoom), sizes[2]])
         self.reader.set_dark(self.appearance.dark)
         self.table.doItemsLayout()
         self.table.viewport().update()
@@ -2048,7 +2338,12 @@ class MainWindow(QMainWindow):
                                                      'off': tr('désactivées')}[update_mode(self.database)]
         else:
             mode = tr('lancé depuis les sources ou un dossier copié — pas de mise à jour automatique')
-        return (tr('Smail {version}\n\nClient mail de bureau Windows (IMAP/SMTP).\n\nCette copie : {mode}.\nDonnées locales : {parent}\n\nLicence MIT — https://github.com/{REPOSITORY}').format(version=__version__, mode=mode, parent=Path(self.database.path).parent, REPOSITORY=updater.REPOSITORY))
+        return (tr('Smail {version}\n\nClient mail de bureau Windows (IMAP/SMTP).\n\nCette copie : {mode}.\nDonnées locales : {parent}\n\nConfidentialité : {privacy}\nAssistance : {support}\n\nLicence MIT — https://github.com/{REPOSITORY}').format(version=__version__, mode=mode, parent=Path(self.database.path).parent, privacy=PRIVACY_URL, support=SUPPORT_URL, REPOSITORY=updater.REPOSITORY))
+
+    def open_link(self, url):
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        QDesktopServices.openUrl(QUrl(url))
 
     def about(self):
         QMessageBox.about(self, tr('À propos de Smail'), self.about_text())

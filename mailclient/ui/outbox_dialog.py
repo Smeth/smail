@@ -1,5 +1,6 @@
 """Envois programmés : consulter, modifier (retour en brouillon) ou supprimer."""
 from mailclient.i18n import tr
+from mailclient.ui.components import safe_rich
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QListWidget, QListWidgetItem, QMessageBox, QVBoxLayout
 from mailclient.core import scheduler
@@ -17,16 +18,16 @@ class OutboxDialog(QDialog):
         self.accounts = {account.id: account for account in accounts}
         self.reopen = None  # Brouillon à rouvrir dans une fenêtre de rédaction.
         theme = install_theme(database)
-        self.setWindowTitle(tr('Envois programmés'))
+        self.setWindowTitle(tr('Boîte d’envoi'))
         self.setMinimumSize(620, 380)
         layout = QVBoxLayout(self)
-        layout.addWidget(label(tr('Envois programmés'), 'Title'))
+        layout.addWidget(label(tr('Boîte d’envoi'), 'Title'))
         layout.addWidget(label(tr('Envoyés par Smail à l’heure prévue s’il est ouvert (sinon au prochain démarrage). On y retrouve aussi '
                                'les envois en échec ou incertains. Un échec n’est jamais renvoyé automatiquement : « Modifier… » '
                                'rouvre le message pour le corriger et le renvoyer.'), 'Subtitle', True))
         self.list = QListWidget()
         self.list.setObjectName('FramedList')
-        self.list.setAccessibleName(tr('Envois programmés'))
+        self.list.setAccessibleName(tr('Boîte d’envoi'))
         layout.addWidget(self.list, 1)
         row = QHBoxLayout()
         self.edit = Button(tr('Modifier…'), theme, 'file-pen-line', 'Secondary', tr('Annule la programmation et rouvre le message en brouillon'))
@@ -52,7 +53,7 @@ class OutboxDialog(QDialog):
             account = self.accounts.get(item['account'])
             entry = QListWidgetItem(f'{moment:%d/%m %H:%M} · {STATUS.get(item["status"], item["status"])} · '
                                     f'{state.get("subject") or "(Sans objet)"} → {state.get("to", "")}')
-            entry.setToolTip((account.email if account else tr('Compte supprimé')) + ('\n' + item['error'] if item.get('error') else ''))
+            entry.setToolTip(safe_rich((account.email if account else tr('Compte supprimé')) + ('\n' + item['error'] if item.get('error') else '')))
             self.list.addItem(entry)
         if not self.items:
             empty = QListWidgetItem(tr('Aucun envoi programmé. Dans une rédaction, utilisez le bouton horloge « Envoyer plus tard ».'))

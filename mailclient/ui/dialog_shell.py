@@ -7,10 +7,13 @@ def appearance():
     app = QApplication.instance()
     theme = getattr(app, 'smail_theme', None)
     if theme is None:
-        from mailclient.ui.theme import Theme
+        from PySide6.QtGui import QPalette
+        from mailclient.ui.presentation import SystemTheme, text_scale
         from mailclient.ui.fonts import configure_fonts
         configure_fonts(app)
-        theme = Theme()
+        theme = SystemTheme()  # Mêmes réglages d’accessibilité que la fenêtre principale.
+        theme.system_palette = QPalette(app.palette())
+        theme.text_scale = text_scale()
         theme.setParent(app)
         app.smail_theme = theme
         theme.apply()

@@ -66,7 +66,7 @@ def test_reader_has_one_empty_prompt_and_menus_are_connected(tmp_path):
     reader = window.reader
     assert reader.headers.text() == '' and reader.headers.isHidden()
     assert reader.empty_message.isVisible()
-    assert [action.text() for action in window.menuBar().actions()] == ['Fichier','Message','Dossier','Affichage','Comptes','Outils']
+    assert [action.text() for action in window.menuBar().actions()] == ['Fichier','Message','Dossier','Affichage','Comptes','Outils','Aide']
     # Vocabulaire et points de suspension cohérents ; « … » quand une fenêtre s’ouvre.
     texts = {action.text() for action in window.command_actions}
     assert {'Nouveau message', 'Suivre / ne plus suivre', 'Marquer comme lu / non lu', 'Déplacer…', 'Actualiser',
